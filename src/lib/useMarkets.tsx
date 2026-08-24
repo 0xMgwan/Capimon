@@ -5,6 +5,7 @@ import type { AssetMeta } from "./assets";
 
 export type Candle = { t: number; p: number; round: string };
 export type Market = AssetMeta & {
+  logo: string | null;
   price: number; feedDecimals: number; updatedAt: number; roundId: string;
   change: number; changeWindowHours: number; multiplier: number; decimals: number;
   supply: number; rawSupply: number; tvl: number; history: Candle[]; stale: boolean;

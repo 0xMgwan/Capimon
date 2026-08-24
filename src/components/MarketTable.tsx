@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { useMarkets } from "@/lib/useMarkets";
 import { useVenues } from "@/lib/useVenues";
 import { Sparkline } from "./Sparkline";
+import { AssetLogo } from "./AssetLogo";
 import { compact, compactUsd, ago } from "@/lib/format";
 
 type SortKey = "ticker" | "price" | "change" | "tvl" | "supply";
@@ -80,10 +81,7 @@ export function MarketTable({ limit, showSearch = true }: { limit?: number; show
               className="block rounded-2xl border hairline p-4 transition-colors active:surface"
             >
               <div className="flex items-center gap-3">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-xs font-semibold text-white"
-                  style={{ background: m.color }}>
-                  {m.ticker.slice(0, 2)}
-                </span>
+                <AssetLogo logo={m.logo} ticker={m.ticker} color={m.color} size={40} />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className="text-[15px] font-medium tracking-tight">{m.ticker}</span>
@@ -149,10 +147,7 @@ export function MarketTable({ limit, showSearch = true }: { limit?: number; show
                 <tr key={m.symbol} className="group border-b hairline transition-colors last:border-0 hover:surface">
                   <td className="px-3 py-3.5">
                     <Link href={`/markets/${m.ticker.toLowerCase()}`} className="flex items-center gap-3">
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white"
-                        style={{ background: m.color }}>
-                        {m.ticker.slice(0, 2)}
-                      </span>
+                      <AssetLogo logo={m.logo} ticker={m.ticker} color={m.color} size={36} />
                       <span className="min-w-0">
                         <span className="block text-sm font-medium tracking-tight">{m.ticker}</span>
                         <span className="block truncate text-xs text-[var(--muted)]">{m.name}</span>

@@ -8,6 +8,7 @@ import { useAccount } from "wagmi";
 import { useMarkets } from "@/lib/useMarkets";
 import { WalletButton } from "./WalletButton";
 import { Sparkline } from "./Sparkline";
+import { AssetLogo } from "./AssetLogo";
 import { Counter } from "./Counter";
 import { Reveal } from "./Reveal";
 import { UsdcIcon } from "./icons/Usdc";
@@ -143,10 +144,7 @@ export function PortfolioView() {
                 <Link key={p.symbol} href={`/markets/${p.ticker.toLowerCase()}`}
                   className="block rounded-2xl border hairline p-4 transition-colors active:surface">
                   <div className="flex items-center gap-3">
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-xs font-semibold text-white"
-                      style={{ background: p.color }}>
-                      {p.ticker.slice(0, 2)}
-                    </span>
+                    <AssetLogo logo={markets?.markets.find((x) => x.symbol === p.symbol)?.logo} ticker={p.ticker} color={p.color} size={40} />
                     <span className="min-w-0 flex-1">
                       <span className="block text-[15px] font-medium">{p.ticker}</span>
                       <span className="tnum block truncate text-xs text-[var(--muted)]">
@@ -190,9 +188,7 @@ export function PortfolioView() {
                     <tr key={p.symbol} className="border-b hairline transition-colors last:border-0 hover:surface">
                       <td className="px-3 py-3.5">
                         <Link href={`/markets/${p.ticker.toLowerCase()}`} className="flex items-center gap-3">
-                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white" style={{ background: p.color }}>
-                            {p.ticker.slice(0, 2)}
-                          </span>
+                          <AssetLogo logo={m?.logo} ticker={p.ticker} color={p.color} size={36} />
                           <span>
                             <span className="block text-sm font-medium">{p.ticker}</span>
                             <span className="block text-xs text-[var(--muted)]">{p.name}</span>

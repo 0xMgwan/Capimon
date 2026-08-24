@@ -7,6 +7,7 @@ import { useMarket, useMarkets } from "@/lib/useMarkets";
 import { PriceChart } from "./PriceChart";
 import { TradePanel } from "./TradePanel";
 import { Sparkline } from "./Sparkline";
+import { AssetLogo } from "./AssetLogo";
 import { Reveal } from "./Reveal";
 import { compact, compactUsd, usd, short, ago } from "@/lib/format";
 
@@ -37,14 +38,7 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
       <Reveal className="mt-6">
         <div className="flex flex-wrap items-start justify-between gap-4 sm:gap-6">
           <div className="flex items-center gap-4">
-            {logo ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logo} alt="" className="h-14 w-14 rounded-2xl object-contain" />
-            ) : (
-              <span className="grid h-14 w-14 place-items-center rounded-2xl text-base font-semibold text-white" style={{ background: asset.color }}>
-                {asset.ticker.slice(0, 2)}
-              </span>
-            )}
+            <AssetLogo logo={market?.logo ?? logo} ticker={asset.ticker} color={asset.color} size={56} />
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="font-[family-name:var(--font-display)] text-3xl font-medium tracking-[-0.045em] sm:text-4xl">
@@ -128,9 +122,7 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
                 <div className="mt-4 space-y-3">
                   {peers.map((p) => (
                     <Link key={p.symbol} href={`/markets/${p.ticker.toLowerCase()}`} className="flex items-center gap-3 transition-opacity hover:opacity-70">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[10px] font-semibold text-white" style={{ background: p.color }}>
-                        {p.ticker.slice(0, 2)}
-                      </span>
+                      <AssetLogo logo={p.logo} ticker={p.ticker} color={p.color} size={32} />
                       <span className="min-w-0 flex-1 text-sm font-medium">{p.ticker}</span>
                       <Sparkline data={p.history.slice(-24)} color={p.change >= 0 ? "var(--color-up)" : "var(--color-down)"} width={48} height={20} fill={false} />
                       <span className={`tnum shrink-0 text-xs ${p.change >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>

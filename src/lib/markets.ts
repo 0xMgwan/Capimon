@@ -7,6 +7,8 @@ import { publicClient } from "./chain";
 export type Candle = { t: number; p: number; round: string };
 
 export type Market = AssetMeta & {
+  /** Issuer artwork, decoded from the B20 contractURI (ERC-7572). */
+  logo: string | null;
   price: number;
   priceRaw: string;
   feedDecimals: number;
@@ -49,6 +51,43 @@ async function history(feed: `0x${string}`, latestRound: bigint, count: number):
     void ids[i];
   });
   return out.sort((a, b) => a.t - b.t);
+}
+
+/**
+ * contractURI is effectively static, so logos are fetched once and kept for the
+ * life of the server process rather than on every market poll.
+ */
+const logoCache = new Map<string, string | null>();
+let logosInflight: Promise<void> | null = null;
+
+async function loadLogos() {
+  if (logoCache.size >= ASSETS.length) return;
+  if (!logosInflight) {
+    logosInflight = publicClient
+      .multicall({
+        contracts: ASSETS.map((a) => ({ address: a.token, abi: b20Abi, functionName: "contractURI" } as const)),
+        allowFailure: true,
+      })
+      .then((res) => {
+        res.forEach((r, i) => {
+          let image: string | null = null;
+          if (r.status === "success") {
+            try {
+              const b64 = (r.result as string).split("base64,")[1];
+              if (b64) image = JSON.parse(Buffer.from(b64, "base64").toString("utf8")).image ?? null;
+            } catch {
+              image = null;
+            }
+          }
+          logoCache.set(ASSETS[i].symbol, image);
+        });
+      })
+      .catch(() => {
+        /* fall back to initials */
+      })
+      .finally(() => { logosInflight = null; });
+  }
+  await logosInflight;
 }
 
 const HISTORY_DEPTH = 120;
@@ -113,9 +152,10 @@ export async function getMarkets(opts: { depth?: number } = {}): Promise<Market[
       updatedAt: Number(rd[3]), decimals, multiplier, rawSupply, supply };
   });
 
-  const hist = await Promise.all(
-    base.map((b) => (b.latestRound > 0n ? cachedHistory(b.meta.feed, b.latestRound, depth) : [])),
-  );
+  const [hist] = await Promise.all([
+    Promise.all(base.map((b) => (b.latestRound > 0n ? cachedHistory(b.meta.feed, b.latestRound, depth) : []))),
+    loadLogos(),
+  ]);
 
   const now = Math.floor(Date.now() / 1000);
 
@@ -131,6 +171,7 @@ export async function getMarkets(opts: { depth?: number } = {}): Promise<Market[
 
     return {
       ...b.meta,
+      logo: logoCache.get(b.meta.symbol) ?? null,
       price: b.price,
       priceRaw: b.priceRaw,
       feedDecimals: b.feedDecimals,

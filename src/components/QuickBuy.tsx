@@ -6,7 +6,8 @@ import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useMarkets } from "@/lib/useMarkets";
 import { useVenues } from "@/lib/useVenues";
-import { Sparkline } from "./Sparkline";
+import { AssetPicker } from "./AssetPicker";
+import { AssetLogo } from "./AssetLogo";
 import { Reveal, RevealWords } from "./Reveal";
 import { UsdcIcon } from "./icons/Usdc";
 import { usd } from "@/lib/format";
@@ -14,9 +15,9 @@ import { usd } from "@/lib/format";
 const PRESETS = [50, 100, 500, 1000];
 
 /**
- * Landing-page quick buy. Pick a USDC amount, pick a company, and the panel
- * shows the live oracle-implied position — then hands the whole intent to the
- * asset page, which owns the actual execution.
+ * A single order ticket: how much, what, what you get. The company selector is
+ * a picker rather than a second panel, so amount and asset stay one decision
+ * instead of reading as two separate tabs.
  */
 export function QuickBuy() {
   const { data, ticks } = useMarkets();
@@ -26,17 +27,17 @@ export function QuickBuy() {
   const [custom, setCustom] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
 
-  // Routable assets first — a quick-buy panel should lead with what can
-  // actually be bought right now.
   const markets = useMemo(() => {
     const rank = (sym: string) => (venues[sym]?.tradeable ? 0 : 1);
     return [...(data?.markets ?? [])].sort(
       (a, b) => rank(a.symbol) - rank(b.symbol) || b.tvl - a.tvl || a.ticker.localeCompare(b.ticker),
     );
   }, [data, venues]);
+
   const selected = markets.find((m) => m.ticker === picked) ?? markets[0];
-  const selectedVenue = selected ? venues[selected.symbol] : undefined;
+  const venue = selected ? venues[selected.symbol] : undefined;
   const units = selected && selected.price > 0 ? amount / selected.price : 0;
+  const tick = selected ? ticks[selected.symbol] : undefined;
 
   const setPreset = (n: number) => { setAmount(n); setCustom(""); };
   const onCustom = (v: string) => {
@@ -54,155 +55,115 @@ export function QuickBuy() {
   return (
     <section className="border-y hairline">
       <div className="mx-auto max-w-[1400px] px-5 py-20 sm:px-8 sm:py-28">
-        <div className="grid gap-12 lg:grid-cols-[0.85fr_1.15fr]">
+        <div className="grid gap-10 lg:grid-cols-[1fr_minmax(380px,460px)] lg:gap-16">
           <Reveal>
             <div className="lg:sticky lg:top-36">
               <div className="eyebrow">Quick buy</div>
               <h2 className="display mt-4 text-[clamp(2rem,4.6vw,3.6rem)]">
-                <RevealWords text="Pick an amount." />
+                <RevealWords text="One ticket." />
                 <br />
                 <span className="font-[family-name:var(--font-serif)] font-light italic text-[var(--muted)]">
-                  <RevealWords text="Pick a company." delay={0.1} />
+                  <RevealWords text="Thirteen companies." delay={0.1} />
                 </span>
               </h2>
               <p className="mt-5 max-w-sm text-[15px] leading-relaxed text-[var(--muted)]">
-                Everything settles in USDC on Base. Choose a size and an asset — CAPIMON
-                shows the live oracle-implied position before you go anywhere near a signature.
+                Everything settles in USDC on Base. Set a size, pick a company, and CAPIMON shows the
+                live oracle-implied position before you go anywhere near a signature.
               </p>
 
-              <div className="mt-7">
-                <div className="eyebrow flex items-center gap-1.5">
-                  <UsdcIcon className="h-3.5 w-3.5" /> You pay · USDC
+              <dl className="mt-8 grid max-w-sm grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)]">
+                <div className="bg-[var(--bg)] p-4">
+                  <dt className="eyebrow">Settles in</dt>
+                  <dd className="mt-1.5 flex items-center gap-1.5 text-lg font-medium">
+                    <UsdcIcon className="h-4 w-4" /> USDC
+                  </dd>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {PRESETS.map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setPreset(p)}
-                      className={`tnum rounded-full border px-4 py-2 text-sm font-medium transition-all ${
-                        amount === p && !custom
-                          ? "border-transparent bg-[var(--fg)] text-[var(--bg)]"
-                          : "hairline hover:surface"
-                      }`}
-                    >
-                      ${p.toLocaleString()}
-                    </button>
-                  ))}
-                  <div className="flex items-center gap-1.5 rounded-full border hairline px-3 py-2 focus-within:border-[var(--color-accent)]">
-                    <UsdcIcon className="h-4 w-4 shrink-0" />
-                    <input
-                      value={custom}
-                      onChange={(e) => onCustom(e.target.value)}
-                      inputMode="decimal"
-                      placeholder="Custom"
-                      className="tnum w-20 bg-transparent text-sm outline-none placeholder:text-[var(--muted)]"
-                    />
-                  </div>
+                <div className="bg-[var(--bg)] p-4">
+                  <dt className="eyebrow">Custody</dt>
+                  <dd className="mt-1.5 text-lg font-medium">Yours</dd>
                 </div>
-              </div>
+              </dl>
             </div>
           </Reveal>
 
           <Reveal delay={0.08}>
-            <div className="rounded-3xl border hairline p-4 sm:p-6">
-              <div className="eyebrow px-1">Choose a company · live marks</div>
-
-              <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-3">
-                {markets.length === 0 &&
-                  Array.from({ length: 6 }).map((_, i) => (
-                    <div key={i} className="h-[86px] animate-pulse rounded-2xl surface" />
-                  ))}
-
-                {markets.map((m) => {
-                  const active = selected?.ticker === m.ticker;
-                  const tick = ticks[m.symbol];
-                  return (
-                    <button
-                      key={m.symbol}
-                      onClick={() => setPicked(m.ticker)}
-                      className={`group relative rounded-2xl border p-3.5 text-left transition-all ${
-                        active ? "border-[var(--color-accent)] surface" : "hairline hover:surface"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[9px] font-semibold text-white"
-                          style={{ background: m.color }}
-                        >
-                          {m.ticker.slice(0, 2)}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-sm font-medium leading-tight">{m.ticker}</span>
-                          <span className="block truncate text-[11px] leading-tight text-[var(--muted)]">{m.name}</span>
-                        </span>
-                        <Sparkline
-                          data={m.history.slice(-20)}
-                          color={m.change >= 0 ? "var(--color-up)" : "var(--color-down)"}
-                          width={30} height={16} fill={false}
-                        />
-                        {venues[m.symbol]?.tradeable && (
-                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-up)]" title="Routable now" />
-                        )}
-                      </div>
-                      <div className="mt-2.5 flex items-baseline justify-between gap-2">
-                        <span className={`tnum text-sm ${tick === "up" ? "flash-up" : tick === "down" ? "flash-down" : ""}`}>
-                          {usd(m.price)}
-                        </span>
-                        <span className={`tnum text-[11px] ${m.change >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
-                          {m.change >= 0 ? "+" : ""}{m.change.toFixed(2)}%
-                        </span>
-                      </div>
-                      {active && (
-                        <motion.span
-                          layoutId="quickbuy-ring"
-                          className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-[var(--color-accent)]"
-                          transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                        />
-                      )}
-                    </button>
-                  );
-                })}
+            <div className="rounded-3xl border hairline p-5 shadow-sm sm:p-6">
+              {/* 1 — size */}
+              <div className="eyebrow flex items-center gap-1.5">
+                <UsdcIcon className="h-3.5 w-3.5" /> You pay · USDC
+              </div>
+              <div className="mt-3 flex items-center gap-3 rounded-2xl border hairline px-4 py-3.5 focus-within:border-[var(--color-accent)]">
+                <span className="text-2xl text-[var(--muted)]">$</span>
+                <input
+                  value={custom || String(amount)}
+                  onChange={(e) => onCustom(e.target.value)}
+                  inputMode="decimal"
+                  aria-label="Amount in USDC"
+                  className="tnum w-full bg-transparent text-2xl outline-none"
+                />
+                <UsdcIcon className="h-6 w-6 shrink-0" />
+              </div>
+              <div className="mt-2.5 grid grid-cols-4 gap-2">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPreset(p)}
+                    className={`tnum rounded-full border py-2 text-[13px] font-medium transition-all active:scale-95 ${
+                      amount === p && !custom
+                        ? "border-transparent bg-[var(--fg)] text-[var(--bg)]"
+                        : "hairline hover:surface"
+                    }`}
+                  >
+                    ${p >= 1000 ? `${p / 1000}k` : p}
+                  </button>
+                ))}
               </div>
 
-              {/* Live receipt for the current selection */}
-              <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl surface p-5">
-                <div>
-                  <div className="eyebrow">You receive · oracle-implied</div>
-                  <AnimatePresence mode="popLayout">
-                    <motion.div
-                      key={`${selected?.ticker}-${units.toFixed(6)}`}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -8 }}
-                      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-                      className="tnum mt-1.5 flex items-baseline gap-2 text-3xl font-medium tracking-tight"
-                    >
-                      {units.toFixed(6)}
-                      <span className="text-sm text-[var(--muted)]">{selected?.symbol ?? "—"}</span>
-                    </motion.div>
-                  </AnimatePresence>
-                  <div className="tnum mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--muted)]">
-                    <UsdcIcon className="h-3.5 w-3.5" />
-                    {usd(amount)} at {selected ? usd(selected.price) : "—"} ·{" "}
-                    {selectedVenue
-                      ? selectedVenue.tradeable
-                        ? `routing via ${selectedVenue.venues.join(" + ")}`
-                        : "no secondary market yet — mint only"
-                      : "checking routes…"}
-                  </div>
+              {/* 2 — company */}
+              <div className="eyebrow mt-6">Buy</div>
+              <div className="mt-3">
+                <AssetPicker markets={markets} venues={venues} selected={selected} onSelect={setPicked} />
+              </div>
+
+              {/* 3 — receipt */}
+              <div className="mt-4 rounded-2xl surface p-4">
+                <div className="eyebrow">You receive · oracle-implied</div>
+                <AnimatePresence mode="popLayout">
+                  <motion.div
+                    key={`${selected?.ticker}-${units.toFixed(6)}`}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+                    className={`tnum mt-1.5 flex items-center gap-2.5 text-3xl font-medium tracking-tight ${
+                      tick === "up" ? "flash-up" : tick === "down" ? "flash-down" : ""
+                    }`}
+                  >
+                    {selected && <AssetLogo logo={selected.logo} ticker={selected.ticker} color={selected.color} size={28} />}
+                    {units.toFixed(6)}
+                    <span className="text-sm text-[var(--muted)]">{selected?.symbol ?? "—"}</span>
+                  </motion.div>
+                </AnimatePresence>
+                <div className="tnum mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
+                  {usd(amount)} at {selected ? usd(selected.price) : "—"} ·{" "}
+                  {venue
+                    ? venue.tradeable
+                      ? `routing via ${venue.venues.join(" + ")}`
+                      : "no secondary market yet — mint only"
+                    : "checking routes…"}
                 </div>
-
-                <button
-                  onClick={go}
-                  disabled={!selected}
-                  className="group inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--fg)] px-6 py-3.5 sm:w-auto text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95 disabled:opacity-50"
-                >
-                  Review {selected?.ticker ?? ""} order
-                  <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
-                </button>
               </div>
 
-              <p className="mt-3 px-1 text-[11px] leading-relaxed text-[var(--muted)]">
+              <button
+                onClick={go}
+                disabled={!selected}
+                className="group mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--fg)] py-4 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
+              >
+                Review {selected?.ticker ?? ""} order
+                <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
+              </button>
+
+              <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
                 An oracle-implied figure. The asset page aggregates every venue on Base for a real
                 executable quote, and says plainly when an asset has no secondary market yet.{" "}
                 <Link href="/how-it-works" className="underline underline-offset-2 hover:text-[var(--fg)]">

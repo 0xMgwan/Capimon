@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMarkets } from "@/lib/useMarkets";
+import { AssetLogo } from "./AssetLogo";
 import { marketSession } from "@/lib/format";
 import { useEffect, useState } from "react";
 
@@ -49,6 +50,7 @@ export function TickerTape() {
                       dir === "up" ? "flash-up" : dir === "down" ? "flash-down" : ""
                     }`}
                   >
+                    <AssetLogo logo={m.logo} ticker={m.ticker} color={m.color} size={14} />
                     <span className="font-semibold tracking-tight">{m.ticker}</span>
                     <span className="tnum">${m.price.toFixed(2)}</span>
                     <span className={`tnum text-[11px] ${up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>

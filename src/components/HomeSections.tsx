@@ -9,6 +9,7 @@ import { Counter } from "./Counter";
 import { Marquee } from "./Marquee";
 import { MarketTable } from "./MarketTable";
 import { Sparkline } from "./Sparkline";
+import { AssetLogo } from "./AssetLogo";
 import { compactUsd, compact } from "@/lib/format";
 
 /* ------------------------------------------------------------------ */
@@ -112,7 +113,7 @@ export function ProductsSection() {
                   href={`/markets/${m.ticker.toLowerCase()}`}
                   className="flex items-center gap-2 rounded-full border hairline px-3 py-1.5 text-xs transition-transform hover:scale-105"
                 >
-                  <span className="h-2 w-2 rounded-full" style={{ background: m.color }} />
+                  <AssetLogo logo={m.logo} ticker={m.ticker} color={m.color} size={16} />
                   <span className="font-medium">{m.ticker}</span>
                   <span className="tnum text-[var(--muted)]">${m.price.toFixed(2)}</span>
                   <span className={`tnum ${m.change >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>

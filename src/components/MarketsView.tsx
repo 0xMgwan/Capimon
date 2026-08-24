@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { useMarkets } from "@/lib/useMarkets";
 import { MarketTable } from "./MarketTable";
 import { Sparkline } from "./Sparkline";
+import { AssetLogo } from "./AssetLogo";
 import { Counter } from "./Counter";
 import { Reveal } from "./Reveal";
 import { compactUsd, ago } from "@/lib/format";
@@ -122,9 +123,7 @@ function MoverCard({ title, rows }: { title: string; rows: ReturnType<typeof use
         {rows.length === 0 && <div className="h-24 animate-pulse rounded surface" />}
         {rows.map((m) => (
           <Link key={m.symbol} href={`/markets/${m.ticker.toLowerCase()}`} className="flex items-center gap-3 transition-opacity hover:opacity-70">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[10px] font-semibold text-white" style={{ background: m.color }}>
-              {m.ticker.slice(0, 2)}
-            </span>
+            <AssetLogo logo={m.logo} ticker={m.ticker} color={m.color} size={32} />
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-medium">{m.ticker}</span>
               <span className="tnum block text-[11px] text-[var(--muted)]">${m.price.toFixed(2)}</span>

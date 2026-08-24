@@ -63,7 +63,64 @@ export function MarketTable({ limit, showSearch = true }: { limit?: number; show
         </div>
       )}
 
-      <div className="scroll-thin overflow-x-auto rounded-2xl border hairline">
+      {/* Phones get cards; the table needs more width than a phone has. */}
+      <div className="grid gap-2 md:hidden">
+        {loading && !rows.length &&
+          Array.from({ length: limit ?? 6 }).map((_, i) => (
+            <div key={i} className="h-[92px] animate-pulse rounded-2xl surface" />
+          ))}
+        {rows.map((m) => {
+          const dirTick = ticks[m.symbol];
+          const up = m.change >= 0;
+          const v = venues[m.symbol];
+          return (
+            <Link
+              key={m.symbol}
+              href={`/markets/${m.ticker.toLowerCase()}`}
+              className="block rounded-2xl border hairline p-4 transition-colors active:surface"
+            >
+              <div className="flex items-center gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-xs font-semibold text-white"
+                  style={{ background: m.color }}>
+                  {m.ticker.slice(0, 2)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className="text-[15px] font-medium tracking-tight">{m.ticker}</span>
+                    {v && (
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        v.tradeable
+                          ? "bg-[var(--color-up)]/10 text-[var(--color-up)]"
+                          : "surface text-[var(--muted)]"
+                      }`}>
+                        {v.tradeable ? "Tradeable" : "Mint only"}
+                      </span>
+                    )}
+                  </span>
+                  <span className="block truncate text-xs text-[var(--muted)]">{m.name}</span>
+                </span>
+                <Sparkline data={m.history.slice(-30)} color={up ? "var(--color-up)" : "var(--color-down)"} width={56} height={26} />
+                <span className="shrink-0 text-right">
+                  <span className={`tnum block text-[15px] ${dirTick === "up" ? "flash-up" : dirTick === "down" ? "flash-down" : ""}`}>
+                    ${m.price.toFixed(2)}
+                  </span>
+                  <span className={`tnum block text-xs ${up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                    {up ? "+" : ""}{m.change.toFixed(2)}%
+                  </span>
+                </span>
+              </div>
+              {m.tvl > 0 && (
+                <div className="tnum mt-3 flex justify-between border-t hairline pt-2.5 text-[11px] text-[var(--muted)]">
+                  <span>{compact(m.supply, 2)} share-equivalents</span>
+                  <span>{compactUsd(m.tvl)} onchain</span>
+                </div>
+              )}
+            </Link>
+          );
+        })}
+      </div>
+
+      <div className="scroll-thin hidden overflow-x-auto rounded-2xl border hairline md:block">
         <table className="w-full min-w-[760px] border-collapse">
           <thead className="border-b hairline">
             <tr>

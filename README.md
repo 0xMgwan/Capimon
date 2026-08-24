@@ -45,6 +45,12 @@ answers, so CAPIMON aggregates and then checks the result against Chainlink:
 Both `/api/quote` and `/api/swap` grade independently, so a stale render cannot
 push an unsafe order through.
 
+**Fallback.** If the aggregator is unreachable, both endpoints quote and build
+directly against the deepest Aerodrome Slipstream pool
+(factory `0xf8f2eB49…`, quoter `0x514c8B5f…`, router `0x698Cb2b6…`, pools keyed
+by tick spacing rather than fee). The fill is real and executable, just single-hop
+rather than split — the UI says so rather than passing it off as the same quote.
+
 ## Run it
 
 ```bash
@@ -88,6 +94,16 @@ Base, Chainlink, Coinbase, USDC, Uniswap and OP Stack appear on the landing page
 with the role each one plays in the architecture. They are dependencies, not
 partners or sponsors — there are no commercial relationships behind any of those
 names.
+
+## Mobile
+
+Built to be used on a phone, not merely to survive one. Tables become card
+lists below `md` so nothing scrolls sideways, a fixed bottom tab bar replaces
+the hamburger, `viewport-fit=cover` plus `env(safe-area-inset-*)` handles the
+notch and home indicator, and the chart shortens on small screens. Pinch zoom is
+deliberately left enabled for accessibility.
+
+Light is the default theme; dark is opt-in and remembered in `localStorage`.
 
 ## Design
 

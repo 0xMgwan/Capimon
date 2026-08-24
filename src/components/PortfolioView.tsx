@@ -94,7 +94,7 @@ export function PortfolioView() {
               {loading && <span className="opacity-60">syncing…</span>}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-4">
+          <div className="grid w-full grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-4 lg:w-auto">
             <Cell label="Total value" value={<Counter value={pf?.total ?? 0} format={(n) => usd(n)} />} />
             <Cell label="Equities" value={<Counter value={pf?.equity ?? 0} format={(n) => usd(n)} />} />
             <Cell
@@ -133,7 +133,45 @@ export function PortfolioView() {
             </Link>
           </div>
         ) : (
-          <div className="scroll-thin overflow-x-auto rounded-2xl border hairline">
+          <>
+          {/* Phones get cards; the positions table is wider than a phone. */}
+          <div className="grid gap-2 md:hidden">
+            {positions.map((p) => {
+              const m = markets?.markets.find((x) => x.symbol === p.symbol);
+              const weight = pf && pf.total > 0 ? (p.value / pf.total) * 100 : 0;
+              return (
+                <Link key={p.symbol} href={`/markets/${p.ticker.toLowerCase()}`}
+                  className="block rounded-2xl border hairline p-4 transition-colors active:surface">
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-xs font-semibold text-white"
+                      style={{ background: p.color }}>
+                      {p.ticker.slice(0, 2)}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[15px] font-medium">{p.ticker}</span>
+                      <span className="tnum block truncate text-xs text-[var(--muted)]">
+                        {p.qty.toFixed(6)} @ {usd(p.price)}
+                      </span>
+                    </span>
+                    <Sparkline data={(m?.history ?? []).slice(-30)}
+                      color={p.change >= 0 ? "var(--color-up)" : "var(--color-down)"} width={52} height={24} />
+                    <span className="shrink-0 text-right">
+                      <span className="tnum block text-[15px] font-medium">{usd(p.value)}</span>
+                      <span className={`tnum block text-xs ${p.change >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                        {p.change >= 0 ? "+" : ""}{p.change.toFixed(2)}%
+                      </span>
+                    </span>
+                  </div>
+                  <div className="tnum mt-3 flex justify-between border-t hairline pt-2.5 text-[11px] text-[var(--muted)]">
+                    <span>{weight.toFixed(1)}% of book</span>
+                    <span>{p.name}</span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+
+          <div className="scroll-thin hidden overflow-x-auto rounded-2xl border hairline md:block">
             <table className="w-full min-w-[720px] border-collapse">
               <thead className="border-b hairline">
                 <tr>
@@ -179,6 +217,7 @@ export function PortfolioView() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Reveal>
 
@@ -195,9 +234,9 @@ export function PortfolioView() {
 
 function Cell({ label, value }: { label: React.ReactNode; value: React.ReactNode }) {
   return (
-    <div className="bg-[var(--bg)] px-5 py-4">
-      <div className="eyebrow">{label}</div>
-      <div className="tnum mt-1.5 text-lg font-medium">{value}</div>
+    <div className="bg-[var(--bg)] px-3 py-3 sm:px-5 sm:py-4">
+      <div className="eyebrow truncate">{label}</div>
+      <div className="tnum mt-1.5 text-base font-medium sm:text-lg">{value}</div>
     </div>
   );
 }

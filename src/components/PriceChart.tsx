@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Candle } from "@/lib/useMarkets";
 import { usd } from "@/lib/format";
 
@@ -19,6 +19,19 @@ type RangeKey = (typeof RANGES)[number]["key"];
  */
 export function PriceChart({ data, color, height = 320 }: { data: Candle[]; color: string; height?: number }) {
   const [range, setRange] = useState<RangeKey>("ALL");
+  const [compact, setCompact] = useState(false);
+
+  // The chart keeps its aspect ratio via viewBox, so a shorter box on phones
+  // avoids a tall dead zone without touching the drawing maths.
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 640px)");
+    const apply = () => setCompact(mq.matches);
+    const raf = requestAnimationFrame(apply);
+    mq.addEventListener("change", apply);
+    return () => { cancelAnimationFrame(raf); mq.removeEventListener("change", apply); };
+  }, []);
+
+  const h = compact ? Math.round(height * 0.7) : height;
   const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
   const ref = useRef<SVGSVGElement>(null);
   const W = 1000;
@@ -42,14 +55,14 @@ export function PriceChart({ data, color, height = 320 }: { data: Candle[]; colo
     const span = max - min || max * 0.01 || 1;
     const padY = 26;
     const x = (i: number) => (i / (series.length - 1)) * W;
-    const y = (p: number) => height - padY - ((p - min) / span) * (height - padY * 2);
+    const y = (p: number) => h - padY - ((p - min) / span) * (h - padY * 2);
     return {
       min, max, x, y,
       line: ps.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(2)},${y(p).toFixed(2)}`).join(" "),
-      area: `${ps.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(2)},${y(p).toFixed(2)}`).join(" ")} L${W},${height} L0,${height} Z`,
+      area: `${ps.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(2)},${y(p).toFixed(2)}`).join(" ")} L${W},${h} L0,${h} Z`,
       up: ps[ps.length - 1] >= ps[0],
     };
-  }, [series, height]);
+  }, [series, h]);
 
   const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
     if (!geo || !ref.current) return;
@@ -98,15 +111,15 @@ export function PriceChart({ data, color, height = 320 }: { data: Candle[]; colo
 
       <div className="relative rounded-2xl border hairline p-1">
         {!geo ? (
-          <div className="grid place-items-center text-sm text-[var(--muted)]" style={{ height }}>
+          <div className="grid place-items-center text-sm text-[var(--muted)]" style={{ height: h }}>
             Waiting for the first onchain rounds…
           </div>
         ) : (
           <svg
             ref={ref}
-            viewBox={`0 0 ${W} ${height}`}
+            viewBox={`0 0 ${W} ${h}`}
             className="w-full cursor-crosshair"
-            style={{ height }}
+            style={{ height: h }}
             onMouseMove={onMove}
             onMouseLeave={() => setHover(null)}
           >
@@ -118,7 +131,7 @@ export function PriceChart({ data, color, height = 320 }: { data: Candle[]; colo
             </defs>
 
             {[0.25, 0.5, 0.75].map((f) => (
-              <line key={f} x1="0" x2={W} y1={height * f} y2={height * f}
+              <line key={f} x1="0" x2={W} y1={h * f} y2={h * f}
                 stroke="var(--border)" strokeWidth="1" strokeDasharray="3 5" />
             ))}
 
@@ -128,7 +141,7 @@ export function PriceChart({ data, color, height = 320 }: { data: Candle[]; colo
 
             {hover && (
               <g>
-                <line x1={hover.x} x2={hover.x} y1="0" y2={height} stroke="var(--border)" strokeWidth="1" />
+                <line x1={hover.x} x2={hover.x} y1="0" y2={h} stroke="var(--border)" strokeWidth="1" />
                 <circle cx={hover.x} cy={hover.y} r="5" fill="var(--bg)" stroke={color} strokeWidth="2.5" />
               </g>
             )}

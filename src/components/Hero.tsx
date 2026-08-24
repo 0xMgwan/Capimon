@@ -22,7 +22,7 @@ export function Hero() {
   const movers = [...(data?.markets ?? [])].sort((a, b) => Math.abs(b.change) - Math.abs(a.change)).slice(0, 3);
 
   return (
-    <section ref={ref} className="relative isolate flex min-h-[92vh] flex-col justify-center overflow-hidden">
+    <section ref={ref} className="relative isolate flex min-h-[88vh] flex-col justify-center overflow-hidden [@supports(height:100dvh)]:min-h-[88dvh]">
       {/* Living mesh backdrop — cheap, GPU-only, and it never blocks the type. */}
       <motion.div style={reduced ? undefined : { scale }} className="absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-[var(--bg)]" />

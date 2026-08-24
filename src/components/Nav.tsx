@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion } from "motion/react";
 import { Logo, Wordmark } from "./Logo";
 import { WalletButton } from "./WalletButton";
 import { ThemeToggle } from "./ThemeToggle";
@@ -17,10 +17,6 @@ const LINKS = [
 export function Nav() {
   const [scrolled, setScrolled] = useState(false);
   const path = usePathname();
-  // The menu belongs to the route it was opened on, so navigating closes it
-  // without an effect that resets state on every path change.
-  const [menuAt, setMenuAt] = useState<string | null>(null);
-  const menu = menuAt === path;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -74,37 +70,10 @@ export function Nav() {
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <div className="hidden sm:block"><WalletButton /></div>
-            <button
-              onClick={() => setMenuAt(menu ? null : path)}
-              aria-label="Menu"
-              className="grid h-9 w-9 place-items-center rounded-full border hairline md:hidden"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round">
-                {menu ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 8h16M4 16h16" />}
-              </svg>
-            </button>
           </div>
         </nav>
       </motion.div>
 
-      <AnimatePresence>
-        {menu && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-            className="border-y hairline bg-[var(--bg)] px-5 py-4 md:hidden"
-          >
-            {LINKS.map((l) => (
-              <Link key={l.href} href={l.href} className="block py-3 text-lg tracking-tight">
-                {l.label}
-              </Link>
-            ))}
-            <div className="pt-3 sm:hidden"><WalletButton /></div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </header>
   );
 }

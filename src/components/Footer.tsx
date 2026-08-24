@@ -27,8 +27,6 @@ const COLS = [
       { label: "Live market API", href: "/api/markets", ext: true },
       { label: "Routable venues", href: "/api/venues", ext: true },
       { label: "Chainlink feeds", href: "https://data.chain.link/base/base", ext: true },
-      { label: "Base network", href: "https://base.org", ext: true },
-      { label: "BaseScan", href: "https://basescan.org", ext: true },
     ],
   },
 ];

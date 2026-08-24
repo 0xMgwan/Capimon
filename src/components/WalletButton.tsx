@@ -71,7 +71,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
             </div>
             <a href={`https://basescan.org/address/${address}`} target="_blank" rel="noreferrer"
               className="mt-1 block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">
-              View on BaseScan ↗
+              View wallet onchain ↗
             </a>
             <button
               onClick={() => { disconnect(); setOpen(false); }}

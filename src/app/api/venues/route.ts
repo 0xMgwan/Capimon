@@ -3,6 +3,7 @@ import { parseUnits, formatUnits } from "viem";
 import { ASSETS, USDC_BASE } from "@/lib/assets";
 import { getMarkets } from "@/lib/markets";
 import { getRoute, venueLabel } from "@/lib/aggregator";
+import { bestPool } from "@/lib/aerodrome";
 
 export const dynamic = "force-dynamic";
 
@@ -30,14 +31,24 @@ async function probe(): Promise<Venue[]> {
       const m = markets.find((x) => x.symbol === a.symbol)!;
       try {
         const route = await getRoute(USDC_BASE, a.token, amountIn);
-        if (!route) return { symbol: a.symbol, tradeable: false, venues: [], spread: null };
-        const out = Number(formatUnits(BigInt(route.routeSummary.amountOut), m.decimals));
-        const oracleOut = m.price > 0 ? PROBE_USDC / m.price : 0;
-        const spread = oracleOut > 0 ? ((out - oracleOut) / oracleOut) * 100 : null;
-        return { symbol: a.symbol, tradeable: true, venues: route.venues.map(venueLabel), spread };
+        if (route) {
+          const out = Number(formatUnits(BigInt(route.routeSummary.amountOut), m.decimals));
+          const oracleOut = m.price > 0 ? PROBE_USDC / m.price : 0;
+          const spread = oracleOut > 0 ? ((out - oracleOut) / oracleOut) * 100 : null;
+          return { symbol: a.symbol, tradeable: true, venues: route.venues.map(venueLabel), spread };
+        }
       } catch {
-        return { symbol: a.symbol, tradeable: false, venues: [], spread: null };
+        /* fall through */
       }
+      // Aggregator unreachable or routeless — a deep Aerodrome pool still means
+      // the asset is tradeable, so check before calling it mint-only.
+      try {
+        const pool = await bestPool(USDC_BASE, a.token);
+        if (pool) return { symbol: a.symbol, tradeable: true, venues: ["Aerodrome CL"], spread: null };
+      } catch {
+        /* nothing routable */
+      }
+      return { symbol: a.symbol, tradeable: false, venues: [], spread: null };
     }),
   );
 }

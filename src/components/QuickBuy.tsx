@@ -107,7 +107,7 @@ export function QuickBuy() {
             <div className="rounded-3xl border hairline p-4 sm:p-6">
               <div className="eyebrow px-1">Choose a company · live marks</div>
 
-              <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-3">
                 {markets.length === 0 &&
                   Array.from({ length: 6 }).map((_, i) => (
                     <div key={i} className="h-[86px] animate-pulse rounded-2xl surface" />
@@ -124,7 +124,7 @@ export function QuickBuy() {
                         active ? "border-[var(--color-accent)] surface" : "hairline hover:surface"
                       }`}
                     >
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-2">
                         <span
                           className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[9px] font-semibold text-white"
                           style={{ background: m.color }}
@@ -138,7 +138,7 @@ export function QuickBuy() {
                         <Sparkline
                           data={m.history.slice(-20)}
                           color={m.change >= 0 ? "var(--color-up)" : "var(--color-down)"}
-                          width={38} height={18} fill={false}
+                          width={30} height={16} fill={false}
                         />
                         {venues[m.symbol]?.tradeable && (
                           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-up)]" title="Routable now" />
@@ -195,7 +195,7 @@ export function QuickBuy() {
                 <button
                   onClick={go}
                   disabled={!selected}
-                  className="group inline-flex items-center gap-2 rounded-full bg-[var(--fg)] px-6 py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95 disabled:opacity-50"
+                  className="group inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--fg)] px-6 py-3.5 sm:w-auto text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95 disabled:opacity-50"
                 >
                   Review {selected?.ticker ?? ""} order
                   <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>

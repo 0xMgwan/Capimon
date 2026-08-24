@@ -124,3 +124,14 @@ export const BY_SYMBOL: Record<string, AssetMeta> = Object.fromEntries(
 export const B20_REGISTRY = "0x3f3E8cf41cdd3b1D118c16471aB0113DfDDd5CaD" as const;
 export const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
 export const MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11" as const;
+
+/**
+ * Aerodrome Slipstream (concentrated liquidity) on Base — where B20 equity
+ * liquidity actually sits. Used as the direct fallback when the aggregator is
+ * unavailable. Resolved from the live NVDAc/USDC pool's own `factory()`.
+ */
+export const AERO_CL_FACTORY = "0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef" as const;
+export const AERO_CL_QUOTER = "0x514c8B5f54112481E28028F1166Bd78501089259" as const;
+export const AERO_CL_ROUTER = "0x698Cb2b6dd822994581fEa6eA4Fc755d1363A92F" as const;
+/** Slipstream keys pools by tick spacing rather than fee. */
+export const AERO_TICK_SPACINGS = [1, 10, 50, 100, 200, 2000] as const;

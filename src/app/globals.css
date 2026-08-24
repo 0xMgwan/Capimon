@@ -51,6 +51,26 @@ html.dark {
    breaks window scrolling and position:sticky on descendants. */
 html { scroll-behavior: smooth; overflow-x: clip; }
 
+/* App-like on phones: fill the dynamic viewport, respect the notch and home
+   indicator, and never rubber-band horizontally. */
+@supports (height: 100dvh) {
+  .min-h-screen-d { min-height: 100dvh; }
+}
+.safe-b { padding-bottom: env(safe-area-inset-bottom); }
+.safe-t { padding-top: env(safe-area-inset-top); }
+.safe-x { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+
+/* Bottom tab bar clearance, applied only while the bar is on screen. */
+@media (max-width: 767px) {
+  body { padding-bottom: calc(4.25rem + env(safe-area-inset-bottom)); }
+}
+
+/* Touch targets and tap feedback */
+@media (hover: none) {
+  .marquee:hover .marquee-track { animation-play-state: running; }
+}
+button, a { -webkit-tap-highlight-color: transparent; }
+
 body {
   background: var(--bg);
   color: var(--fg);

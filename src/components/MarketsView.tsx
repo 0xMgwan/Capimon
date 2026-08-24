@@ -44,7 +44,7 @@ export function MarketsView() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-3">
+          <div className="grid w-full grid-cols-3 gap-px overflow-hidden rounded-2xl bg-[var(--border)] lg:w-auto">
             <Cell label="Onchain value" value={<Counter value={data?.totals.tvl ?? 0} format={compactUsd} />} />
             <Cell label="Assets" value={<Counter value={markets.length} format={(n) => Math.round(n).toString()} />} />
             <Cell label="Snapshot" value={data ? ago(data.asOf) : "—"} />
@@ -59,7 +59,7 @@ export function MarketsView() {
       )}
 
       <Reveal delay={0.06} className="mt-10">
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
           <MoverCard title="Top movers" rows={gainers} />
           <MoverCard title="Biggest drawdowns" rows={losers} />
           <div className="rounded-2xl border hairline p-5">
@@ -107,9 +107,9 @@ export function MarketsView() {
 
 function Cell({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="bg-[var(--bg)] px-5 py-4">
-      <div className="eyebrow">{label}</div>
-      <div className="tnum mt-1.5 text-lg font-medium">{value}</div>
+    <div className="bg-[var(--bg)] px-3 py-3 sm:px-5 sm:py-4">
+      <div className="eyebrow truncate">{label}</div>
+      <div className="tnum mt-1.5 text-base font-medium sm:text-lg">{value}</div>
     </div>
   );
 }

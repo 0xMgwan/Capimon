@@ -3,6 +3,7 @@ import { parseUnits, formatUnits } from "viem";
 import { BY_SYMBOL, USDC_BASE } from "@/lib/assets";
 import { getMarkets } from "@/lib/markets";
 import { getRoute, venueLabel } from "@/lib/aggregator";
+import { quote as aeroQuote } from "@/lib/aerodrome";
 
 export const dynamic = "force-dynamic";
 
@@ -44,14 +45,45 @@ export async function GET(req: Request) {
     // What the oracle says the fill should be, before venue fees and slippage.
     const oracleOut = side === "buy" ? amount / market.price : amount * market.price;
 
-    const route = await getRoute(tokenIn, tokenOut, amountInRaw);
+    // Aggregated routing first; if it is unreachable, fall back to quoting the
+    // deepest Aerodrome CL pool directly so the desk never goes dark.
+    let route: Awaited<ReturnType<typeof getRoute>> = null;
+    let degraded = false;
+    try {
+      route = await getRoute(tokenIn, tokenOut, amountInRaw);
+    } catch {
+      degraded = true;
+    }
+
+    if (!route) {
+      const direct = await aeroQuote(tokenIn, tokenOut, amountInRaw).catch(() => null);
+      if (direct) {
+        const amountOut = Number(formatUnits(direct.amountOut, outDecimals));
+        const impact = oracleOut > 0 ? ((amountOut - oracleOut) / oracleOut) * 100 : 0;
+        const g = grade(impact);
+        return NextResponse.json({
+          ok: true, executable: true, source: "aerodrome", degraded: true,
+          symbol: asset.symbol, side, amountIn: amount, amountOut, oracleOut,
+          oraclePrice: market.price,
+          executionPrice: side === "buy" ? amount / amountOut : amountOut / amount,
+          priceImpact: impact, ...g,
+          severity: g.severity, safe: g.safe, overridable: g.overridable,
+          venues: ["Aerodrome CL"], hops: 1,
+          tickSpacing: direct.pool.tickSpacing, pool: direct.pool.address,
+          note: "Aggregated routing is unavailable — quoting the deepest Aerodrome pool directly. The fill may be slightly worse than a split route.",
+        }, { headers: { "cache-control": "no-store" } });
+      }
+    }
 
     if (!route) {
       return NextResponse.json({
-        ok: true, executable: false, reason: "no-route", severity: "none", safe: false, overridable: false,
+        ok: true, executable: false, reason: degraded ? "routing-unavailable" : "no-route",
+        severity: "none", safe: false, overridable: false, degraded,
         symbol: asset.symbol, side, amountIn: amount, oracleOut, oraclePrice: market.price,
         supply: market.supply,
-        note: market.supply > 0
+        note: degraded
+          ? "Routing is temporarily unavailable and no direct Aerodrome pool could be quoted. The oracle mark above is still live."
+          : market.supply > 0
           ? "No routable liquidity for this size right now across the venues we aggregate."
           : "No tokens have been minted on Base for this asset yet, so there is no secondary market to route through. Mint runs through the issuer under KYC.",
       }, { headers: { "cache-control": "no-store" } });
@@ -62,7 +94,7 @@ export async function GET(req: Request) {
     const { severity, safe, overridable } = grade(impact);
 
     return NextResponse.json({
-      ok: true, executable: true, symbol: asset.symbol, side, amountIn: amount, amountOut, oracleOut,
+      ok: true, executable: true, source: "aggregator", symbol: asset.symbol, side, amountIn: amount, amountOut, oracleOut,
       oraclePrice: market.price,
       executionPrice: side === "buy" ? amount / amountOut : amountOut / amount,
       priceImpact: impact, severity, safe, overridable,

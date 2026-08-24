@@ -3,6 +3,7 @@ import { parseUnits, isAddress } from "viem";
 import { BY_SYMBOL, USDC_BASE } from "@/lib/assets";
 import { getMarkets } from "@/lib/markets";
 import { getRoute, buildRoute } from "@/lib/aggregator";
+import { quote as aeroQuote, buildSwap as buildAeroSwap } from "@/lib/aerodrome";
 
 export const dynamic = "force-dynamic";
 
@@ -32,16 +33,46 @@ export async function POST(req: Request) {
     const inDecimals = side === "buy" ? 6 : market.decimals;
     const outDecimals = side === "buy" ? market.decimals : 6;
 
-    const route = await getRoute(
-      side === "buy" ? USDC_BASE : asset.token,
-      side === "buy" ? asset.token : USDC_BASE,
-      parseUnits(amount.toString(), inDecimals),
-    );
-    if (!route) return NextResponse.json({ ok: false, error: "no route available" }, { status: 409 });
+    const tokenIn = side === "buy" ? USDC_BASE : asset.token;
+    const tokenOut = side === "buy" ? asset.token : USDC_BASE;
+    const amountInRaw = parseUnits(amount.toString(), inDecimals);
+    const oracleOut = side === "buy" ? amount / market.price : amount * market.price;
+
+    let route: Awaited<ReturnType<typeof getRoute>> = null;
+    try {
+      route = await getRoute(tokenIn, tokenOut, amountInRaw);
+    } catch {
+      /* fall through to the direct Aerodrome path */
+    }
+
+    if (!route) {
+      // Same guard as the aggregated path: grade the direct fill before building.
+      const direct = await aeroQuote(tokenIn, tokenOut, amountInRaw).catch(() => null);
+      if (!direct) return NextResponse.json({ ok: false, error: "no route available" }, { status: 409 });
+
+      const out = Number(direct.amountOut) / 10 ** outDecimals;
+      const impact = oracleOut > 0 ? ((out - oracleOut) / oracleOut) * 100 : 0;
+      if (Math.abs(impact) >= UNUSABLE_IMPACT) {
+        return NextResponse.json(
+          { ok: false, error: `route is ${impact.toFixed(1)}% from the oracle mark — refusing to build`, impact },
+          { status: 409 },
+        );
+      }
+      const minOut = (direct.amountOut * BigInt(10_000 - slippageBps)) / 10_000n;
+      const built = buildAeroSwap({
+        tokenIn, tokenOut, tickSpacing: direct.pool.tickSpacing,
+        recipient: sender as `0x${string}`, amountIn: amountInRaw, amountOutMinimum: minOut,
+      });
+      return NextResponse.json({
+        ok: true, source: "aerodrome", ...built,
+        gas: direct.gasEstimate.toString(),
+        amountOut: direct.amountOut.toString(),
+        priceImpact: impact,
+      }, { headers: { "cache-control": "no-store" } });
+    }
 
     // Re-check against the mark: the route may have moved since the quote.
     const out = Number(BigInt(route.routeSummary.amountOut)) / 10 ** outDecimals;
-    const oracleOut = side === "buy" ? amount / market.price : amount * market.price;
     const impact = oracleOut > 0 ? ((out - oracleOut) / oracleOut) * 100 : 0;
     if (Math.abs(impact) >= UNUSABLE_IMPACT) {
       return NextResponse.json(
@@ -54,6 +85,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
+      source: "aggregator",
       to: built.routerAddress,
       data: built.data,
       value: built.transactionValue ?? "0",

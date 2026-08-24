@@ -35,7 +35,7 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
       </Link>
 
       <Reveal className="mt-6">
-        <div className="flex flex-wrap items-start justify-between gap-6">
+        <div className="flex flex-wrap items-start justify-between gap-4 sm:gap-6">
           <div className="flex items-center gap-4">
             {logo ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -57,8 +57,8 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
             </div>
           </div>
 
-          <div className="text-right">
-            <div className={`tnum text-4xl font-medium tracking-tight sm:text-5xl ${tick === "up" ? "flash-up" : tick === "down" ? "flash-down" : ""}`}>
+          <div className="w-full text-left sm:w-auto sm:text-right">
+            <div className={`tnum text-[2.25rem] font-medium tracking-tight sm:text-5xl ${tick === "up" ? "flash-up" : tick === "down" ? "flash-down" : ""}`}>
               {market ? usd(market.price) : loading ? <span className="inline-block h-11 w-40 animate-pulse rounded surface" /> : "—"}
             </div>
             {market && (
@@ -75,9 +75,9 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
         {asset.blurb}
       </p>
 
-      <div className="mt-10 grid gap-6 lg:grid-cols-[1.7fr_1fr]">
+      <div className="mt-8 grid gap-5 sm:mt-10 sm:gap-6 lg:grid-cols-[1.7fr_1fr]">
         <Reveal>
-          <div className="rounded-3xl border hairline p-5 sm:p-7">
+          <div className="rounded-3xl border hairline p-4 sm:p-7">
             <PriceChart data={market?.history ?? []} color={up ? "var(--color-up)" : "var(--color-down)"} />
           </div>
 

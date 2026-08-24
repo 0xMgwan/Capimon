@@ -20,7 +20,7 @@ type Quote = {
   executionPrice?: number; priceImpact?: number; error?: string;
   severity?: Severity; safe?: boolean; overridable?: boolean;
   venues?: string[]; hops?: number; gasUsd?: number; router?: `0x${string}`;
-  supply?: number;
+  supply?: number; source?: "aggregator" | "aerodrome"; degraded?: boolean; pool?: string;
 };
 
 const SLIPPAGE_BPS = 100; // 1%
@@ -222,12 +222,19 @@ export function TradePanel({ asset, market }: { asset: AssetMeta; market?: Marke
                   : "—"
               }
             />
-            <Row k="Est. gas" v={quote?.gasUsd ? usd(quote.gasUsd) : "—"} />
+            {quote?.gasUsd ? <Row k="Est. gas" v={usd(quote.gasUsd)} /> : null}
             <Row k="Max slippage" v={`${SLIPPAGE_BPS / 100}%`} />
           </>
         )}
         <Row k="Multiplier" v={market ? `${market.multiplier.toFixed(6)} ×` : "—"} />
       </dl>
+
+      {quote?.degraded && (
+        <p className="mt-4 rounded-xl border border-dashed hairline px-3 py-2.5 text-[11px] leading-relaxed text-[var(--muted)]">
+          Aggregated routing is unavailable, so this is a direct Aerodrome quote. It is a real
+          executable fill, just not split across venues.
+        </p>
+      )}
 
       <div className="mt-5">
         {/* Venue state is shown before the connect gate — no point asking for a

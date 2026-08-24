@@ -45,3 +45,48 @@ export const b20Abi = [
   { type: "function", name: "isAuthorized", stateMutability: "view", inputs: [{ name: "policyId", type: "uint64" }, { name: "account", type: "address" }], outputs: [{ type: "bool" }] },
 ] as const;
 
+
+/** Aerodrome Slipstream — pools are keyed by tickSpacing, not fee. */
+export const aeroFactoryAbi = [
+  { type: "function", name: "getPool", stateMutability: "view",
+    inputs: [{ type: "address" }, { type: "address" }, { type: "int24" }],
+    outputs: [{ type: "address" }] },
+] as const;
+
+export const aeroPoolAbi = [
+  { type: "function", name: "liquidity", stateMutability: "view", inputs: [], outputs: [{ type: "uint128" }] },
+  { type: "function", name: "fee", stateMutability: "view", inputs: [], outputs: [{ type: "uint24" }] },
+  { type: "function", name: "tickSpacing", stateMutability: "view", inputs: [], outputs: [{ type: "int24" }] },
+] as const;
+
+export const aeroQuoterAbi = [
+  { type: "function", name: "quoteExactInputSingle", stateMutability: "nonpayable",
+    inputs: [{ components: [
+      { name: "tokenIn", type: "address" },
+      { name: "tokenOut", type: "address" },
+      { name: "amountIn", type: "uint256" },
+      { name: "tickSpacing", type: "int24" },
+      { name: "sqrtPriceLimitX96", type: "uint160" },
+    ], name: "params", type: "tuple" }],
+    outputs: [
+      { name: "amountOut", type: "uint256" },
+      { name: "sqrtPriceX96After", type: "uint160" },
+      { name: "initializedTicksCrossed", type: "uint32" },
+      { name: "gasEstimate", type: "uint256" },
+    ] },
+] as const;
+
+export const aeroRouterAbi = [
+  { type: "function", name: "exactInputSingle", stateMutability: "payable",
+    inputs: [{ components: [
+      { name: "tokenIn", type: "address" },
+      { name: "tokenOut", type: "address" },
+      { name: "tickSpacing", type: "int24" },
+      { name: "recipient", type: "address" },
+      { name: "deadline", type: "uint256" },
+      { name: "amountIn", type: "uint256" },
+      { name: "amountOutMinimum", type: "uint256" },
+      { name: "sqrtPriceLimitX96", type: "uint160" },
+    ], name: "params", type: "tuple" }],
+    outputs: [{ name: "amountOut", type: "uint256" }] },
+] as const;

@@ -5,6 +5,7 @@ import { Providers } from "@/components/Providers";
 import { Nav } from "@/components/Nav";
 import { Footer } from "@/components/Footer";
 import { TickerTape } from "@/components/TickerTape";
+import { MobileTabs } from "@/components/MobileTabs";
 
 const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit", weight: ["200", "300", "400", "500", "600"] });
 const figtree = Figtree({ subsets: ["latin"], variable: "--font-figtree", weight: ["300", "400", "500", "600", "700"] });
@@ -27,16 +28,21 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
     { media: "(prefers-color-scheme: dark)", color: "#0a0a0b" },
   ],
+  width: "device-width",
+  initialScale: 1,
+  // Fills the notch area on phones; zoom stays enabled for accessibility.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Applied before paint so the first frame never flashes the wrong theme. */}
+        {/* Light is the default. Dark is opt-in and remembered, applied before
+            paint so the first frame never flashes the wrong theme. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('capimon-theme');if(t==='dark'||(!t&&matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.classList.add('dark')}catch(e){}`,
+            __html: `try{if(localStorage.getItem('capimon-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}`,
           }}
         />
         {/* Motion emits inline initial styles; without JS they would hide content. */}
@@ -50,8 +56,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <TickerTape />
             <Nav />
           </div>
-          <main>{children}</main>
+          <main className="safe-x">{children}</main>
           <Footer />
+          <MobileTabs />
         </Providers>
       </body>
     </html>

@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { motion } from "motion/react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { createPortal } from "react-dom";
+import { useAccount } from "wagmi";
 import { Logo, Wordmark } from "./Logo";
 import { WalletButton } from "./WalletButton";
 import { ThemeToggle } from "./ThemeToggle";
@@ -17,6 +19,11 @@ const LINKS = [
 export function Nav() {
   const [scrolled, setScrolled] = useState(false);
   const path = usePathname();
+  const { isConnected } = useAccount();
+  // The menu belongs to the route it was opened on, so navigating closes it.
+  const [menuAt, setMenuAt] = useState<string | null>(null);
+  const menu = menuAt === path;
+  const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -70,10 +77,71 @@ export function Nav() {
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <div className="hidden sm:block"><WalletButton /></div>
+            {/* Before connecting there is no tab bar, so the menu carries
+                navigation on phones. */}
+            {!isConnected && (
+              <button
+                onClick={() => setMenuAt(menu ? null : path)}
+                aria-label={menu ? "Close menu" : "Open menu"}
+                aria-expanded={menu}
+                className="grid h-9 w-9 place-items-center rounded-full border hairline transition-colors active:surface md:hidden"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round">
+                  {menu ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 8h16M4 16h16" />}
+                </svg>
+              </button>
+            )}
           </div>
         </nav>
       </motion.div>
 
+      {mounted &&
+        createPortal(
+          <AnimatePresence>
+            {menu && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  onClick={() => setMenuAt(null)}
+                  className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-sm md:hidden"
+                />
+                <motion.div
+                  initial={{ y: "-100%" }} animate={{ y: 0 }} exit={{ y: "-100%" }}
+                  transition={{ type: "spring", stiffness: 380, damping: 38 }}
+                  className="safe-t fixed inset-x-0 top-0 z-[70] rounded-b-3xl border-b hairline bg-[var(--bg)] p-5 pt-6 shadow-2xl md:hidden"
+                >
+                  <div className="flex items-center justify-between">
+                    <Wordmark className="text-xl" />
+                    <button
+                      onClick={() => setMenuAt(null)}
+                      aria-label="Close menu"
+                      className="grid h-9 w-9 place-items-center rounded-full border hairline"
+                    >
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round">
+                        <path d="M6 6l12 12M18 6L6 18" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className="mt-5 grid gap-1">
+                    {LINKS.map((l) => (
+                      <Link
+                        key={l.href}
+                        href={l.href}
+                        className="rounded-2xl px-3 py-3.5 text-lg tracking-tight transition-colors active:surface"
+                      >
+                        {l.label}
+                      </Link>
+                    ))}
+                  </div>
+                  <div className="mt-4 border-t hairline pt-4 [&>div>button]:w-full">
+                    <WalletButton />
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
     </header>
   );
 }

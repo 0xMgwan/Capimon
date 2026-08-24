@@ -8,6 +8,7 @@ import { Counter } from "./Counter";
 import { RevealWords } from "./Reveal";
 import { compactUsd } from "@/lib/format";
 import { Sparkline } from "./Sparkline";
+import { AssetLogo } from "./AssetLogo";
 
 export function Hero() {
   const ref = useRef<HTMLElement>(null);
@@ -19,7 +20,7 @@ export function Hero() {
 
   const { data } = useMarkets();
   const tvl = data?.totals.tvl ?? 0;
-  const movers = [...(data?.markets ?? [])].sort((a, b) => Math.abs(b.change) - Math.abs(a.change)).slice(0, 3);
+  const movers = [...(data?.markets ?? [])].sort((a, b) => Math.abs(b.change) - Math.abs(a.change)).slice(0, 2);
 
   return (
     <section ref={ref} className="relative isolate flex min-h-[88vh] flex-col justify-center overflow-hidden [@supports(height:100dvh)]:min-h-[88dvh]">
@@ -49,7 +50,7 @@ export function Hero() {
       </motion.div>
 
       <motion.div style={reduced ? undefined : { y, opacity }} className="mx-auto w-full max-w-[1400px] px-5 pb-16 pt-20 sm:px-8">
-        <h1 className="display text-[clamp(2.9rem,9vw,8.5rem)]">
+        <h1 className="display text-center text-[clamp(2.9rem,9vw,8.5rem)] sm:text-left">
           <RevealWords text="Own the open" />
           <br />
           <span className="italic font-[family-name:var(--font-serif)] font-light tracking-[-0.02em]">
@@ -60,25 +61,25 @@ export function Hero() {
         <motion.div
           initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.45, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-8 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between"
+          className="mt-7 flex flex-col gap-7 sm:mt-8 sm:gap-8 lg:flex-row lg:items-end lg:justify-between"
         >
-          <p className="max-w-xl font-[family-name:var(--font-serif)] text-lg leading-relaxed text-[var(--muted)] sm:text-xl">
+          <p className="mx-auto max-w-xl text-center font-[family-name:var(--font-serif)] text-[17px] leading-relaxed text-[var(--muted)] sm:mx-0 sm:text-left sm:text-xl">
             CAPIMON puts public equities onchain as B20 tokens on Base. Live Chainlink marks,
             real onchain supply, permissionless secondary transfer, and self-custody —
             no broker, no closing bell for settlement.
           </p>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex w-full flex-col gap-2.5 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
             <Link
               href="/markets"
-              className="group inline-flex items-center gap-2 rounded-full bg-[var(--fg)] px-6 py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95"
+              className="group inline-flex items-center justify-center gap-2 rounded-full bg-[var(--fg)] px-6 py-4 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95 sm:py-3.5"
             >
               Explore markets
               <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
             </Link>
             <Link
               href="/how-it-works"
-              className="rounded-full border hairline bg-[var(--bg)]/60 px-6 py-3.5 text-sm font-medium backdrop-blur transition-colors hover:surface"
+              className="rounded-full border hairline bg-[var(--bg)]/60 px-6 py-4 text-center text-sm font-medium backdrop-blur transition-colors hover:surface sm:py-3.5"
             >
               How it works
             </Link>
@@ -89,29 +90,32 @@ export function Hero() {
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.62, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-14 grid gap-px overflow-hidden rounded-2xl border hairline bg-[var(--border)] sm:grid-cols-2 lg:grid-cols-4"
+          className="mt-10 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border hairline bg-[var(--border)] sm:mt-14 lg:grid-cols-4"
         >
-          <div className="bg-[var(--bg)]/80 p-5 backdrop-blur">
+          <div className="bg-[var(--bg)]/80 p-4 backdrop-blur sm:p-5">
             <div className="eyebrow">Onchain value</div>
-            <div className="tnum mt-2 text-2xl font-medium">
+            <div className="tnum mt-2 text-xl font-medium sm:text-2xl">
               <Counter value={tvl} format={(n) => compactUsd(n)} />
             </div>
             <div className="mt-1 text-[11px] text-[var(--muted)]">supply × live mark</div>
           </div>
-          <div className="bg-[var(--bg)]/80 p-5 backdrop-blur">
+          <div className="bg-[var(--bg)]/80 p-4 backdrop-blur sm:p-5">
             <div className="eyebrow">Listed assets</div>
-            <div className="tnum mt-2 text-2xl font-medium">
+            <div className="tnum mt-2 text-xl font-medium sm:text-2xl">
               <Counter value={data?.totals.assets ?? 0} format={(n) => Math.round(n).toString()} />
             </div>
             <div className="mt-1 text-[11px] text-[var(--muted)]">B20 equities on Base</div>
           </div>
           {movers.map((m) => (
-            <Link key={m.symbol} href={`/markets/${m.ticker.toLowerCase()}`} className="group bg-[var(--bg)]/80 p-5 backdrop-blur transition-colors hover:bg-[var(--bg)]">
-              <div className="flex items-center justify-between">
-                <div className="eyebrow">{m.ticker}</div>
-                <Sparkline data={m.history.slice(-24)} color={m.change >= 0 ? "var(--color-up)" : "var(--color-down)"} width={58} height={20} fill={false} />
+            <Link key={m.symbol} href={`/markets/${m.ticker.toLowerCase()}`} className="group bg-[var(--bg)]/80 p-4 backdrop-blur transition-colors hover:bg-[var(--bg)] sm:p-5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <AssetLogo logo={m.logo} ticker={m.ticker} color={m.color} size={14} />
+                  <span className="eyebrow truncate">{m.ticker}</span>
+                </div>
+                <Sparkline data={m.history.slice(-24)} color={m.change >= 0 ? "var(--color-up)" : "var(--color-down)"} width={44} height={18} fill={false} />
               </div>
-              <div className="tnum mt-2 text-2xl font-medium">${m.price.toFixed(2)}</div>
+              <div className="tnum mt-2 text-xl font-medium sm:text-2xl">${m.price.toFixed(2)}</div>
               <div className={`tnum mt-1 text-[11px] ${m.change >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
                 {m.change >= 0 ? "▲" : "▼"} {Math.abs(m.change).toFixed(2)}% · {m.changeWindowHours}h
               </div>

@@ -239,7 +239,16 @@ export function StatsBand() {
         </Reveal>
       </div>
 
-      <motion.div style={{ x }} className="mt-16 flex gap-4 px-5 sm:px-8">
+      {/* Phones: stacked figures with rules, which reads far better than a
+          horizontal rail you cannot see the end of. */}
+      <div className="mt-10 px-5 sm:hidden">
+        <StackedStat label="Onchain value" value={<Counter value={data?.totals.tvl ?? 0} format={compactUsd} />} sub="supply × Chainlink mark" />
+        <StackedStat label="Share-equivalents" value={<Counter value={totalSupply} format={(n) => compact(n, 1)} />} sub="multiplier-adjusted" />
+        <StackedStat label="Oracle rounds read" value={<Counter value={rounds} format={(n) => Math.round(n).toLocaleString()} />} sub="this snapshot" />
+        <StackedStat label="Settlement" value="~2s" sub="Base block time" />
+      </div>
+
+      <motion.div style={{ x }} className="mt-16 hidden gap-4 px-5 sm:flex sm:px-8">
         <BigStat label="Onchain value" value={<Counter value={data?.totals.tvl ?? 0} format={compactUsd} />} sub="supply × Chainlink mark" />
         <BigStat label="Share-equivalents" value={<Counter value={totalSupply} format={(n) => compact(n, 1)} />} sub="multiplier-adjusted" />
         <BigStat label="Oracle rounds read" value={<Counter value={rounds} format={(n) => Math.round(n).toLocaleString()} />} sub="this snapshot" />
@@ -247,6 +256,18 @@ export function StatsBand() {
         <BigStat label="Settlement" value="~2s" sub="block time" />
       </motion.div>
     </section>
+  );
+}
+
+function StackedStat({ label, value, sub }: { label: string; value: React.ReactNode; sub: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 border-b hairline py-6 first:border-t">
+      <div className="tnum text-[clamp(2.2rem,13vw,3.4rem)] font-medium leading-none tracking-tight">{value}</div>
+      <div className="max-w-[42%] text-right">
+        <div className="font-[family-name:var(--font-serif)] text-[15px] leading-tight">{label}</div>
+        <div className="mt-1 text-[11px] text-[var(--muted)]">{sub}</div>
+      </div>
+    </div>
   );
 }
 

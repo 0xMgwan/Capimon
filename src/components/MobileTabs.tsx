@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
+import { useAccount } from "wagmi";
 
 const TABS = [
   {
@@ -23,11 +24,21 @@ const TABS = [
   },
 ];
 
-/** Phone navigation. A fixed bar keeps the app reachable with one thumb. */
+/**
+ * Phone navigation for signed-in users. Before a wallet is connected the site
+ * reads as a landing page, so it uses the nav menu instead — the tab bar only
+ * appears once there is an account to move around inside.
+ */
 export function MobileTabs() {
   const path = usePathname();
+  const { isConnected } = useAccount();
+
+  if (!isConnected) return null;
 
   return (
+    <>
+    {/* Clearance for the fixed bar, scoped to when the bar actually exists. */}
+    <div className="h-[4.25rem] md:hidden" />
     <nav className="safe-b fixed inset-x-0 bottom-0 z-50 border-t hairline bg-[var(--nav)] backdrop-blur-xl md:hidden">
       <div className="flex">
         {TABS.map((t) => {
@@ -57,5 +68,6 @@ export function MobileTabs() {
         })}
       </div>
     </nav>
+    </>
   );
 }

@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------
+   CAPIMON design tokens
+   Type: Outfit (display, geometric — stands in for OndoSans),
+         Figtree (UI/body — stands in for Gellix),
+         Newsreader (editorial serif — stands in for Arizona),
+         JetBrains Mono (tabular market data — stands in for A2 Mono)
+   --------------------------------------------------------------- */
+@theme {
+  --font-display: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-newsreader), Georgia, serif;
+  --font-mono: var(--font-jbmono), ui-monospace, SFMono-Regular, monospace;
+
+  --color-ink: #0a0a0b;
+  --color-paper: #ffffff;
+  --color-mist: #f5f5f4;
+  --color-line: #e6e6e3;
+  --color-muted: #6b6b6b;
+
+  --color-accent: #7c5cff;
+  --color-accent-soft: #b9a6ff;
+  --color-up: #12a150;
+  --color-down: #e5484d;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root {
+  --bg: #ffffff;
+  --fg: #0a0a0b;
+  --surface: #fafaf9;
+  --border: #e6e6e3;
+  --muted: #6b6b6b;
+  --nav: rgba(255, 255, 255, 0.72);
+  color-scheme: light;
+}
+
+html.dark {
+  --bg: #0a0a0b;
+  --fg: #f7f7f5;
+  --surface: #141416;
+  --border: #26262a;
+  --muted: #8f8f96;
+  --nav: rgba(12, 12, 14, 0.72);
+  color-scheme: dark;
+}
+
+/* `clip` (not `hidden`) — `hidden` makes the element a scroll container, which
+   breaks window scrolling and position:sticky on descendants. */
+html { scroll-behavior: smooth; overflow-x: clip; }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: clip;
+}
+
+::selection { background: var(--color-accent); color: #fff; }
+
+/* Numeric columns must never jitter as prices tick. */
+.tnum { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+
+.hairline { border-color: var(--border); }
+.surface { background: var(--surface); }
+
+/* Big display type: tight, optically balanced, never bold-blobby. */
+.display {
+  font-family: var(--font-display);
+  font-weight: 300;
+  letter-spacing: -0.035em;
+  line-height: 0.94;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* --- motion ------------------------------------------------------ */
+@keyframes marquee { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
+.marquee-track { animation: marquee var(--marquee-duration, 40s) linear infinite; will-change: transform; }
+.marquee:hover .marquee-track { animation-play-state: paused; }
+
+@keyframes flash-up { 0% { background-color: color-mix(in oklab, var(--color-up) 26%, transparent); } 100% { background-color: transparent; } }
+@keyframes flash-down { 0% { background-color: color-mix(in oklab, var(--color-down) 26%, transparent); } 100% { background-color: transparent; } }
+.flash-up { animation: flash-up 900ms var(--ease-out-expo); }
+.flash-down { animation: flash-down 900ms var(--ease-out-expo); }
+
+@keyframes pulse-dot { 0%,100% { opacity: 1; transform: scale(1);} 50% { opacity: .35; transform: scale(.82);} }
+.live-dot { animation: pulse-dot 1.8s ease-in-out infinite; }
+
+@keyframes sweep { to { stroke-dashoffset: 0; } }
+.sweep { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: sweep 1.6s var(--ease-out-expo) forwards; }
+
+@keyframes grain { 0%,100%{transform:translate(0,0)} 20%{transform:translate(-2%,3%)} 40%{transform:translate(3%,-2%)} 60%{transform:translate(-3%,-3%)} 80%{transform:translate(2%,2%)} }
+.grain::after {
+  content: ""; position: absolute; inset: -50%; pointer-events: none; opacity: .28;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.42'/%3E%3C/svg%3E");
+  animation: grain 8s steps(6) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .marquee-track, .live-dot, .grain::after { animation: none !important; }
+  .sweep { stroke-dashoffset: 0; animation: none; }
+  *, *::before, *::after { transition-duration: .01ms !important; }
+}
+
+/* Thin, unobtrusive scrollbars inside data panes. */
+.scroll-thin::-webkit-scrollbar { height: 6px; width: 6px; }
+.scroll-thin::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }

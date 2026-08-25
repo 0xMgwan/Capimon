@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { PortfolioView } from "@/components/PortfolioView";
 
 export const metadata: Metadata = {
-  title: "Portfolio — CAPIMON",
+  title: "Portfolio",
   description: "Your B20 equity positions on Base, read straight from the chain and marked live.",
 };
 

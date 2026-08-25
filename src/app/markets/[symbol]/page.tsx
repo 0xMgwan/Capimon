@@ -11,9 +11,9 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ symbol: string }> }): Promise<Metadata> {
   const { symbol } = await params;
   const a = BY_SYMBOL[symbol.toLowerCase()];
-  if (!a) return { title: "Not found — CAPIMON" };
+  if (!a) return { title: "Not found" };
   return {
-    title: `${a.ticker} · ${a.name} — CAPIMON`,
+    title: `${a.ticker} · ${a.name}`,
     description: `Live ${a.symbol} price, onchain supply and B20 contract detail on Base. ${a.blurb}`,
   };
 }

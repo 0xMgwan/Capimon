@@ -47,7 +47,7 @@ export function Nav() {
       >
         <nav className="mx-auto flex max-w-[1400px] items-center justify-between px-5 sm:px-8">
           <Link href="/" className="group flex items-center gap-2.5">
-            <Logo className="h-7 w-7 transition-transform duration-500 group-hover:rotate-[20deg]" />
+            <Logo className="h-7 w-7 transition-transform duration-500 group-hover:translate-x-0.5" />
             <Wordmark />
           </Link>
 

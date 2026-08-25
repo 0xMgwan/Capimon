@@ -12,15 +12,41 @@ const figtree = Figtree({ subsets: ["latin"], variable: "--font-figtree", weight
 const newsreader = Newsreader({ subsets: ["latin"], variable: "--font-newsreader", weight: ["300", "400", "500"], style: ["normal", "italic"] });
 const jbmono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jbmono", weight: ["400", "500", "600"] });
 
+// Set NEXT_PUBLIC_SITE_URL once a custom domain is live; VERCEL_PROJECT_PRODUCTION_URL
+// keeps preview deployments pointing at themselves in the meantime.
+const SITE =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "https://capimon.vercel.app");
+const DESCRIPTION =
+  "Buy and sell public equities onchain as B20 tokens on Base. Live Chainlink marks, " +
+  "aggregated routing across every venue, and self-custody — no broker, no closing bell.";
+
 export const metadata: Metadata = {
-  title: "CAPIMON — Capital markets, onchain",
-  description:
-    "CAPIMON brings public equities onchain as B20 tokens on Base. Live Chainlink marks, real onchain supply, 24/5 markets, self-custody.",
-  openGraph: {
-    title: "CAPIMON — Capital markets, onchain",
-    description: "Tokenized equities on Base. Live prices, real onchain data, self-custody.",
-    type: "website",
+  // Resolves relative OG and icon URLs so crawlers get absolute links.
+  metadataBase: new URL(SITE),
+  title: {
+    default: "CAPIMON — Capital markets in motion",
+    template: "%s — CAPIMON",
   },
+  description: DESCRIPTION,
+  applicationName: "CAPIMON",
+  keywords: ["tokenized equities", "B20", "Base", "onchain stocks", "Chainlink", "self-custody"],
+  openGraph: {
+    title: "CAPIMON — Capital markets in motion",
+    description: DESCRIPTION,
+    siteName: "CAPIMON",
+    url: SITE,
+    type: "website",
+    locale: "en",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CAPIMON — Capital markets in motion",
+    description: DESCRIPTION,
+  },
+  robots: { index: true, follow: true },
 };
 
 export const viewport: Viewport = {

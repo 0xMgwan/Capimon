@@ -4,7 +4,7 @@ import { Reveal, RevealWords } from "@/components/Reveal";
 import { B20_REGISTRY, ASSETS } from "@/lib/assets";
 
 export const metadata: Metadata = {
-  title: "How it works — CAPIMON",
+  title: "How it works",
   description: "The B20 standard, Chainlink total-return feeds, multipliers and onchain policy — what CAPIMON is actually reading.",
 };
 

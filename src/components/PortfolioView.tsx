@@ -12,6 +12,7 @@ import { AssetLogo } from "./AssetLogo";
 import { Counter } from "./Counter";
 import { Reveal } from "./Reveal";
 import { UsdcIcon } from "./icons/Usdc";
+import { CostBasis } from "./CostBasis";
 import { usd, compactUsd, short } from "@/lib/format";
 
 type Position = {
@@ -216,6 +217,8 @@ export function PortfolioView() {
           </>
         )}
       </Reveal>
+
+      {address && positions.length > 0 && <CostBasis address={address} />}
 
       {pf && (
         <p className="tnum mt-6 text-xs text-[var(--muted)]">

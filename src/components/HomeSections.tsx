@@ -71,7 +71,7 @@ export function ProductsSection() {
           </span>
         </h2>
         <p className="mt-6 max-w-lg font-[family-name:var(--font-serif)] text-lg text-[var(--muted)]">
-          Three onchain surfaces bridging public markets and DeFi — all reading the same live state on Base.
+          Three onchain surfaces bridging public markets and DeFi — all reading the same live state.
         </p>
       </Reveal>
 
@@ -90,7 +90,7 @@ export function ProductsSection() {
                   CAPIMON Equities
                 </h3>
                 <p className="mt-3 font-[family-name:var(--font-serif)] text-[17px] leading-relaxed text-[var(--muted)]">
-                  Public companies as B20 tokens on Base — freely transferable, composable in DeFi,
+                  Public companies as B20 tokens — freely transferable, composable in DeFi,
                   and marked continuously by Chainlink total-return feeds.
                 </p>
                 <span className="mt-4 inline-block rounded-full surface px-3 py-1 text-[11px] text-[var(--muted)]">
@@ -134,7 +134,7 @@ export function ProductsSection() {
             <SideCard
               title="CAPIMON Vault"
               tag="Self-custody"
-              body="Your positions live in your own wallet. CAPIMON reads Base directly — every balance on the portfolio page is an onchain read, not our ledger."
+              body="Your positions live in your own wallet. CAPIMON reads the chain directly — every balance on the portfolio page is an onchain read, not our ledger."
               stat={<Counter value={equities} format={(n) => `${Math.round(n)} assets`} />}
               statLabel="Tracked live"
               href="/portfolio"
@@ -145,7 +145,7 @@ export function ProductsSection() {
             <SideCard
               title="CAPIMON Feeds"
               tag="Oracle"
-              body="Total-return Chainlink feeds on Base, running 24/5 and freezing through corporate actions. Every chart on this site is drawn from onchain rounds."
+              body="Total-return Chainlink feeds, running 24/5 and freezing through corporate actions. Every chart on this site is drawn from onchain rounds."
               stat={<span className="tnum">8 dp</span>}
               statLabel="Feed precision"
               href="/how-it-works"
@@ -245,14 +245,13 @@ export function StatsBand() {
         <StackedStat label="Onchain value" value={<Counter value={data?.totals.tvl ?? 0} format={compactUsd} />} sub="supply × Chainlink mark" />
         <StackedStat label="Share-equivalents" value={<Counter value={totalSupply} format={(n) => compact(n, 1)} />} sub="multiplier-adjusted" />
         <StackedStat label="Oracle rounds read" value={<Counter value={rounds} format={(n) => Math.round(n).toLocaleString()} />} sub="this snapshot" />
-        <StackedStat label="Settlement" value="~2s" sub="Base block time" />
+        <StackedStat label="Settlement" value="~2s" sub="block time" />
       </div>
 
       <motion.div style={{ x }} className="mt-16 hidden gap-4 px-5 sm:flex sm:px-8">
         <BigStat label="Onchain value" value={<Counter value={data?.totals.tvl ?? 0} format={compactUsd} />} sub="supply × Chainlink mark" />
         <BigStat label="Share-equivalents" value={<Counter value={totalSupply} format={(n) => compact(n, 1)} />} sub="multiplier-adjusted" />
         <BigStat label="Oracle rounds read" value={<Counter value={rounds} format={(n) => Math.round(n).toLocaleString()} />} sub="this snapshot" />
-        <BigStat label="Chain" value="Base" sub="8453 · OP Stack L2" />
         <BigStat label="Settlement" value="~2s" sub="block time" />
       </motion.div>
     </section>
@@ -344,7 +343,7 @@ export function PillarsSection() {
               <span className="font-[family-name:var(--font-serif)] font-light italic text-[var(--muted)]">visible to everyone.</span>
             </h2>
             <p className="mt-6 max-w-sm text-[15px] leading-relaxed text-[var(--muted)]">
-              Every claim on this page resolves to an address on Base you can check yourself.
+              Every claim on this page resolves to an onchain address you can check yourself.
             </p>
           </div>
         </Reveal>
@@ -396,7 +395,7 @@ export function ClosingCTA() {
             </span>
           </h2>
           <p className="mx-auto mt-7 max-w-xl font-[family-name:var(--font-serif)] text-lg text-[var(--muted)]">
-            Connect a wallet and read your positions straight off Base. No account, no onboarding queue, no custody.
+            Connect a wallet and read your positions straight off the chain. No account, no onboarding queue, no custody.
           </p>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
             <Link href="/markets" className="rounded-full bg-[var(--fg)] px-7 py-4 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95">

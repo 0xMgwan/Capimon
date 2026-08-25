@@ -64,7 +64,7 @@ export function Hero() {
           className="mt-7 flex flex-col gap-7 sm:mt-8 sm:gap-8 lg:flex-row lg:items-end lg:justify-between"
         >
           <p className="mx-auto max-w-xl text-center font-[family-name:var(--font-serif)] text-[17px] leading-relaxed text-[var(--muted)] sm:mx-0 sm:text-left sm:text-xl">
-            CAPIMON puts public equities onchain as B20 tokens on Base. Live Chainlink marks,
+            CAPIMON puts public equities onchain. Live oracle marks,
             real onchain supply, permissionless secondary transfer, and self-custody —
             no broker, no closing bell for settlement.
           </p>
@@ -104,7 +104,7 @@ export function Hero() {
             <div className="tnum mt-2 text-xl font-medium sm:text-2xl">
               <Counter value={data?.totals.assets ?? 0} format={(n) => Math.round(n).toString()} />
             </div>
-            <div className="mt-1 text-[11px] text-[var(--muted)]">B20 equities on Base</div>
+            <div className="mt-1 text-[11px] text-[var(--muted)]">tokenized equities</div>
           </div>
           {movers.map((m) => (
             <Link key={m.symbol} href={`/markets/${m.ticker.toLowerCase()}`} className="group bg-[var(--bg)]/80 p-4 backdrop-blur transition-colors hover:bg-[var(--bg)] sm:p-5">

@@ -39,7 +39,7 @@ export function Footer() {
           <div>
             <Lockup />
             <p className="mt-4 max-w-xs font-[family-name:var(--font-serif)] text-[17px] leading-snug text-[var(--muted)]">
-              Public markets, rebuilt as open infrastructure. Settled on Base, priced by Chainlink,
+              Public markets, rebuilt as open infrastructure. Priced by live oracles,
               held in your own wallet.
             </p>
           </div>
@@ -76,7 +76,7 @@ export function Footer() {
             by the issuer under KYC; secondary transfers are permissionless subject to onchain policy.
           </p>
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-            <span className="tnum text-xs text-[var(--muted)]">CAPIMON © {new Date().getFullYear()} · Base mainnet · chain 8453</span>
+            <span className="tnum text-xs text-[var(--muted)]">CAPIMON © {new Date().getFullYear()}</span>
             <span className="eyebrow">Built on B20</span>
           </div>
         </div>

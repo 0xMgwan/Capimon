@@ -40,7 +40,7 @@ export function MarketsView() {
               Every asset, <span className="font-[family-name:var(--font-serif)] font-light italic text-[var(--muted)]">live.</span>
             </h1>
             <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-[var(--muted)]">
-              B20 tokenized equities on Base. Prices are Chainlink total-return marks read straight
+              Tokenized equities, priced by Chainlink total-return marks read straight
               from the chain; supply and value are onchain reads, not estimates.
             </p>
           </div>
@@ -99,7 +99,7 @@ export function MarketsView() {
 
       <p className="mt-6 text-xs leading-relaxed text-[var(--muted)]">
         Onchain supply shows share-equivalents — raw token supply multiplied by the current B20
-        multiplier. A supply of “—” means no tokens are minted on Base yet; the Chainlink mark is
+        multiplier. A supply of “—” means nothing is minted yet; the Chainlink mark is
         still live. Tokenized equities are not available to US persons.
       </p>
     </div>

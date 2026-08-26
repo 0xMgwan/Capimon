@@ -10,9 +10,14 @@ type Admin = {
               unavailable?: string } | null;
   omnibus: { tzs: number; usdc: number } | null;
   treasury: string | null;
-  deposits: { id: string; email: string; amount_tzs: number; status: string; usdc_credited: string | null;
-              phone: string; error: string | null; created_at: string }[];
-  users: { id: string; email: string; name: string | null; phone: string | null; deposits: number; created_at: string }[];
+  reconciliation: { credited: string | null; ledger: string | null; deposits: number }[];
+  deposits: { id: string; email: string; name: string | null; nida_number: string | null;
+              amount_tzs: number; status: string; usdc_credited: string | null; phone: string;
+              account_phone: string | null; error: string | null; created_at: string; settled_at: string | null;
+              ntzs_deposit_id: string | null; ntzs_status: string | null; ntzs_reference: string | null;
+              swap_ref: string | null; transfer_tx: string | null; rate_tzs_usdc: string | null }[];
+  users: { id: string; email: string; name: string | null; phone: string | null; nida_number: string | null;
+           deposits: number; settled_tzs: number; usdc_balance: string | null; created_at: string }[];
   orders: { id: string; email: string; side: string; symbol: string; usdc_amount: string | null;
             qty: string | null; status: string; tx_hash: string | null; created_at: string }[];
 };
@@ -29,6 +34,7 @@ export function AdminPanel() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<"deposits" | "users" | "orders">("deposits");
+  const [openRow, setOpenRow] = useState<string | null>(null);
 
   const load = useCallback(async (t: string) => {
     if (!t) return;
@@ -138,6 +144,25 @@ export function AdminPanel() {
         )}
       </div>
 
+      {(() => {
+        const r = data.reconciliation?.[0];
+        if (!r) return null;
+        const credited = Number(r.credited ?? 0);
+        const ledger = Number(r.ledger ?? 0);
+        const drift = Math.abs(credited - ledger);
+        const matched = drift < 0.01;
+        return (
+          <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${
+            matched ? "hairline" : "border-[var(--color-down)]/50 bg-[var(--color-down)]/[0.07]"}`}>
+            <span className={matched ? "text-[var(--muted)]" : "text-[var(--color-down)] font-medium"}>
+              {matched
+                ? `Deposits reconcile: ${r.deposits} settled, ${usd(credited)} credited and ${usd(ledger)} in the ledger.`
+                : `Deposits do NOT reconcile — ${usd(credited)} credited against ${usd(ledger)} in the ledger (${usd(drift)} adrift).`}
+            </span>
+          </div>
+        );
+      })()}
+
       <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-4">
         <Cell label="Users" value={String(data.totals.users)} />
         <Cell label="Pending deposits" value={String(data.totals.pendingDeposits)} />
@@ -159,21 +184,31 @@ export function AdminPanel() {
         <table className="w-full min-w-[720px] border-collapse text-sm">
           <thead className="border-b hairline">
             <tr>{(tab === "deposits" ? ["User", "Amount", "Status", "Credited", "Phone", "When"]
-                : tab === "users" ? ["Email", "Name", "Phone", "Deposits", "Joined"]
+                : tab === "users" ? ["User", "National ID", "Phone", "Deposits", "Balance"]
                 : ["User", "Side", "Asset", "Amount", "Status", "Tx"]).map((h, i) => (
               <th key={h} className={`px-3 py-3 text-[11px] font-medium uppercase tracking-wider text-[var(--muted)] ${i === 0 ? "text-left" : "text-right"}`}>{h}</th>
             ))}</tr>
           </thead>
           <tbody>
             {tab === "deposits" && data.deposits.map((d) => (
-              <tr key={d.id} className="border-b hairline last:border-0">
-                <td className="px-3 py-3">{d.email}</td>
+              <>
+              <tr key={d.id} onClick={() => setOpenRow(openRow === d.id ? null : d.id)}
+                  className="cursor-pointer border-b hairline last:border-0 hover:surface">
+                <td className="px-3 py-3">
+                  <div className="font-medium">{d.name ?? d.email}</div>
+                  <div className="text-[11px] text-[var(--muted)]">{d.email}</div>
+                </td>
                 <td className="tnum px-3 py-3 text-right">{TZS(d.amount_tzs)}</td>
                 <td className="px-3 py-3 text-right">
                   <span className={`rounded-full px-2 py-0.5 text-[11px] ${
                     d.status === "settled" ? "bg-[var(--color-up)]/10 text-[var(--color-up)]"
                     : d.status === "failed" ? "bg-[var(--color-down)]/10 text-[var(--color-down)]"
                     : "surface text-[var(--muted)]"}`} title={d.error ?? undefined}>{d.status}</span>
+                  {d.ntzs_status && d.ntzs_status !== d.status && (
+                    <span className="ml-1 rounded-full bg-[#b45309]/15 px-2 py-0.5 text-[11px] text-[#b45309]">
+                      nTZS: {d.ntzs_status}
+                    </span>
+                  )}
                 </td>
                 <td className="tnum px-3 py-3 text-right">{d.usdc_credited ? usd(Number(d.usdc_credited)) : "—"}</td>
                 <td className="tnum px-3 py-3 text-right text-[var(--muted)]">{d.phone}</td>
@@ -181,16 +216,47 @@ export function AdminPanel() {
                   {new Date(d.created_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                 </td>
               </tr>
+              {openRow === d.id && (
+                <tr key={`${d.id}-detail`} className="border-b hairline surface">
+                  <td colSpan={6} className="px-3 py-4">
+                    <div className="grid gap-4 text-[12px] sm:grid-cols-2">
+                      <div>
+                        <div className="eyebrow mb-2">Depositor (CAPX KYC)</div>
+                        <Detail k="Name" v={d.name} />
+                        <Detail k="Email" v={d.email} />
+                        <Detail k="National ID" v={d.nida_number} />
+                        <Detail k="Account phone" v={d.account_phone} />
+                        <Detail k="Paid from" v={d.phone} />
+                      </div>
+                      <div>
+                        <div className="eyebrow mb-2">nTZS trail</div>
+                        <Detail k="nTZS deposit id" v={d.ntzs_deposit_id} mono />
+                        <Detail k="nTZS status" v={d.ntzs_status} />
+                        <Detail k="Provider ref" v={d.ntzs_reference} mono />
+                        <Detail k="Swap ref" v={d.swap_ref} mono />
+                        <Detail k="Transfer to treasury" v={d.transfer_tx} mono link={d.transfer_tx ? `https://basescan.org/tx/${d.transfer_tx}` : undefined} />
+                        <Detail k="Rate" v={d.rate_tzs_usdc ? `1 TZS = ${Number(d.rate_tzs_usdc).toFixed(8)} USDC` : null} />
+                        <Detail k="Settled" v={d.settled_at ? new Date(d.settled_at).toLocaleString("en-GB") : null} />
+                        {d.error && <Detail k="Error" v={d.error} />}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              </>
             ))}
             {tab === "users" && data.users.map((u) => (
               <tr key={u.id} className="border-b hairline last:border-0">
-                <td className="px-3 py-3">{u.email}</td>
-                <td className="px-3 py-3 text-right text-[var(--muted)]">{u.name ?? "—"}</td>
-                <td className="tnum px-3 py-3 text-right text-[var(--muted)]">{u.phone ?? "—"}</td>
-                <td className="tnum px-3 py-3 text-right">{u.deposits}</td>
-                <td className="tnum px-3 py-3 text-right text-[11px] text-[var(--muted)]">
-                  {new Date(u.created_at).toLocaleDateString("en-GB")}
+                <td className="px-3 py-3">
+                  <div className="font-medium">{u.name ?? "—"}</div>
+                  <div className="text-[11px] text-[var(--muted)]">{u.email}</div>
                 </td>
+                <td className="tnum px-3 py-3 text-right text-[var(--muted)]">{u.nida_number ?? "—"}</td>
+                <td className="tnum px-3 py-3 text-right text-[var(--muted)]">{u.phone ?? "—"}</td>
+                <td className="tnum px-3 py-3 text-right">
+                  {u.deposits} · {TZS(u.settled_tzs)}
+                </td>
+                <td className="tnum px-3 py-3 text-right">{usd(Number(u.usdc_balance ?? 0))}</td>
               </tr>
             ))}
             {tab === "orders" && data.orders.map((o) => (
@@ -212,6 +278,19 @@ export function AdminPanel() {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function Detail({ k, v, mono, link }: { k: string; v: string | null | undefined; mono?: boolean; link?: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 border-b hairline py-1.5 last:border-0">
+      <span className="shrink-0 text-[var(--muted)]">{k}</span>
+      {link && v ? (
+        <a href={link} target="_blank" rel="noreferrer" className={`truncate underline ${mono ? "tnum" : ""}`}>{v}</a>
+      ) : (
+        <span className={`truncate text-right ${mono ? "tnum" : ""}`}>{v ?? "—"}</span>
+      )}
     </div>
   );
 }

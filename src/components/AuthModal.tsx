@@ -30,7 +30,7 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
   const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
 
   const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [form, setForm] = useState({ email: "", password: "", name: "", phone: "" });
+  const [form, setForm] = useState({ email: "", password: "", name: "", phone: "", nidaNumber: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
@@ -137,12 +137,26 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
                     className="w-full rounded-xl border hairline bg-transparent px-4 py-3 text-sm outline-none transition-colors placeholder:text-[var(--muted)] focus:border-[var(--color-accent)]"
                   />
                   {mode === "signup" && (
-                    <input
-                      value={form.phone}
-                      onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                      inputMode="numeric" placeholder="Mobile money number (optional)"
-                      className="w-full rounded-xl border hairline bg-transparent px-4 py-3 text-sm outline-none transition-colors placeholder:text-[var(--muted)] focus:border-[var(--color-accent)]"
-                    />
+                    <>
+                      <input
+                        value={form.name}
+                        onChange={(e) => setForm({ ...form, name: e.target.value })}
+                        placeholder="Full name, as on your ID" autoComplete="name"
+                        className="w-full rounded-xl border hairline bg-transparent px-4 py-3 text-sm outline-none transition-colors placeholder:text-[var(--muted)] focus:border-[var(--color-accent)]"
+                      />
+                      <input
+                        value={form.phone}
+                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                        inputMode="numeric" placeholder="Mobile money number" autoComplete="tel"
+                        className="w-full rounded-xl border hairline bg-transparent px-4 py-3 text-sm outline-none transition-colors placeholder:text-[var(--muted)] focus:border-[var(--color-accent)]"
+                      />
+                      <input
+                        value={form.nidaNumber}
+                        onChange={(e) => setForm({ ...form, nidaNumber: e.target.value })}
+                        inputMode="numeric" placeholder="National ID number"
+                        className="w-full rounded-xl border hairline bg-transparent px-4 py-3 text-sm outline-none transition-colors placeholder:text-[var(--muted)] focus:border-[var(--color-accent)]"
+                      />
+                    </>
                   )}
                 </div>
 
@@ -157,7 +171,7 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
                 <p className="mt-2.5 text-[11px] leading-relaxed text-[var(--muted)]">
                   An email account is <span className="text-[var(--fg)]">custodial</span> — CAPX
                   holds your assets and records what you are owed. Fund it with mobile money in
-                  shillings.
+                  shillings.{mode === "signup" && " Your name and ID are held for identity checks."}
                 </p>
 
                 <div className="my-5 flex items-center gap-3">

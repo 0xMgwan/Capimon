@@ -35,12 +35,21 @@ export async function GET(req: Request) {
     const sql = db();
 
     const [deposits, users, orders, totals] = await Promise.all([
+      // Everything needed to match a CAPX row against its nTZS counterpart,
+      // plus the identity CAPX holds for the depositor.
       sql`select d.id::text, d.amount_tzs, d.status, d.usdc_credited::text, d.phone,
-                 d.error, d.created_at, d.settled_at, u.email
+                 d.error, d.created_at, d.settled_at,
+                 d.ntzs_deposit_id, d.ntzs_status, d.ntzs_reference,
+                 d.swap_ref, d.transfer_tx, d.rate_tzs_usdc::text, d.metadata,
+                 u.id::text as user_id, u.email, u.name, u.nida_number, u.phone as account_phone
             from capx.deposits d join capx.users u on u.id = d.user_id
            order by d.created_at desc limit 100`,
-      sql`select id::text, email, name, phone, kyc_status, created_at,
-                 (select count(*) from capx.deposits d where d.user_id = u.id)::int as deposits
+      sql`select id::text, email, name, phone, nida_number, kyc_status, created_at,
+                 (select count(*) from capx.deposits d where d.user_id = u.id)::int as deposits,
+                 (select coalesce(sum(amount_tzs),0) from capx.deposits d
+                   where d.user_id = u.id and d.status = 'settled')::int as settled_tzs,
+                 (select coalesce(sum(amount),0)::text from capx.ledger_entries l
+                   where l.user_id = u.id and l.asset = 'USDC') as usdc_balance
             from capx.users u order by created_at desc limit 100`,
       sql`select o.id::text, o.side, o.symbol, o.usdc_amount::text, o.qty::text, o.status,
                  o.tx_hash, o.error, o.created_at, u.email
@@ -59,6 +68,12 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       ok: true,
+      // Does the sum of credited deposits reconcile with what the ledger holds?
+      reconciliation: await sql<{ credited: string | null; ledger: string | null; deposits: number }[]>`
+        select (select coalesce(sum(usdc_credited),0)::text from capx.deposits where status = 'settled') as credited,
+               (select coalesce(sum(amount),0)::text from capx.ledger_entries
+                 where asset = 'USDC' and kind = 'deposit') as ledger,
+               (select count(*)::int from capx.deposits where status = 'settled') as deposits`,
       totals: {
         users: totals[0]?.users ?? 0,
         pendingDeposits: totals[0]?.pending ?? 0,

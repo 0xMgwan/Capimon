@@ -52,7 +52,7 @@ export async function checkSolvency(): Promise<Solvency> {
     // On-ramped USDC is delivered to the nTZS settlement float, not to the
     // Base treasury. It is still CAPX's money and still backs client balances,
     // so leaving it out reported a shortfall that did not exist.
-    ntzsConfigured ? rampBalance().then((b) => Number(b.balance ?? b.usdc ?? 0)).catch(() => 0) : 0,
+    ntzsConfigured ? rampBalance().then((b) => Number(b.usdcBalance ?? b.balance ?? b.usdc ?? 0)).catch(() => 0) : 0,
     // Shilling accounts hold TZS until they buy, so client TZS balances are
     // backed by the shillings sitting in the nTZS omnibus, not by anything
     // onchain. Read it so a TZS liability is checked against a real holding.

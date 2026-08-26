@@ -99,7 +99,7 @@ export async function ntzsTreasury(): Promise<
     try {
       const b = await rampBalance();
       return { available: true, source: "ramp-float", tzs: 0,
-        usdc: Number(b.balance ?? b.usdc ?? 0), walletAddress: null };
+        usdc: Number(b.usdcBalance ?? b.balance ?? b.usdc ?? 0), walletAddress: null };
     } catch (e) {
       return { available: false, reason: e instanceof Error ? e.message : "ramp balance read failed" };
     }

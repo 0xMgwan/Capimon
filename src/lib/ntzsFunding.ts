@@ -15,7 +15,7 @@ import { omnibusUserId, omnibusBalances, capabilities } from "./omnibus";
 export async function ntzsAvailableUsdc() {
   const caps = await capabilities();
   const parts = await Promise.all([
-    caps.ramp.available ? rampBalance().then((b) => Number(b.balance ?? b.usdc ?? 0)).catch(() => 0) : 0,
+    caps.ramp.available ? rampBalance().then((b) => Number(b.usdcBalance ?? b.balance ?? b.usdc ?? 0)).catch(() => 0) : 0,
     caps.wallets.available ? omnibusBalances().then((b) => b.usdc).catch(() => 0) : 0,
   ]);
   return parts.reduce((a, b) => a + b, 0);

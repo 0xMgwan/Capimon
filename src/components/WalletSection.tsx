@@ -13,8 +13,10 @@ type Deposit = {
 };
 
 const TZS = (n: number) => `${Math.round(n).toLocaleString()} TZS`;
-const PRESETS = [2_000, 10_000, 50_000, 100_000];
 const MIN_WITHDRAW = 5_000;
+
+/** Preset ladder starting at whichever floor the active rail imposes. */
+const presetsFor = (min: number) => [min, min * 4, min * 10, min * 20].map((n) => Math.round(n / 500) * 500);
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Waiting for your approval",
@@ -33,7 +35,7 @@ const STATUS_LABEL: Record<string, string> = {
 export function WalletSection() {
   const { account, refresh } = useCapimonAccount();
   const [deposits, setDeposits] = useState<Deposit[]>([]);
-  const [amountTzs, setAmountTzs] = useState(10_000);
+  const [amountTzs, setAmountTzs] = useState(0);
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -60,6 +62,9 @@ export function WalletSection() {
 
   if (!account) return null;
   const phoneToUse = phone || account.user.phone || "";
+  const minTzs = account.depositMinTzs ?? 500;
+  const presets = presetsFor(minTzs);
+  const amount = amountTzs || presets[1];
 
   const deposit = async () => {
     setBusy(true); setError(null); setNotice(null);
@@ -67,7 +72,7 @@ export function WalletSection() {
       const r = await fetch("/api/ntzs/deposit", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ amountTzs, phoneNumber: phoneToUse }),
+        body: JSON.stringify({ amountTzs: amount, phoneNumber: phoneToUse }),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error);
@@ -194,12 +199,12 @@ export function WalletSection() {
                 <div className="mt-4 border-t hairline pt-4">
                   <div className="eyebrow">Amount</div>
                   <div className="mt-2 grid grid-cols-4 gap-2">
-                    {PRESETS.map((p) => (
+                    {presets.map((p) => (
                       <button
                         key={p}
                         onClick={() => setAmountTzs(p)}
                         className={`tnum rounded-full border py-2 text-[12px] font-medium transition-all active:scale-95 ${
-                          amountTzs === p ? "border-transparent bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"
+                          amount === p ? "border-transparent bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"
                         }`}
                       >
                         {p >= 1000 ? `${p / 1000}k` : p}
@@ -207,7 +212,7 @@ export function WalletSection() {
                     ))}
                   </div>
                   <input
-                    value={String(amountTzs)}
+                    value={String(amount)}
                     onChange={(e) => setAmountTzs(Number(e.target.value.replace(/\D/g, "")) || 0)}
                     inputMode="numeric"
                     aria-label="Amount in shillings"
@@ -221,12 +226,15 @@ export function WalletSection() {
                   />
                   <button
                     onClick={deposit}
-                    disabled={busy || amountTzs < 500 || !phoneToUse}
+                    disabled={busy || amount < minTzs || !phoneToUse}
                     className="mt-3 w-full rounded-full bg-[var(--fg)] py-3 text-sm font-medium text-[var(--bg)] disabled:opacity-50"
                   >
-                    {busy ? "Sending prompt…" : `Deposit ${TZS(amountTzs)}`}
+                    {busy ? "Sending prompt…" : `Deposit ${TZS(amount)}`}
                   </button>
-                  <p className="mt-2 text-[11px] text-[var(--muted)]">Minimum 500 TZS.</p>
+                  <p className="mt-2 text-[11px] text-[var(--muted)]">
+                    Minimum {minTzs.toLocaleString()} TZS
+                    {account.depositRoute === "ramp" && " on this rail"}.
+                  </p>
                 </div>
               </motion.div>
             )}

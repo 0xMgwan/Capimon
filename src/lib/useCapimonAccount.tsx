@@ -15,6 +15,9 @@ export type CustodialAccount = {
   /** Cash expressed in shillings at the live rate; null when unavailable. */
   cashTzs: number | null;
   usdcPerTzs: number | null;
+  /** Which rail deposits will use, and its floor in whole shillings. */
+  depositRoute: string | null;
+  depositMinTzs: number;
   positions: CustodialPosition[];
   equity: number;
   total: number;

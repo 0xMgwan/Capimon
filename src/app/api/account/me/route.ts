@@ -3,7 +3,8 @@ import { currentUser } from "@/lib/auth";
 import { balances, history } from "@/lib/ledger";
 import { getMarkets } from "@/lib/markets";
 import { requireDb, boom } from "@/lib/apiHelpers";
-import { ntzsConfigured, getSwapRate } from "@/lib/ntzs";
+import { ntzsConfigured, getSwapRate, MIN_TZS_BY_ROUTE } from "@/lib/ntzs";
+import { collectionRoute } from "@/lib/omnibus";
 import { treasuryConfigured } from "@/lib/treasury";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +43,17 @@ export async function GET() {
 
     // Indicative shilling rate, so a Tanzanian account can be shown in the
     // currency it thinks in. The ledger still holds whatever actually arrived.
+    let depositRoute: string | null = null;
+    let depositMinTzs = 500;
+    if (ntzsConfigured) {
+      try {
+        depositRoute = await collectionRoute();
+        depositMinTzs = MIN_TZS_BY_ROUTE[depositRoute] ?? 500;
+      } catch {
+        /* the form falls back to the absolute minimum */
+      }
+    }
+
     let usdcPerTzs: number | null = null;
     if (ntzsConfigured && cash > 0) {
       try {
@@ -58,6 +70,8 @@ export async function GET() {
       user,
       cash, tzs, positions, equity, total: equity + cash,
       usdcPerTzs,
+      depositRoute,
+      depositMinTzs,
       /** Cash expressed in shillings, when a rate is available. */
       cashTzs: usdcPerTzs && usdcPerTzs > 0 ? cash / usdcPerTzs : null,
       entries,

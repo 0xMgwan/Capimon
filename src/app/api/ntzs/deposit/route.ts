@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createDeposit, rampQuote, rampOnramp, NtzsError, ntzsConfigured } from "@/lib/ntzs";
+import { createDeposit, rampQuote, rampOnramp, MIN_TZS_BY_ROUTE, NtzsError, ntzsConfigured } from "@/lib/ntzs";
 import { currentUser } from "@/lib/auth";
 import { db, migrate } from "@/lib/db";
 import { omnibusUserId, collectionRoute, capabilities } from "@/lib/omnibus";
@@ -7,7 +7,7 @@ import { requireDb, bad, boom, notConfigured } from "@/lib/apiHelpers";
 
 export const dynamic = "force-dynamic";
 
-const MIN_TZS = 500;
+const ABSOLUTE_MIN_TZS = 500;
 
 /**
  * Starts a mobile money collection into the CAPX omnibus account.
@@ -30,7 +30,17 @@ export async function POST(req: Request) {
     const phoneNumber = String(body.phoneNumber ?? user.phone ?? "").replace(/[^\d]/g, "");
     const amountTzs = Math.round(Number(body.amountTzs));
     if (!phoneNumber) return bad("A mobile money number is required.");
-    if (!Number.isFinite(amountTzs) || amountTzs < MIN_TZS) return bad(`Minimum deposit is ${MIN_TZS} TZS.`);
+    if (!Number.isFinite(amountTzs) || amountTzs < ABSOLUTE_MIN_TZS) {
+      return bad(`The minimum deposit is ${ABSOLUTE_MIN_TZS.toLocaleString()} TZS.`);
+    }
+
+    // The floor depends on which rail the deposit will travel; check it before
+    // writing a row and asking the user's phone for money.
+    const plannedRoute = await collectionRoute();
+    const routeMin = MIN_TZS_BY_ROUTE[plannedRoute] ?? ABSOLUTE_MIN_TZS;
+    if (amountTzs < routeMin) {
+      return bad(`The minimum deposit is ${routeMin.toLocaleString()} TZS.`, "below_minimum");
+    }
 
     await migrate();
     const sql = db();
@@ -44,7 +54,7 @@ export async function POST(req: Request) {
       // Which route is open depends on what this partner key was granted, so
       // ask rather than assume: `wallets` is off by default, and ramp collects
       // mobile money straight to USDC with no wallets at all.
-      const route = await collectionRoute();
+      const route = plannedRoute;
 
       if (route === "none") {
         await sql`update capx.deposits set status = 'failed',

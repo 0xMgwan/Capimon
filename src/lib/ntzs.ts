@@ -151,9 +151,13 @@ export async function createDeposit(input: { userId?: string; amountTzs: number;
 
 /** Price a payout before executing it. `amountTzs` is what the recipient gets. */
 export async function withdrawalQuote(input: { amountTzs: number; phoneNumber: string }) {
+  const amount = Math.round(input.amountTzs);
   return call<{ quoteId?: string | null; recipientName?: string | null; totalFeeTzs?: number;
                 [k: string]: unknown }>("/api/v1/withdrawals/quote", {
-    method: "POST", body: { amountTzs: Math.round(input.amountTzs), phoneNumber: input.phoneNumber },
+    // Both spellings, for the same reason as the ramp quote: the deployment has
+    // asked for `tzsAmount` where the spec says otherwise, and the values are
+    // identical so whichever it reads is correct.
+    method: "POST", body: { amountTzs: amount, tzsAmount: amount, phoneNumber: input.phoneNumber },
   });
 }
 
@@ -161,7 +165,12 @@ export async function withdrawalQuote(input: { amountTzs: number; phoneNumber: s
 export async function createWithdrawal(input: { quoteId: string; amountTzs: number; phoneNumber: string }) {
   return call<{ id?: string; status?: string; [k: string]: unknown }>("/api/v1/withdrawals", {
     method: "POST",
-    body: { quoteId: input.quoteId, amountTzs: Math.round(input.amountTzs), phoneNumber: input.phoneNumber },
+    body: {
+      quoteId: input.quoteId,
+      amountTzs: Math.round(input.amountTzs),
+      tzsAmount: Math.round(input.amountTzs),
+      phoneNumber: input.phoneNumber,
+    },
     idempotent: true,
   });
 }
@@ -293,13 +302,39 @@ export type RampQuote = {
   [k: string]: unknown;
 };
 
+/**
+ * The published spec names this field `amount`; the deployed API rejects that
+ * and asks for `tzsAmount`. Both are sent — the extra key is ignored by
+ * whichever side is right, and the call works against either.
+ */
 export async function rampQuote(input: {
   direction: "onramp" | "offramp";
   amount: number;
   phoneNumber?: string;
 }) {
-  return call<RampQuote>("/api/v1/ramp/quote", { method: "POST", body: input });
+  return call<RampQuote>("/api/v1/ramp/quote", {
+    method: "POST",
+    body: {
+      direction: input.direction,
+      amount: Math.round(input.amount),
+      tzsAmount: Math.round(input.amount),
+      ...(input.phoneNumber ? { phoneNumber: input.phoneNumber } : {}),
+    },
+  });
 }
+
+/**
+ * Minimum collection per route, in whole shillings.
+ *
+ * Ramp settles over the same rail as a payout and carries the payout minimum;
+ * a plain deposit does not. The docs give 5,000 for withdrawals and 500 for
+ * deposits, and the live API confirms ramp follows the former.
+ */
+export const MIN_TZS_BY_ROUTE: Record<string, number> = {
+  ramp: 5_000,
+  treasury: 500,
+  "omnibus-wallet": 500,
+};
 
 /** A 202 here is success-in-flight, not a failure — track it with rampStatus. */
 export async function rampOnramp(input: { quoteId: string; phoneNumber: string }) {

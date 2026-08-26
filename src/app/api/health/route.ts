@@ -68,6 +68,20 @@ export async function GET() {
     } catch (e) {
       c.capabilities = { error: e instanceof Error ? e.message : "probe failed" };
     }
+
+    // The omnibus needs an actual wallet for deposits to land and for buys to
+    // swap — a user record alone is rejected. Report readiness (a boolean, not
+    // the address) so a setup gap is visible before someone tries to deposit.
+    if (c.collectionRoute === "omnibus-wallet") {
+      try {
+        const { omnibusBalances } = await import("@/lib/omnibus");
+        const b = await omnibusBalances();
+        c.omnibusWalletReady = !!b.walletAddress;
+      } catch (e) {
+        c.omnibusWalletReady = false;
+        c.omnibusWalletError = e instanceof Error ? e.message : "omnibus wallet unavailable";
+      }
+    }
   }
 
   if (dbConfigured && treasuryConfigured) {

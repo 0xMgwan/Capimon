@@ -169,26 +169,13 @@ export function JoinFlow() {
               )}
             </AnimatePresence>
 
-            <div className="rounded-3xl border border-[#b45309]/40 bg-[#b45309]/[0.05] p-5">
-              <div className="text-sm font-medium text-[#b45309]">This account is custodial</div>
-              <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">
-                CAPX holds the USDC and the shares, and its ledger records what you are owed. You
-                are trusting CAPX to remain solvent and to honour that record — which is the price
-                of not needing a wallet.{" "}
-                <Link href="/markets" className="underline underline-offset-2 hover:text-[var(--fg)]">
-                  Connect your own wallet instead
-                </Link>{" "}
-                and CAPX holds nothing.
-              </p>
-            </div>
-
-            <div className="mt-5 rounded-3xl border hairline p-6">
-              <div className="eyebrow">Where your money goes</div>
+            <div className="rounded-3xl border hairline p-6">
+              <div className="eyebrow">How a deposit works</div>
               <ol className="mt-4 space-y-4 text-sm leading-relaxed text-[var(--muted)]">
-                <li><span className="text-[var(--fg)]">You send shillings.</span> Approve the prompt on your phone.</li>
-                <li><span className="text-[var(--fg)]">CAPX converts them.</span> Settlement, conversion and custody happen in the background.</li>
-                <li><span className="text-[var(--fg)]">Your balance appears.</span> Ready to buy with.</li>
-                <li><span className="text-[var(--fg)]">You buy shares.</span> CAPX trades and records your holding.</li>
+                <li><span className="text-[var(--fg)]">You send shillings.</span> Approve the prompt on your phone — no card, no bank transfer.</li>
+                <li><span className="text-[var(--fg)]">They convert automatically.</span> Your shillings become USDC at the live rate.</li>
+                <li><span className="text-[var(--fg)]">Your balance appears.</span> Usually within a minute, ready to invest.</li>
+                <li><span className="text-[var(--fg)]">You buy shares.</span> CAPX places the trade onchain and records your holding.</li>
               </ol>
               <p className="mt-5 border-t hairline pt-4 text-[11px] leading-relaxed text-[var(--muted)]">
                 Tokenized equities are not available to US persons. Nothing here is investment advice.

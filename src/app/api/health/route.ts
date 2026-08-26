@@ -4,6 +4,7 @@ import { ntzsConfigured, ntzsLiveMode, getSwapRate } from "@/lib/ntzs";
 import { treasuryConfigured, treasuryAddress, treasuryDiagnosis } from "@/lib/treasury";
 import { feeEnabled, FEE_BPS } from "@/lib/fees";
 import { checkSolvency } from "@/lib/solvency";
+import { capabilities, collectionRoute } from "@/lib/omnibus";
 
 export const dynamic = "force-dynamic";
 
@@ -51,13 +52,21 @@ export async function GET() {
   }
 
   if (ntzsConfigured) {
+    const c = checks.ntzs as Record<string, unknown>;
     try {
       await getSwapRate("NTZS", "USDC", 100_000);
-      (checks.ntzs as Record<string, unknown>).rateAvailable = true;
+      c.rateAvailable = true;
     } catch (e) {
-      const c = checks.ntzs as Record<string, unknown>;
       c.rateAvailable = false;
       c.error = e instanceof Error ? e.message : "rate unavailable";
+    }
+    // Capabilities are granted per partner, so the only honest way to know what
+    // this key can do is to ask.
+    try {
+      c.capabilities = await capabilities();
+      c.collectionRoute = await collectionRoute();
+    } catch (e) {
+      c.capabilities = { error: e instanceof Error ? e.message : "probe failed" };
     }
   }
 

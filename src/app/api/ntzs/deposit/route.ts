@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { createDeposit, NtzsError, ntzsConfigured } from "@/lib/ntzs";
+import { createDeposit, rampQuote, rampOnramp, NtzsError, ntzsConfigured } from "@/lib/ntzs";
 import { currentUser } from "@/lib/auth";
 import { db, migrate } from "@/lib/db";
-import { omnibusUserId } from "@/lib/omnibus";
+import { omnibusUserId, collectionRoute } from "@/lib/omnibus";
 import { requireDb, bad, boom, notConfigured } from "@/lib/apiHelpers";
 
 export const dynamic = "force-dynamic";
@@ -41,10 +41,46 @@ export async function POST(req: Request) {
     const localId = rows[0].id;
 
     try {
+      // Which route is open depends on what this partner key was granted, so
+      // ask rather than assume: `wallets` is off by default, and ramp collects
+      // mobile money straight to USDC with no wallets at all.
+      const route = await collectionRoute();
+
+      if (route === "none") {
+        await sql`update capx.deposits set status = 'failed',
+                  error = 'no collection capability' where id = ${localId}`;
+        return NextResponse.json(
+          { ok: false, code: "capability_missing",
+            error: "Deposits are not enabled for this deployment yet. The nTZS key needs either the 'ramp' capability (mobile money straight to USDC) or 'wallets'. Request one in the nTZS developer dashboard." },
+          { status: 503 },
+        );
+      }
+
+      if (route === "ramp") {
+        // Quote first — the rate is locked for 60s and the fee is never ours to
+        // recompute — then execute against that quote.
+        const quote = await rampQuote({ direction: "onramp", amount: amountTzs, phoneNumber });
+        const quoteId = String(quote.quoteId ?? quote.id ?? "");
+        if (!quoteId) throw new NtzsError("quote_missing", "The ramp quote returned no id", 502);
+
+        const settlement = await rampOnramp({ quoteId, phoneNumber });
+        await sql`update capx.deposits
+                     set ntzs_deposit_id = ${String(settlement.id ?? quoteId)},
+                         metadata = metadata || ${sql.json(JSON.parse(JSON.stringify({ route: "ramp", quote, settlement })))}
+                   where id = ${localId}`;
+        return NextResponse.json({
+          ok: true, depositId: localId, route: "ramp", status: settlement.status ?? "submitted",
+          note: "Approve the prompt on your phone. Your balance updates once it settles.",
+        });
+      }
+
       const deposit = await createDeposit({ userId: await omnibusUserId(), amountTzs, phoneNumber });
-      await sql`update capx.deposits set ntzs_deposit_id = ${String(deposit.id)} where id = ${localId}`;
+      await sql`update capx.deposits
+                   set ntzs_deposit_id = ${String(deposit.id)},
+                       metadata = metadata || ${sql.json({ route: "omnibus-wallet" })}
+                 where id = ${localId}`;
       return NextResponse.json({
-        ok: true, depositId: localId, status: deposit.status ?? "submitted",
+        ok: true, depositId: localId, route: "omnibus-wallet", status: deposit.status ?? "submitted",
         note: "Approve the prompt on your phone. Your balance updates once it settles.",
       });
     } catch (e) {

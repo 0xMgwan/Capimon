@@ -228,3 +228,80 @@ export async function transferUsdc(input: { fromUserId: string; toAddress: strin
     idempotent: true,
   });
 }
+
+/* ------------------------------------------------------------------ ramp -- */
+
+/**
+ * Wallet-less settlement: mobile money straight to USDC, with no per-user
+ * wallets and no swap leg. This is the path for a partner without the `wallets`
+ * capability, which is granted per partner rather than by default.
+ *
+ * Quote first, then execute against the quote — the rate is locked for 60
+ * seconds and the fee must never be recomputed locally.
+ */
+export type RampQuote = {
+  quoteId?: string;
+  id?: string;
+  amount?: number;
+  usdcAmount?: number;
+  rate?: number;
+  expiresAt?: string;
+  [k: string]: unknown;
+};
+
+export async function rampQuote(input: {
+  direction: "onramp" | "offramp";
+  amount: number;
+  phoneNumber?: string;
+}) {
+  return call<RampQuote>("/api/v1/ramp/quote", { method: "POST", body: input });
+}
+
+/** A 202 here is success-in-flight, not a failure — track it with rampStatus. */
+export async function rampOnramp(input: { quoteId: string; phoneNumber: string }) {
+  return call<{ id?: string; status?: string; [k: string]: unknown }>("/api/v1/ramp/onramp", {
+    method: "POST", body: input, idempotent: true,
+  });
+}
+
+export async function rampStatus(id: string) {
+  return call<{ id?: string; status?: string; [k: string]: unknown }>(
+    `/api/v1/ramp/${encodeURIComponent(id)}`,
+  );
+}
+
+/** The partner's USDC settlement float. Read-only, so it doubles as a probe. */
+export async function rampBalance() {
+  return call<{ balance?: number; usdc?: number; [k: string]: unknown }>("/api/v1/ramp/balance");
+}
+
+/* ---------------------------------------------------------- capabilities -- */
+
+export type Capability = "wallets" | "ramp";
+
+/**
+ * What this key can actually do.
+ *
+ * Capabilities are granted per partner and an endpoint outside the grant
+ * answers 403 no matter how valid the key is, so the only honest way to know is
+ * to ask. Both probes are safe: the ramp probe is a balance read, and user
+ * creation is idempotent on externalId — it returns the omnibus account rather
+ * than creating a second one.
+ */
+export async function probeCapabilities(omnibusExternalId: string, omnibusEmail: string) {
+  const result: Record<Capability, { available: boolean; detail?: string }> = {
+    wallets: { available: false },
+    ramp: { available: false },
+  };
+
+  await Promise.all([
+    rampBalance()
+      .then(() => { result.ramp = { available: true }; })
+      .catch((e) => { result.ramp = { available: false, detail: e instanceof Error ? e.message : "unavailable" }; }),
+    upsertUser({ externalId: omnibusExternalId, email: omnibusEmail, name: "CAPX Treasury" })
+      .then((u) => { result.wallets = { available: true, detail: u.id }; })
+      .catch((e) => { result.wallets = { available: false, detail: e instanceof Error ? e.message : "unavailable" }; }),
+  ]);
+
+  return result;
+}

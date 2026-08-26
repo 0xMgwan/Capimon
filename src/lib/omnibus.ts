@@ -1,5 +1,5 @@
 import "server-only";
-import { upsertUser, getUser } from "./ntzs";
+import { upsertUser, getUser, probeCapabilities, type Capability } from "./ntzs";
 
 /**
  * The single nTZS account CAPX collects into.
@@ -11,7 +11,8 @@ import { upsertUser, getUser } from "./ntzs";
  * CAPX's obligation rather than something inherited from nTZS.
  */
 
-const OMNIBUS_EXTERNAL_ID = "capx-omnibus";
+export const OMNIBUS_EXTERNAL_ID = "capx-omnibus";
+export const OMNIBUS_EMAIL = process.env.NTZS_OMNIBUS_EMAIL ?? "treasury@capx.finance";
 const CONFIGURED_ID = process.env.NTZS_OMNIBUS_USER_ID ?? "";
 
 let cached: string | null = CONFIGURED_ID || null;
@@ -25,8 +26,7 @@ export async function omnibusUserId(): Promise<string> {
   if (cached) return cached;
   if (!inflight) {
     inflight = (async () => {
-      const email = process.env.NTZS_OMNIBUS_EMAIL ?? "treasury@capx.finance";
-      const user = await upsertUser({ externalId: OMNIBUS_EXTERNAL_ID, email, name: "CAPX Treasury" });
+      const user = await upsertUser({ externalId: OMNIBUS_EXTERNAL_ID, email: OMNIBUS_EMAIL, name: "CAPX Treasury" });
       cached = user.id;
       return user.id;
     })().finally(() => { inflight = null; });
@@ -39,4 +39,31 @@ export async function omnibusBalances() {
   const id = await omnibusUserId();
   const u = await getUser(id);
   return { id, tzs: Number(u.balanceTzs ?? 0), usdc: Number(u.balanceUsdc ?? 0), walletAddress: u.walletAddress ?? null };
+}
+
+/**
+ * Which collection route this key can use, cached for the process.
+ *
+ * `wallets` is granted per partner and off by default, so the omnibus-user path
+ * is not always open. `ramp` collects mobile money straight to USDC with no
+ * wallets at all, which suits an omnibus model just as well.
+ */
+let capsCache: { at: number; caps: Record<Capability, { available: boolean; detail?: string }> } | null = null;
+const CAPS_TTL_MS = 300_000;
+
+export async function capabilities(force = false) {
+  if (!force && capsCache && Date.now() - capsCache.at < CAPS_TTL_MS) return capsCache.caps;
+  const caps = await probeCapabilities(OMNIBUS_EXTERNAL_ID, OMNIBUS_EMAIL);
+  capsCache = { at: Date.now(), caps };
+  return caps;
+}
+
+export type CollectionRoute = "ramp" | "omnibus-wallet" | "none";
+
+/** Ramp is preferred: fewer moving parts, and no identity perimeter to inherit. */
+export async function collectionRoute(): Promise<CollectionRoute> {
+  const caps = await capabilities();
+  if (caps.ramp.available) return "ramp";
+  if (caps.wallets.available) return "omnibus-wallet";
+  return "none";
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDeposit, swap, transferUsdc, ntzsConfigured } from "@/lib/ntzs";
+import { getDeposit, rampStatus, swap, transferUsdc, ntzsConfigured } from "@/lib/ntzs";
 import { db, migrate } from "@/lib/db";
 import { record } from "@/lib/ledger";
 import { omnibusUserId, omnibusBalances } from "@/lib/omnibus";
@@ -34,8 +34,9 @@ export async function POST() {
   const sql = db();
   const treasury = treasuryAddress()!;
 
-  const pending = await sql<{ id: string; user_id: string; ntzs_deposit_id: string; amount_tzs: number }[]>`
-    select id::text, user_id::text, ntzs_deposit_id, amount_tzs
+  const pending = await sql<{ id: string; user_id: string; ntzs_deposit_id: string;
+                             amount_tzs: number; metadata: { route?: string } }[]>`
+    select id::text, user_id::text, ntzs_deposit_id, amount_tzs, metadata
       from capx.deposits
      where status in ('pending','uncertain') and ntzs_deposit_id is not null
      order by created_at asc
@@ -45,7 +46,8 @@ export async function POST() {
 
   for (const d of pending) {
     try {
-      const remote = await getDeposit(d.ntzs_deposit_id);
+      const viaRamp = d.metadata?.route === "ramp";
+      const remote = viaRamp ? await rampStatus(d.ntzs_deposit_id) : await getDeposit(d.ntzs_deposit_id);
       const status = String(remote.status ?? "").toLowerCase();
 
       // Keep the upstream view on the row either way — a stuck deposit is
@@ -66,18 +68,31 @@ export async function POST() {
         continue;
       }
 
-      // Convert exactly this deposit, then move what the swap actually produced.
-      const before = await omnibusBalances();
-      const swapResult = await swap({ userId: await omnibusUserId(), from: "NTZS", to: "USDC", amount: d.amount_tzs });
-      const after = await omnibusBalances();
-      const usdc = Math.max(0, after.usdc - before.usdc);
+      // Ramp settles straight to USDC, so there is nothing to convert. The
+      // wallet route lands in shillings and still needs the swap and transfer.
+      let usdc = 0;
+      let swapResult: unknown = null;
+      let transfer: unknown = null;
+      let omnibus: { before?: { tzs: number; usdc: number }; after?: { tzs: number; usdc: number } } = {};
 
-      if (!(usdc > 0)) {
-        results.push({ id: d.id, outcome: "swapped but no USDC visible yet" });
-        continue;
+      if (viaRamp) {
+        usdc = Number(remote.usdcAmount ?? remote.usdc ?? remote.amountUsdc ?? 0);
+        if (!(usdc > 0)) {
+          results.push({ id: d.id, outcome: "settled but the USDC amount is not visible yet" });
+          continue;
+        }
+      } else {
+        const before = await omnibusBalances();
+        swapResult = await swap({ userId: await omnibusUserId(), from: "NTZS", to: "USDC", amount: d.amount_tzs });
+        const after = await omnibusBalances();
+        usdc = Math.max(0, after.usdc - before.usdc);
+        omnibus = { before: { tzs: before.tzs, usdc: before.usdc }, after: { tzs: after.tzs, usdc: after.usdc } };
+        if (!(usdc > 0)) {
+          results.push({ id: d.id, outcome: "swapped but no USDC visible yet" });
+          continue;
+        }
+        transfer = await transferUsdc({ fromUserId: await omnibusUserId(), toAddress: treasury, amount: usdc });
       }
-
-      const transfer = await transferUsdc({ fromUserId: await omnibusUserId(), toAddress: treasury, amount: usdc });
 
       // Keyed to the deposit, so a repeated settle is a no-op.
       await record([
@@ -86,14 +101,16 @@ export async function POST() {
       ]);
       await sql`update capx.deposits
                    set status = 'settled', usdc_credited = ${usdc}, settled_at = now(),
-                       swap_ref = ${String(swapResult.id ?? swapResult.reference ?? "") || null},
-                       transfer_tx = ${String(transfer.txHash ?? transfer.id ?? "") || null},
+                       swap_ref = ${String((swapResult as { id?: string; reference?: string } | null)?.id
+                                          ?? (swapResult as { reference?: string } | null)?.reference ?? "") || null},
+                       transfer_tx = ${String((transfer as { txHash?: string; id?: string } | null)?.txHash
+                                          ?? (transfer as { id?: string } | null)?.id ?? "") || null},
                        rate_tzs_usdc = ${d.amount_tzs > 0 ? usdc / d.amount_tzs : null},
                        metadata = metadata || ${sql.json(asJson({
                          swap: swapResult,
                          transfer,
-                         omnibusBefore: { tzs: before.tzs, usdc: before.usdc },
-                         omnibusAfter: { tzs: after.tzs, usdc: after.usdc },
+                         route: viaRamp ? "ramp" : "omnibus-wallet",
+                         omnibus,
                        }))}
                  where id = ${d.id}`;
       results.push({ id: d.id, outcome: `credited ${usdc.toFixed(2)} USDC` });

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db, dbConfigured, migrate } from "@/lib/db";
 import { ntzsConfigured, ntzsLiveMode, getSwapRate } from "@/lib/ntzs";
-import { treasuryConfigured, treasuryAddress } from "@/lib/treasury";
+import { treasuryConfigured, treasuryAddress, treasuryDiagnosis } from "@/lib/treasury";
 import { feeEnabled, FEE_BPS } from "@/lib/fees";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,13 @@ export async function GET() {
   const checks: Record<string, unknown> = {
     database: { configured: dbConfigured, reachable: null as boolean | null, error: null as string | null },
     ntzs: { configured: ntzsConfigured, liveMode: ntzsLiveMode, rateAvailable: null as boolean | null, error: null as string | null },
-    treasury: { configured: treasuryConfigured, address: treasuryAddress() },
+    treasury: {
+      configured: treasuryConfigured,
+      address: treasuryAddress(),
+      problem: treasuryDiagnosis(),
+      /** Gas balance — the treasury pays for every trade it executes. */
+      gasEth: null as number | null,
+    },
     fee: { enabled: feeEnabled, bps: FEE_BPS },
   };
 
@@ -27,6 +33,19 @@ export async function GET() {
       checks.database = { configured: true, reachable: true, tables: Number(rows[0]?.n ?? 0), error: null };
     } catch (e) {
       checks.database = { configured: true, reachable: false, error: e instanceof Error ? e.message.split("\n")[0] : "unreachable" };
+    }
+  }
+
+  if (treasuryConfigured) {
+    try {
+      const { formatEther } = await import("viem");
+      const { publicClient } = await import("@/lib/chain");
+      const wei = await publicClient.getBalance({ address: treasuryAddress()! });
+      const t = checks.treasury as Record<string, unknown>;
+      t.gasEth = Number(formatEther(wei));
+      t.needsGas = Number(formatEther(wei)) < 0.0005;
+    } catch {
+      /* the address still reports */
     }
   }
 

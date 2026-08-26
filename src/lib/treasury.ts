@@ -20,15 +20,31 @@ import { getMarkets } from "./markets";
  * touching the key directly.
  */
 
-const RAW_KEY = process.env.TREASURY_PRIVATE_KEY ?? "";
-export const treasuryConfigured = /^0x[0-9a-fA-F]{64}$/.test(RAW_KEY);
+// Accept the key with or without the 0x prefix, and tolerate the whitespace a
+// dashboard paste tends to bring with it. A key that is present but rejected on
+// a formatting technicality is a confusing failure at trade time.
+const RAW_KEY = (process.env.TREASURY_PRIVATE_KEY ?? "").trim().replace(/^["']|["']$/g, "");
+const NORMALISED = RAW_KEY && !RAW_KEY.startsWith("0x") && /^[0-9a-fA-F]{64}$/.test(RAW_KEY)
+  ? `0x${RAW_KEY}`
+  : RAW_KEY;
+
+export const treasuryConfigured = /^0x[0-9a-fA-F]{64}$/.test(NORMALISED);
+
+/** Why the key was rejected, without ever revealing any of it. */
+export function treasuryDiagnosis() {
+  if (treasuryConfigured) return null;
+  if (!RAW_KEY) return "TREASURY_PRIVATE_KEY is not set on this deployment.";
+  const hex = NORMALISED.replace(/^0x/, "");
+  if (!/^[0-9a-fA-F]*$/.test(hex)) return "The value contains non-hexadecimal characters.";
+  return `Expected 64 hex characters, received ${hex.length}.`;
+}
 
 /** Refuse to route an order more than this far from the oracle mark. */
 const UNUSABLE_IMPACT = 15;
 
 function signer() {
   if (!treasuryConfigured) throw new Error("TREASURY_PRIVATE_KEY is not configured");
-  const account = privateKeyToAccount(RAW_KEY as `0x${string}`);
+  const account = privateKeyToAccount(NORMALISED as `0x${string}`);
   return {
     account,
     wallet: createWalletClient({

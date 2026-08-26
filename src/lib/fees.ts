@@ -7,9 +7,10 @@ import "server-only";
  * receiver inside the swap the user already signs — no extra approval, no extra
  * transaction, and CAPIMON never holds the funds.
  *
- * Off by default: charging a fee on securities transactions has licensing
- * consequences, so switching it on has to be a deliberate act, not a default.
- * Set FEE_BPS to enable.
+ * Live at 20 bps. Set FEE_BPS to change it, or FEE_BPS=0 to switch it off
+ * without a deploy. Charging a fee on securities transactions carries licensing
+ * obligations — that is a business decision, taken deliberately, not a default
+ * that drifted in.
  */
 
 export const FEE_RECEIVER =
@@ -18,9 +19,16 @@ export const FEE_RECEIVER =
 /** Hard ceiling so a mistyped env var cannot charge a user 20%. */
 const MAX_FEE_BPS = 100;
 
+const DEFAULT_FEE_BPS = 20;
+
+// An explicit FEE_BPS wins, including "0" to disable. An unset or unparseable
+// value falls back to the default rather than silently charging nothing.
+const configured = process.env.FEE_BPS?.trim();
+const parsed = configured !== undefined && configured !== "" ? Number(configured) : DEFAULT_FEE_BPS;
+
 export const FEE_BPS = Math.min(
   MAX_FEE_BPS,
-  Math.max(0, Math.round(Number(process.env.FEE_BPS ?? 0) || 0)),
+  Math.max(0, Math.round(Number.isFinite(parsed) ? parsed : DEFAULT_FEE_BPS)),
 );
 
 export const feeEnabled = FEE_BPS > 0;

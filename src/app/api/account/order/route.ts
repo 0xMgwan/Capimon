@@ -5,6 +5,7 @@ import { balanceOf, record } from "@/lib/ledger";
 import { BY_SYMBOL } from "@/lib/assets";
 import { executeBuy, executeSell, treasuryConfigured } from "@/lib/treasury";
 import { requireDb, bad, boom, notConfigured } from "@/lib/apiHelpers";
+import { assertSolvent } from "@/lib/solvency";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,17 @@ export async function POST(req: Request) {
   try {
     const user = await currentUser();
     if (!user) return NextResponse.json({ ok: false, code: "unauthenticated" }, { status: 401 });
+
+    // Refuse to trade at all if client assets are not fully backed. A shortfall
+    // must never be deepened by another order.
+    try {
+      await assertSolvent();
+    } catch (e) {
+      return NextResponse.json(
+        { ok: false, code: "trading_paused", error: e instanceof Error ? e.message : "Trading is paused." },
+        { status: 503 },
+      );
+    }
 
     const body = await req.json();
     const side = body.side === "sell" ? "sell" : "buy";

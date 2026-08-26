@@ -1,46 +1,36 @@
 "use client";
 
-import { useAccount, useConnect, useDisconnect, useBalance, useChainId, useSwitchChain } from "wagmi";
+import { useAccount, useDisconnect, useBalance, useChainId, useSwitchChain } from "wagmi";
 import { base } from "wagmi/chains";
 import { useEffect, useRef, useState } from "react";
 import { formatUnits } from "viem";
-import { short } from "@/lib/format";
-import { WALLETS } from "@/lib/wallets";
-import { CoinbaseIcon, MetaMaskIcon, PhantomIcon } from "./icons/Wallets";
+import { short, usd } from "@/lib/format";
+import { useCapimonAccount } from "@/lib/useCapimonAccount";
+import { AuthModal } from "./AuthModal";
 
-const ICONS: Record<string, (p: { className?: string }) => React.ReactElement> = {
-  coinbaseWalletSDK: CoinbaseIcon,
-  metaMask: MetaMaskIcon,
-  phantom: PhantomIcon,
-};
-
+/**
+ * The single entry point: signed out it opens the auth modal, signed in it
+ * shows whichever identity the visitor actually has — a wallet address for
+ * self-custody, an email for a custodial account.
+ */
 export function WalletButton({ compact = false }: { compact?: boolean }) {
   const { address, isConnected } = useAccount();
-  const { connectors, connect, isPending } = useConnect();
+  const { account, signOut } = useCapimonAccount();
+  const [authOpen, setAuthOpen] = useState(false);
   const { disconnect } = useDisconnect();
   const chainId = useChainId();
   const { switchChain } = useSwitchChain();
   const { data: bal } = useBalance({ address, chainId: base.id, query: { enabled: !!address, refetchInterval: 15_000 } });
   const [open, setOpen] = useState(false);
-  const [installed, setInstalled] = useState<Record<string, boolean>>({});
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
-
-  // An injected connector only works if its provider is actually present, so
-  // probe before offering it — otherwise the click silently does nothing.
-  useEffect(() => {
-    if (!open) return;
-    let alive = true;
-    void Promise.all(
-      connectors.map(async (c) => [c.id, !!(await c.getProvider().catch(() => undefined))] as const),
-    ).then((pairs) => { if (alive) setInstalled(Object.fromEntries(pairs)); });
-    return () => { alive = false; };
-  }, [open, connectors]);
 
   if (isConnected && address) {
     const wrongChain = chainId !== base.id;
@@ -85,72 +75,47 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
     );
   }
 
+  // Signed into a custodial account with no wallet: show that identity instead.
+  if (account) {
+    return (
+      <div className="relative" ref={ref}>
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="flex items-center gap-2 rounded-full border hairline surface px-4 py-2 text-sm font-medium transition-colors hover:border-[var(--color-accent)]"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-up)]" />
+          <span className="max-w-[10rem] truncate">{account.user.email}</span>
+        </button>
+        {open && (
+          <div className="absolute right-0 z-50 mt-2 w-60 rounded-2xl border hairline bg-[var(--bg)] p-2 shadow-2xl shadow-black/10">
+            <div className="rounded-xl surface p-3">
+              <div className="eyebrow">Custodial account</div>
+              <div className="tnum mt-1 text-sm">{usd(account.total)}</div>
+              <div className="mt-1 text-[11px] text-[var(--muted)]">held by CAPIMON for you</div>
+            </div>
+            <a href="/portfolio" className="mt-1 block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">Portfolio</a>
+            <a href="/join" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">Fund with shillings</a>
+            <button
+              onClick={() => { void signOut(); setOpen(false); }}
+              className="w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--color-down)] transition-colors hover:surface"
+            >
+              Sign out
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="relative" ref={ref}>
+    <>
       <button
-        onClick={() => setOpen((o) => !o)}
-        disabled={isPending}
-        className="rounded-full bg-[var(--fg)] px-5 py-2 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95 disabled:opacity-60"
+        onClick={() => setAuthOpen(true)}
+        className="rounded-full bg-[var(--fg)] px-5 py-2 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95"
       >
-        {isPending ? "Connecting…" : compact ? "Connect" : "Connect Wallet"}
+        {compact ? "Sign in" : "Sign in"}
       </button>
-
-      {open && (
-        <div className="absolute right-0 z-50 mt-2 w-72 rounded-2xl border hairline bg-[var(--bg)] p-2 shadow-2xl shadow-black/10">
-          <div className="eyebrow px-3 py-2">Choose a wallet</div>
-          {WALLETS.map((w) => {
-            const connector = connectors.find((c) => c.id === w.id);
-            const Icon = ICONS[w.id];
-            const detected = w.alwaysAvailable || installed[w.id];
-            const probed = w.id in installed;
-
-            if (connector && (detected || !probed)) {
-              return (
-                <button
-                  key={w.id}
-                  onClick={() => { connect({ connector, chainId: base.id }); setOpen(false); }}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:surface"
-                >
-                  <Icon className="h-8 w-8 shrink-0 rounded-lg" />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium">{w.name}</span>
-                    <span className="block truncate text-[11px] text-[var(--muted)]">{w.hint}</span>
-                  </span>
-                </button>
-              );
-            }
-
-            return (
-              <a
-                key={w.id}
-                href={w.install}
-                target="_blank"
-                rel="noreferrer"
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:surface"
-              >
-                <Icon className="h-8 w-8 shrink-0 rounded-lg opacity-40" />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-[var(--muted)]">{w.name}</span>
-                  <span className="block truncate text-[11px] text-[var(--muted)]">Not detected · install ↗</span>
-                </span>
-              </a>
-            );
-          })}
-          <a
-            href="/join"
-            className="mt-1 flex items-center gap-3 rounded-xl border border-dashed hairline px-3 py-2.5 text-left transition-colors hover:surface"
-          >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg surface text-base">🇹🇿</span>
-            <span className="min-w-0">
-              <span className="block text-sm font-medium">No wallet? Start with shillings</span>
-              <span className="block truncate text-[11px] text-[var(--muted)]">Email signup · mobile money · nTZS</span>
-            </span>
-          </a>
-          <p className="px-3 pb-1 pt-2 text-[11px] leading-snug text-[var(--muted)]">
-            Connect a wallet and CAPIMON holds nothing — every transaction is signed by you.
-          </p>
-        </div>
-      )}
-    </div>
+      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
+    </>
   );
 }

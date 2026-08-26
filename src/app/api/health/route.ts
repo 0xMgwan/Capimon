@@ -3,6 +3,7 @@ import { db, dbConfigured, migrate } from "@/lib/db";
 import { ntzsConfigured, ntzsLiveMode, getSwapRate } from "@/lib/ntzs";
 import { treasuryConfigured, treasuryAddress, treasuryDiagnosis } from "@/lib/treasury";
 import { feeEnabled, FEE_BPS } from "@/lib/fees";
+import { checkSolvency } from "@/lib/solvency";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,21 @@ export async function GET() {
       const c = checks.ntzs as Record<string, unknown>;
       c.rateAvailable = false;
       c.error = e instanceof Error ? e.message : "rate unavailable";
+    }
+  }
+
+  if (dbConfigured && treasuryConfigured) {
+    try {
+      const s = await checkSolvency();
+      checks.solvency = {
+        solvent: s.ok,
+        owedUsd: Number(s.totals.owedUsd.toFixed(2)),
+        heldUsd: Number(s.totals.heldUsd.toFixed(2)),
+        shortfallUsd: Number(s.totals.shortfallUsd.toFixed(2)),
+        unavailable: s.unavailable ?? null,
+      };
+    } catch (e) {
+      checks.solvency = { solvent: null, error: e instanceof Error ? e.message : "check failed" };
     }
   }
 

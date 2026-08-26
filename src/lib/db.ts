@@ -79,11 +79,8 @@ export async function migrate() {
           created_at  timestamptz not null default now(),
           expires_at  timestamptz not null
         )`;
-      await sql`create index if not exists sessions_user_idx on capx.sessions(user_id)`;
       // Case-insensitive uniqueness: two people cannot hold the same handle in
       // different capitalisations.
-      await sql`create unique index if not exists users_username_idx
-                  on capx.users (lower(username)) where username is not null`;
       await sql`
         create table if not exists capx.ledger_entries (
           id           bigserial primary key,
@@ -95,9 +92,7 @@ export async function migrate() {
           metadata     jsonb not null default '{}'::jsonb,
           created_at   timestamptz not null default now()
         )`;
-      await sql`create index if not exists ledger_user_asset_idx on capx.ledger_entries(user_id, asset)`;
       // One row per external reference makes every money-moving write idempotent.
-      await sql`create unique index if not exists ledger_ref_idx on capx.ledger_entries(ref) where ref is not null`;
       await sql`
         create table if not exists capx.orders (
           id            uuid primary key default gen_random_uuid(),
@@ -114,7 +109,6 @@ export async function migrate() {
           created_at    timestamptz not null default now(),
           settled_at    timestamptz
         )`;
-      await sql`create index if not exists orders_user_idx on capx.orders(user_id, created_at desc)`;
       // Deposits land in one omnibus nTZS wallet, so the only record of who sent
       // what is this table. It is the attribution, and it is written before the
       // money is asked for.
@@ -139,8 +133,6 @@ export async function migrate() {
           created_at     timestamptz not null default now(),
           settled_at     timestamptz
         )`;
-      await sql`create index if not exists deposits_user_idx on capx.deposits(user_id, created_at desc)`;
-      await sql`create index if not exists deposits_status_idx on capx.deposits(status)`;
 
       /*
        * Columns added after a table first shipped.
@@ -150,6 +142,10 @@ export async function migrate() {
        * has the table. Every late addition has to be listed here as well —
        * missing one surfaces as a runtime "column does not exist" on the write
        * path, which is the worst place to find it.
+       *
+       * These run before any index is created, because an index over a
+       * late-added column cannot exist before the column does — getting that
+       * order wrong aborts the whole migration and leaves the column missing.
        */
       const lateColumns: Record<string, string[]> = {
         users: [
@@ -167,6 +163,16 @@ export async function migrate() {
           await sql.unsafe(`alter table capx.${table} add column if not exists ${col}`);
         }
       }
+
+      // Indexes last: every column they reference exists by now.
+      await sql`create index if not exists sessions_user_idx on capx.sessions(user_id)`;
+      await sql`create unique index if not exists users_username_idx
+                  on capx.users (lower(username)) where username is not null`;
+      await sql`create index if not exists ledger_user_asset_idx on capx.ledger_entries(user_id, asset)`;
+      await sql`create unique index if not exists ledger_ref_idx on capx.ledger_entries(ref) where ref is not null`;
+      await sql`create index if not exists orders_user_idx on capx.orders(user_id, created_at desc)`;
+      await sql`create index if not exists deposits_user_idx on capx.deposits(user_id, created_at desc)`;
+      await sql`create index if not exists deposits_status_idx on capx.deposits(status)`;
     })().catch((e) => {
       migrated = null;
       throw e;

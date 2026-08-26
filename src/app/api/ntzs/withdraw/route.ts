@@ -105,6 +105,11 @@ export async function POST(req: Request) {
       return bad(`Your balance is ${Math.floor(balance).toLocaleString()} TZS.`, "insufficient_balance");
     }
 
+    // Walk the money back to nTZS first if it is sitting in the treasury —
+    // the payout is made from the nTZS balance, not from the chain.
+    const { ensureNtzsHasTzs } = await import("@/lib/ntzsFunding");
+    await ensureNtzsHasTzs(amountTzs);
+
     const result = await createWithdrawal({
       userId: await omnibusUserId(), quoteId, amountTzs, phoneNumber,
     });

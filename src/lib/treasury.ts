@@ -207,6 +207,35 @@ export async function treasuryHoldings() {
 /* --------------------------------------------------------------- funding -- */
 
 /**
+ * Sends USDC from the treasury back to nTZS.
+ *
+ * This is the direction the key can do unaided: the treasury is an ordinary EOA
+ * and signing an ERC-20 transfer out of it is exactly what a private key is
+ * for. Pulling the other way needs the nTZS API, because that address belongs
+ * to nTZS. Withdrawals rely on this leg to put shillings back within reach of a
+ * payout.
+ */
+export async function sendUsdcToNtzs(usdc: number, ntzsAddress: `0x${string}`) {
+  const { account, wallet } = signer();
+  const amount = parseUnits(usdc.toFixed(6), 6);
+
+  const balance = (await publicClient.readContract({
+    address: USDC_BASE, abi: b20Abi, functionName: "balanceOf", args: [account.address],
+  })) as bigint;
+  if (balance < amount) {
+    throw new Error(
+      `The treasury holds ${Number(formatUnits(balance, 6)).toFixed(2)} USDC and this needs ${usdc.toFixed(2)}.`,
+    );
+  }
+
+  const hash = await wallet.writeContract({
+    address: USDC_BASE, abi: b20Abi, functionName: "transfer", args: [ntzsAddress, amount],
+  });
+  await publicClient.waitForTransactionReceipt({ hash });
+  return hash;
+}
+
+/**
  * Makes sure the treasury holds enough USDC to place an order, pulling from the
  * nTZS side when it does not.
  *

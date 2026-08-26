@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
-import { getDeposit, rampStatus, rampSettlements, swap, transferUsdc, ntzsConfigured } from "@/lib/ntzs";
+import { getDeposit, rampStatus, rampSettlements, ntzsConfigured } from "@/lib/ntzs";
 import { db, migrate } from "@/lib/db";
 import { record } from "@/lib/ledger";
-import { omnibusUserId, omnibusBalances } from "@/lib/omnibus";
-import { treasuryAddress } from "@/lib/treasury";
 import { requireDb } from "@/lib/apiHelpers";
 import { dbConfigured } from "@/lib/db";
 
@@ -17,8 +15,10 @@ const TERMINAL_OK = new Set(["settled", "completed", "success", "successful", "f
 const TERMINAL_BAD = new Set(["failed", "cancelled", "canceled", "expired", "rejected"]);
 
 /**
- * Settles pending deposits: confirm the collection landed, convert it, move the
- * USDC to the treasury, and credit the depositor.
+ * Settles pending deposits: confirm the collection landed and credit the
+ * depositor. Every route but ramp credits shillings and leaves them in the
+ * omnibus to be swapped at buy time; ramp settles straight to USDC and is
+ * credited in USDC.
  *
  * Credit happens only on a confirmed collection. Crediting on submission would
  * let an abandoned prompt create a balance out of nothing. Every credit is keyed
@@ -33,7 +33,6 @@ export async function settlePending(): Promise<{ checked: number; results: Recor
 
   await migrate();
   const sql = db();
-  const treasury = treasuryAddress();
 
   const pending = await sql<{ id: string; user_id: string; ntzs_deposit_id: string;
                              amount_tzs: number; metadata: { route?: string; quotedUsdc?: number } }[]>`
@@ -92,56 +91,36 @@ export async function settlePending(): Promise<{ checked: number; results: Recor
         continue;
       }
 
-      // Treasury collection is the ordinary path: shillings land in the partner
-      // treasury and the account is credited in shillings. Nothing is converted
-      // here — the user holds TZS and the swap happens when they buy, so the
-      // rate they get is the rate at the moment they invest.
-      if (d.metadata?.route === "treasury" || !d.metadata?.route) {
+      // Every route except ramp holds the deposit as shillings: the money rests
+      // in the omnibus wallet (or partner treasury) and the account is credited
+      // in TZS. Nothing is converted here — the swap to USDC happens when the
+      // user buys, so the rate they get is the rate at the moment they invest.
+      // This is what keeps owed and held both in TZS.
+      if (!viaRamp) {
+        const route = d.metadata?.route ?? "treasury";
         await record([
           { userId: d.user_id, kind: "deposit", asset: "TZS", amount: d.amount_tzs.toString(),
             ref: `deposit:${d.id}`,
-            metadata: { ntzsDepositId: d.ntzs_deposit_id, route: "treasury" } },
+            metadata: { ntzsDepositId: d.ntzs_deposit_id, route } },
         ]);
         await sql`update capx.deposits
-                     set status = 'settled', settled_at = now()
+                     set status = 'settled', settled_at = now(),
+                         metadata = metadata || ${sql.json(asJson({ route }))}
                    where id = ${d.id}`;
         results.push({ id: d.id, outcome: `credited ${d.amount_tzs.toLocaleString()} TZS` });
         continue;
       }
 
-      // Ramp settles straight to USDC, so there is nothing to convert. The
-      // wallet route lands in shillings and still needs the swap and transfer.
-      let usdc = 0;
-      let swapResult: unknown = null;
-      let transfer: unknown = null;
-      let omnibus: { before?: { tzs: number; usdc: number }; after?: { tzs: number; usdc: number } } = {};
-
-      if (viaRamp) {
-        // Whatever the settlement reports, falling back to what the quote
-        // priced — the collection is confirmed at this point, so refusing to
-        // credit over an unexpected field name would strand a real payment.
-        usdc = Number(
-          remote.usdcAmount ?? remote.usdc ?? remote.amountUsdc ?? remote.outputAmount ?? 0,
-        ) || Number(d.metadata?.quotedUsdc ?? 0);
-        if (!(usdc > 0)) {
-          results.push({ id: d.id, outcome: "settled but no USDC amount could be determined" });
-          continue;
-        }
-      } else {
-        const before = await omnibusBalances();
-        swapResult = await swap({ userId: await omnibusUserId(), from: "NTZS", to: "USDC", amount: d.amount_tzs });
-        const after = await omnibusBalances();
-        usdc = Math.max(0, after.usdc - before.usdc);
-        omnibus = { before: { tzs: before.tzs, usdc: before.usdc }, after: { tzs: after.tzs, usdc: after.usdc } };
-        if (!(usdc > 0)) {
-          results.push({ id: d.id, outcome: "swapped but no USDC visible yet" });
-          continue;
-        }
-        if (!treasury) {
-          results.push({ id: d.id, outcome: "no treasury configured for the transfer leg" });
-          continue;
-        }
-        transfer = await transferUsdc({ fromUserId: await omnibusUserId(), toAddress: treasury, amount: usdc });
+      // Ramp settled straight to USDC, so the account is credited in USDC.
+      // Whatever the settlement reports, falling back to what the quote priced —
+      // the collection is confirmed at this point, so refusing to credit over an
+      // unexpected field name would strand a real payment.
+      const usdc = Number(
+        remote.usdcAmount ?? remote.usdc ?? remote.amountUsdc ?? remote.outputAmount ?? 0,
+      ) || Number(d.metadata?.quotedUsdc ?? 0);
+      if (!(usdc > 0)) {
+        results.push({ id: d.id, outcome: "settled but no USDC amount could be determined" });
+        continue;
       }
 
       // Keyed to the deposit, so a repeated settle is a no-op.
@@ -151,17 +130,8 @@ export async function settlePending(): Promise<{ checked: number; results: Recor
       ]);
       await sql`update capx.deposits
                    set status = 'settled', usdc_credited = ${usdc}, settled_at = now(),
-                       swap_ref = ${String((swapResult as { id?: string; reference?: string } | null)?.id
-                                          ?? (swapResult as { reference?: string } | null)?.reference ?? "") || null},
-                       transfer_tx = ${String((transfer as { txHash?: string; id?: string } | null)?.txHash
-                                          ?? (transfer as { id?: string } | null)?.id ?? "") || null},
                        rate_tzs_usdc = ${d.amount_tzs > 0 ? usdc / d.amount_tzs : null},
-                       metadata = metadata || ${sql.json(asJson({
-                         swap: swapResult,
-                         transfer,
-                         route: viaRamp ? "ramp" : "omnibus-wallet",
-                         omnibus,
-                       }))}
+                       metadata = metadata || ${sql.json(asJson({ route: "ramp" }))}
                  where id = ${d.id}`;
       results.push({ id: d.id, outcome: `credited ${usdc.toFixed(2)} USDC` });
     } catch (e) {

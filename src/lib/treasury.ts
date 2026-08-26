@@ -8,6 +8,32 @@ import { ASSETS, USDC_BASE, BY_SYMBOL } from "./assets";
 import { getRoute, buildRoute } from "./aggregator";
 import { feeParams } from "./fees";
 import { getMarkets } from "./markets";
+import type { Log } from "viem";
+
+/** keccak256("Transfer(address,address,uint256)") */
+const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+/**
+ * Sums ERC-20 `Transfer` value credited to `to` for `token`, read straight from
+ * a transaction's own logs.
+ *
+ * This is the honest measure of what a trade delivered. A post-trade
+ * `balanceOf` looks equivalent but is not: reads fan out across a pool of
+ * public RPCs, and one lagging node returns the pre-trade balance — which
+ * credited zero shares for a buy that in fact succeeded. The receipt logs come
+ * from the same node that confirmed the tx, so there is nothing to lag behind.
+ */
+function incomingTransfer(logs: Log[], token: `0x${string}`, to: `0x${string}`): bigint {
+  const want = to.toLowerCase().slice(2).padStart(64, "0");
+  let sum = 0n;
+  for (const log of logs) {
+    if (log.address.toLowerCase() !== token.toLowerCase()) continue;
+    if (log.topics[0] !== TRANSFER_TOPIC) continue;
+    if ((log.topics[2] ?? "").toLowerCase() !== "0x" + want) continue;
+    sum += BigInt(log.data);
+  }
+  return sum;
+}
 
 /**
  * The omnibus treasury that holds custodial client assets.
@@ -115,23 +141,25 @@ export async function executeBuy(symbol: string, usdcAmount: number): Promise<Ex
 
   await ensureAllowance(USDC_BASE, route.routerAddress, amountIn);
 
-  const before = (await publicClient.readContract({
-    address: asset.token, abi: b20Abi, functionName: "balanceOf", args: [account.address],
-  })) as bigint;
-
   const built = await buildRoute(route, account.address, 100);
   const txHash = await wallet.sendTransaction({
     to: built.routerAddress,
     data: built.data,
     value: BigInt(built.transactionValue || 0),
   });
-  await publicClient.waitForTransactionReceipt({ hash: txHash });
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
-  // Credit what the chain says arrived, not what the quote promised.
-  const after = (await publicClient.readContract({
-    address: asset.token, abi: b20Abi, functionName: "balanceOf", args: [account.address],
-  })) as bigint;
-  const qty = Number(formatUnits(after - before, market.decimals)) * market.multiplier;
+  // Credit what actually arrived, read from the trade's own Transfer logs. A
+  // post-trade balanceOf can hit a lagging fallback RPC and read the pre-trade
+  // balance, which credited zero shares for a buy that really succeeded.
+  const raw = incomingTransfer(receipt.logs, asset.token, account.address);
+  const qty = Number(formatUnits(raw, market.decimals)) * market.multiplier;
+  if (!(qty > 0)) {
+    throw new Error(
+      `Trade ${txHash} confirmed but no ${asset.symbol} transfer to the treasury was found in its ` +
+      `logs — not crediting a buy we cannot see. This needs manual reconciliation.`,
+    );
+  }
 
   return { txHash, qty, usdc: usdcAmount, price: qty > 0 ? usdcAmount / qty : 0,
     venues: route.venues, impact };
@@ -159,22 +187,23 @@ export async function executeSell(symbol: string, qty: number): Promise<Executio
 
   await ensureAllowance(asset.token, route.routerAddress, amountIn);
 
-  const before = (await publicClient.readContract({
-    address: USDC_BASE, abi: b20Abi, functionName: "balanceOf", args: [account.address],
-  })) as bigint;
-
   const built = await buildRoute(route, account.address, 100);
   const txHash = await wallet.sendTransaction({
     to: built.routerAddress,
     data: built.data,
     value: BigInt(built.transactionValue || 0),
   });
-  await publicClient.waitForTransactionReceipt({ hash: txHash });
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
-  const after = (await publicClient.readContract({
-    address: USDC_BASE, abi: b20Abi, functionName: "balanceOf", args: [account.address],
-  })) as bigint;
-  const usdc = Number(formatUnits(after - before, 6));
+  // Proceeds read from the trade's own Transfer logs, not a post-trade
+  // balanceOf — the same RPC-lag hazard would otherwise credit zero USDC.
+  const usdc = Number(formatUnits(incomingTransfer(receipt.logs, USDC_BASE, account.address), 6));
+  if (!(usdc > 0)) {
+    throw new Error(
+      `Sell ${txHash} confirmed but no USDC transfer to the treasury was found in its logs — ` +
+      `not settling a sale we cannot see. This needs manual reconciliation.`,
+    );
+  }
 
   return { txHash, qty, usdc, price: qty > 0 ? usdc / qty : 0, venues: route.venues, impact };
 }

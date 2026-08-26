@@ -10,8 +10,11 @@ export type CustodialPosition = {
 export type CustodialAccount = {
   user: { id: string; email: string; username: string | null; name: string | null; phone: string | null; ntzsUserId: string | null; kycStatus: string };
   cash: number;
-  /** Shilling balance — what a Tanzanian account actually holds. */
+  /** Shillings held directly, when the treasury route is in use. */
   tzs: number;
+  /** Cash expressed in shillings at the live rate; null when unavailable. */
+  cashTzs: number | null;
+  usdcPerTzs: number | null;
   positions: CustodialPosition[];
   equity: number;
   total: number;

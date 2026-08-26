@@ -105,9 +105,16 @@ export async function POST(req: Request) {
         if (!quoteId) throw new NtzsError("quote_missing", "The ramp quote returned no id", 502);
 
         const settlement = await rampOnramp({ quoteId, phoneNumber });
+        // The quote already priced this collection. Keeping it means settlement
+        // has a figure to credit even if the settlement payload names its
+        // amount something we did not anticipate.
+        const quotedUsdc = Number(quote.usdcAmount ?? quote.outputAmount ?? quote.amountOut ?? 0) || null;
         await sql`update capx.deposits
                      set ntzs_deposit_id = ${String(settlement.id ?? quoteId)},
-                         metadata = metadata || ${sql.json(JSON.parse(JSON.stringify({ route: "ramp", quote, settlement })))}
+                         rate_tzs_usdc = ${quotedUsdc ? quotedUsdc / amountTzs : null},
+                         metadata = metadata || ${sql.json(JSON.parse(JSON.stringify({
+                           route: "ramp", quotedUsdc, quote, settlement,
+                         })))}
                    where id = ${localId}`;
         return NextResponse.json({
           ok: true, depositId: localId, route: "ramp", status: settlement.status ?? "submitted",

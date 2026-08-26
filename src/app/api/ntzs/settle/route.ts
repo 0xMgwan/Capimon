@@ -35,7 +35,7 @@ export async function POST() {
   const treasury = treasuryAddress()!;
 
   const pending = await sql<{ id: string; user_id: string; ntzs_deposit_id: string;
-                             amount_tzs: number; metadata: { route?: string } }[]>`
+                             amount_tzs: number; metadata: { route?: string; quotedUsdc?: number } }[]>`
     select id::text, user_id::text, ntzs_deposit_id, amount_tzs, metadata
       from capx.deposits
      where status in ('pending','uncertain') and ntzs_deposit_id is not null
@@ -93,9 +93,14 @@ export async function POST() {
       let omnibus: { before?: { tzs: number; usdc: number }; after?: { tzs: number; usdc: number } } = {};
 
       if (viaRamp) {
-        usdc = Number(remote.usdcAmount ?? remote.usdc ?? remote.amountUsdc ?? 0);
+        // Whatever the settlement reports, falling back to what the quote
+        // priced — the collection is confirmed at this point, so refusing to
+        // credit over an unexpected field name would strand a real payment.
+        usdc = Number(
+          remote.usdcAmount ?? remote.usdc ?? remote.amountUsdc ?? remote.outputAmount ?? 0,
+        ) || Number(d.metadata?.quotedUsdc ?? 0);
         if (!(usdc > 0)) {
-          results.push({ id: d.id, outcome: "settled but the USDC amount is not visible yet" });
+          results.push({ id: d.id, outcome: "settled but no USDC amount could be determined" });
           continue;
         }
       } else {

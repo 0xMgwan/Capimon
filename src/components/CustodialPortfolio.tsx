@@ -13,7 +13,8 @@ export function CustodialPortfolio() {
   const { account, signOut } = useCapimonAccount();
   if (!account) return null;
 
-  const { tzs, positions, equity, total } = account;
+  const { tzs, cashTzs, positions, equity, total } = account;
+  const shillings = tzs + (cashTzs ?? 0);
 
   return (
     <div className="mx-auto max-w-[1400px] px-5 pb-24 pt-12 sm:px-8">
@@ -30,7 +31,7 @@ export function CustodialPortfolio() {
           </div>
           <div className="grid w-full grid-cols-3 gap-px overflow-hidden rounded-2xl bg-[var(--border)] lg:w-auto">
             <Cell label="Shares" value={<Counter value={equity} format={usd} />} />
-            <Cell label="Cash" value={<Counter value={tzs} format={(n) => `${Math.round(n).toLocaleString()} TZS`} />} />
+            <Cell label="Cash" value={<Counter value={shillings} format={(n) => `${Math.round(n).toLocaleString()} TZS`} />} />
             <Cell label="Total value" value={<Counter value={total} format={usd} />} />
           </div>
         </div>

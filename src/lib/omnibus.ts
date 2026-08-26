@@ -91,15 +91,19 @@ export async function capabilities(force = false) {
 export type CollectionRoute = "treasury" | "ramp" | "omnibus-wallet" | "none";
 
 /**
- * Treasury collection is preferred: it needs only `collections`, keeps the money
- * in the account CAPX already controls, and leaves attribution in the CAPX
- * ledger where it belongs. Ramp is the fallback for keys without `collections`,
- * and the per-user wallet path is only used where `wallets` was granted.
+ * Ramp first.
+ *
+ * Treasury collection reads better on paper — it would hold shillings and let
+ * the conversion happen at purchase — but the deployed API rejects a deposit
+ * with no userId regardless of what its spec says, so that route does not
+ * actually work. Ramp is wallet-less by design, needs no user, and settles to
+ * USDC in one step. It is the route that works, which beats the route that
+ * ought to.
  */
 export async function collectionRoute(): Promise<CollectionRoute> {
   const caps = await capabilities();
-  if (caps.collections.available) return "treasury";
   if (caps.ramp.available) return "ramp";
   if (caps.wallets.available) return "omnibus-wallet";
+  if (caps.collections.available) return "treasury";
   return "none";
 }

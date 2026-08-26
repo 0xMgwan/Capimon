@@ -135,13 +135,28 @@ export function WalletSection() {
       <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,380px)_1fr]">
         <div className="rounded-3xl border hairline p-5">
           <div className="eyebrow">Available to invest</div>
-          <div className="tnum mt-2 text-3xl font-medium tracking-tight">{TZS(account.tzs)}</div>
-          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--muted)]">
-            {usd(account.equity)} in shares
-            {account.cash > 0 && (
-              <>· <UsdcIcon className="h-3 w-3" /> {usd(account.cash)}</>
-            )}
-          </div>
+          {(() => {
+            // Shillings held directly, plus any cash the ramp route settled in
+            // USDC, shown at the live rate.
+            const shillings = account.tzs + (account.cashTzs ?? 0);
+            const showTzs = account.tzs > 0 || account.cashTzs !== null;
+            return (
+              <>
+                <div className="tnum mt-2 text-3xl font-medium tracking-tight">
+                  {showTzs ? TZS(shillings) : usd(account.cash)}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--muted)]">
+                  {account.cash > 0 && (
+                    <span className="inline-flex items-center gap-1">
+                      <UsdcIcon className="h-3 w-3" />{usd(account.cash)}
+                      {showTzs && " at today's rate"}
+                    </span>
+                  )}
+                  {account.equity > 0 && <span>· {usd(account.equity)} in shares</span>}
+                </div>
+              </>
+            );
+          })()}
 
           <div className="mt-5 grid gap-2">
             <button
@@ -159,7 +174,7 @@ export function WalletSection() {
               </Link>
               <button
                 onClick={() => { setPanel((p) => (p === "withdraw" ? "none" : "withdraw")); setQuote(null); }}
-                disabled={account.tzs < MIN_WITHDRAW}
+                disabled={account.tzs + (account.cashTzs ?? 0) < MIN_WITHDRAW}
                 className="rounded-full border hairline py-3 text-sm font-medium transition-colors hover:surface disabled:opacity-40"
               >
                 {panel === "withdraw" ? "Cancel" : "Withdraw"}
@@ -265,7 +280,7 @@ export function WalletSection() {
                   ) : (
                     <button
                       onClick={priceWithdraw}
-                      disabled={busy || wdAmount < MIN_WITHDRAW || !phoneToUse || wdAmount > account.tzs}
+                      disabled={busy || wdAmount < MIN_WITHDRAW || !phoneToUse || wdAmount > account.tzs + (account.cashTzs ?? 0)}
                       className="mt-3 w-full rounded-full bg-[var(--fg)] py-3 text-sm font-medium text-[var(--bg)] disabled:opacity-50"
                     >
                       {busy ? "Pricing…" : "Continue"}

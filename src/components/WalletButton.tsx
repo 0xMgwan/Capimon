@@ -91,7 +91,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
             <div className="rounded-xl surface p-3">
               <div className="eyebrow">Custodial account</div>
               <div className="tnum mt-1 text-sm">{usd(account.total)}</div>
-              <div className="mt-1 text-[11px] text-[var(--muted)]">held by CAPIMON for you</div>
+              <div className="mt-1 text-[11px] text-[var(--muted)]">held by CAPX for you</div>
             </div>
             <a href="/portfolio" className="mt-1 block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">Portfolio</a>
             <a href="/join" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">Fund with shillings</a>

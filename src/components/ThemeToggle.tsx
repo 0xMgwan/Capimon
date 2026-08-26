@@ -16,7 +16,7 @@ export function ThemeToggle() {
     const next = !dark;
     setDark(next);
     document.documentElement.classList.toggle("dark", next);
-    try { localStorage.setItem("capimon-theme", next ? "dark" : "light"); } catch {}
+    try { localStorage.setItem("capx-theme", next ? "dark" : "light"); } catch {}
   };
 
   return (

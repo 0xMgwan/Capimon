@@ -32,7 +32,7 @@ async function api<T>(url: string, body?: unknown): Promise<T> {
 /**
  * Onboarding for people without a wallet.
  *
- * This is the custodial path: CAPIMON opens an account, collects shillings
+ * This is the custodial path: CAPX opens an account, collects shillings
  * through nTZS, converts them to USDC and holds the resulting shares, recording
  * what each account is owed. Anyone who would rather hold their own keys should
  * connect a wallet instead, and the copy says so plainly.
@@ -82,7 +82,7 @@ export function JoinFlow() {
         </h1>
         <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-[var(--muted)]">
           Fund with mobile money in Tanzanian shillings and buy tokenized equities — no wallet, no
-          seed phrase. CAPIMON holds the assets for you and records what you are owed.
+          seed phrase. CAPX holds the assets for you and records what you are owed.
         </p>
       </Reveal>
 
@@ -161,7 +161,7 @@ export function JoinFlow() {
           {/* 3 — convert */}
           <Step n={3} active={step === 3} done={(account?.cash ?? 0) > 0} title="Convert to trading balance">
             <p className="text-sm leading-relaxed text-[var(--muted)]">
-              Your shillings convert to USDC and become your CAPIMON balance, ready to buy with.
+              Your shillings convert to USDC and become your CAPX balance, ready to buy with.
             </p>
             <button
               onClick={() => run(async () => {
@@ -214,13 +214,13 @@ export function JoinFlow() {
             <div className="rounded-3xl border border-[#b45309]/40 bg-[#b45309]/[0.05] p-5">
               <div className="text-sm font-medium text-[#b45309]">This account is custodial</div>
               <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">
-                CAPIMON holds the USDC and the shares, and its ledger records what you are owed. You
-                are trusting CAPIMON to remain solvent and to honour that record — which is the price
+                CAPX holds the USDC and the shares, and its ledger records what you are owed. You
+                are trusting CAPX to remain solvent and to honour that record — which is the price
                 of not needing a wallet.{" "}
                 <Link href="/markets" className="underline underline-offset-2 hover:text-[var(--fg)]">
                   Connect your own wallet instead
                 </Link>{" "}
-                and CAPIMON holds nothing.
+                and CAPX holds nothing.
               </p>
             </div>
 
@@ -229,8 +229,8 @@ export function JoinFlow() {
               <ol className="mt-4 space-y-4 text-sm leading-relaxed text-[var(--muted)]">
                 <li><span className="text-[var(--fg)]">Mobile money → nTZS.</span> Held against the shilling reserve.</li>
                 <li><span className="text-[var(--fg)]">nTZS → USDC.</span> Converted at the live rate.</li>
-                <li><span className="text-[var(--fg)]">USDC → CAPIMON.</span> Held in the treasury; your balance is credited.</li>
-                <li><span className="text-[var(--fg)]">USDC → shares.</span> CAPIMON trades and records your holding.</li>
+                <li><span className="text-[var(--fg)]">USDC → CAPX.</span> Held in the treasury; your balance is credited.</li>
+                <li><span className="text-[var(--fg)]">USDC → shares.</span> CAPX trades and records your holding.</li>
               </ol>
               <p className="mt-5 border-t hairline pt-4 text-[11px] leading-relaxed text-[var(--muted)]">
                 Tokenized equities are not available to US persons. Nothing here is investment advice.

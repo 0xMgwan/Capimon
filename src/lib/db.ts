@@ -4,7 +4,7 @@ import postgres from "postgres";
 /**
  * Postgres for the custodial ledger.
  *
- * CAPIMON holds client balances for nTZS users, so this is a system of record
+ * CAPX holds client balances for nTZS users, so this is a system of record
  * for other people's money — every write goes through an append-only entry
  * table rather than mutating a balance in place.
  *
@@ -45,11 +45,21 @@ export async function migrate() {
   if (!migrated) {
     migrated = (async () => {
       const sql = db();
-      // Everything lives in its own schema so CAPIMON can share a database with
+      // Everything lives in its own schema so CAPX can share a database with
       // anything else without either side colliding.
-      await sql`create schema if not exists capimon`;
+      //
+      // Deployments created before the rename still hold a `capimon` schema with
+      // live rows in it. Move it rather than creating an empty one beside it —
+      // an orphaned schema would read as a wiped ledger.
+      const [legacy] = await sql<{ exists: boolean }[]>`
+        select
+          exists(select 1 from information_schema.schemata where schema_name = 'capimon')
+          and not exists(select 1 from information_schema.schemata where schema_name = 'capx')
+          as exists`;
+      if (legacy?.exists) await sql`alter schema capimon rename to capx`;
+      await sql`create schema if not exists capx`;
       await sql`
-        create table if not exists capimon.users (
+        create table if not exists capx.users (
           id             uuid primary key default gen_random_uuid(),
           email          text not null unique,
           password_hash  text not null,
@@ -61,17 +71,17 @@ export async function migrate() {
           created_at     timestamptz not null default now()
         )`;
       await sql`
-        create table if not exists capimon.sessions (
+        create table if not exists capx.sessions (
           token       text primary key,
-          user_id     uuid not null references capimon.users(id) on delete cascade,
+          user_id     uuid not null references capx.users(id) on delete cascade,
           created_at  timestamptz not null default now(),
           expires_at  timestamptz not null
         )`;
-      await sql`create index if not exists sessions_user_idx on capimon.sessions(user_id)`;
+      await sql`create index if not exists sessions_user_idx on capx.sessions(user_id)`;
       await sql`
-        create table if not exists capimon.ledger_entries (
+        create table if not exists capx.ledger_entries (
           id           bigserial primary key,
-          user_id      uuid not null references capimon.users(id) on delete cascade,
+          user_id      uuid not null references capx.users(id) on delete cascade,
           kind         text not null,
           asset        text not null,
           amount       numeric(38,8) not null,
@@ -79,13 +89,13 @@ export async function migrate() {
           metadata     jsonb not null default '{}'::jsonb,
           created_at   timestamptz not null default now()
         )`;
-      await sql`create index if not exists ledger_user_asset_idx on capimon.ledger_entries(user_id, asset)`;
+      await sql`create index if not exists ledger_user_asset_idx on capx.ledger_entries(user_id, asset)`;
       // One row per external reference makes every money-moving write idempotent.
-      await sql`create unique index if not exists ledger_ref_idx on capimon.ledger_entries(ref) where ref is not null`;
+      await sql`create unique index if not exists ledger_ref_idx on capx.ledger_entries(ref) where ref is not null`;
       await sql`
-        create table if not exists capimon.orders (
+        create table if not exists capx.orders (
           id            uuid primary key default gen_random_uuid(),
-          user_id       uuid not null references capimon.users(id) on delete cascade,
+          user_id       uuid not null references capx.users(id) on delete cascade,
           side          text not null,
           symbol        text not null,
           usdc_amount   numeric(38,6),
@@ -98,7 +108,7 @@ export async function migrate() {
           created_at    timestamptz not null default now(),
           settled_at    timestamptz
         )`;
-      await sql`create index if not exists orders_user_idx on capimon.orders(user_id, created_at desc)`;
+      await sql`create index if not exists orders_user_idx on capx.orders(user_id, created_at desc)`;
     })().catch((e) => {
       migrated = null;
       throw e;

@@ -1,6 +1,6 @@
-# CAPIMON
+# CAPX
 
-Capital markets, onchain. CAPIMON is a non-custodial interface to **B20 tokenized
+Capital markets, onchain. CAPX is a non-custodial interface to **B20 tokenized
 equities on Base** — thirteen public companies issued as native B20 tokens,
 marked continuously by Chainlink total-return feeds.
 
@@ -33,7 +33,7 @@ on **Aerodrome concentrated-liquidity** pools, with some routes crossing Uniswap
 v4 and PancakeSwap v3. Uniswap v3 — the obvious first place to check — holds
 either nothing or dust: GOOGLc has a v3 pool that will quote an *executable*
 fill about 98% away from the mark. Reading one venue produces confidently wrong
-answers, so CAPIMON aggregates and then checks the result against Chainlink:
+answers, so CAPX aggregates and then checks the result against Chainlink:
 
 | Distance from oracle mark | Behaviour |
 | --- | --- |
@@ -67,7 +67,7 @@ before deploying; the public endpoint is rate-limited.
 - `/markets` — all thirteen assets, sortable, searchable, live sparklines
 - `/markets/[ticker]` — chart over onchain rounds, contract references, trade panel
 - `/portfolio` — connected wallet, or `?address=0x…` to watch any wallet read-only
-- `/how-it-works` — the B20 mechanics CAPIMON depends on, with links to verify each claim
+- `/how-it-works` — the B20 mechanics CAPX depends on, with links to verify each claim
 
 ## API
 
@@ -122,7 +122,7 @@ fetch is ~7s, warm responses are sub-20ms.
 
 ## Scope
 
-CAPIMON is not a broker-dealer, exchange, or investment adviser, and nothing it
+CAPX is not a broker-dealer, exchange, or investment adviser, and nothing it
 displays is investment advice. Tokenized equities are not available to US
 persons. One B20 token is not permanently one share — redemption applies the
 current onchain multiplier. Mint and redeem are performed by the issuer under

@@ -4,9 +4,9 @@ import { randomUUID } from "crypto";
 /**
  * nTZS partner API client.
  *
- * nTZS is a Tanzanian shilling stablecoin on Base. CAPIMON uses it as a TZS
+ * nTZS is a Tanzanian shilling stablecoin on Base. CAPX uses it as a TZS
  * on-ramp: collect mobile money, mint nTZS, convert to USDC, then send that
- * USDC to the user's own wallet — which is where CAPIMON's involvement in the
+ * USDC to the user's own wallet — which is where CAPX's involvement in the
  * money begins. nTZS wallets are custodial and the API cannot sign an arbitrary
  * contract call, so the shares are always bought by a wallet the user controls.
  *
@@ -105,8 +105,8 @@ export type NtzsUser = {
 };
 
 /**
- * Idempotent on externalId, so CAPIMON keys the nTZS account to the user's own
- * wallet address. That means no CAPIMON user database: the wallet is the
+ * Idempotent on externalId, so CAPX keys the nTZS account to the user's own
+ * wallet address. That means no CAPX user database: the wallet is the
  * identity, and calling this again on every sign-in returns the same account.
  */
 export async function upsertUser(input: {
@@ -144,7 +144,7 @@ export async function getDeposit(id: string) {
 /* ----------------------------------------------------------------- swap -- */
 
 /**
- * The swap responds as an SSE stream so a caller can show each leg. CAPIMON
+ * The swap responds as an SSE stream so a caller can show each leg. CAPX
  * only needs the outcome, so this drains the stream and returns the terminal
  * event.
  */
@@ -223,7 +223,7 @@ export async function transferUsdc(input: { fromUserId: string; toAddress: strin
       toAddress: input.toAddress,
       token: "USDC",
       amountTzs: input.amount,
-      metadata: { source: "capimon", purpose: "fund_trading_wallet" },
+      metadata: { source: "capx", purpose: "fund_trading_wallet" },
     },
     idempotent: true,
   });

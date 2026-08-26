@@ -18,7 +18,7 @@ const SITE =
   process.env.NEXT_PUBLIC_SITE_URL ??
   (process.env.VERCEL_PROJECT_PRODUCTION_URL
     ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-    : "https://capimon.vercel.app");
+    : "https://capx.vercel.app");
 const DESCRIPTION =
   "Buy and sell public equities onchain as B20 tokens on Base. Live Chainlink marks, " +
   "aggregated routing across every venue, and self-custody — no broker, no closing bell.";
@@ -27,23 +27,23 @@ export const metadata: Metadata = {
   // Resolves relative OG and icon URLs so crawlers get absolute links.
   metadataBase: new URL(SITE),
   title: {
-    default: "CAPIMON — Capital markets in motion",
-    template: "%s — CAPIMON",
+    default: "CAPX — Capital markets in motion",
+    template: "%s — CAPX",
   },
   description: DESCRIPTION,
-  applicationName: "CAPIMON",
+  applicationName: "CAPX",
   keywords: ["tokenized equities", "B20", "Base", "onchain stocks", "Chainlink", "self-custody"],
   openGraph: {
-    title: "CAPIMON — Capital markets in motion",
+    title: "CAPX — Capital markets in motion",
     description: DESCRIPTION,
-    siteName: "CAPIMON",
+    siteName: "CAPX",
     url: SITE,
     type: "website",
     locale: "en",
   },
   twitter: {
     card: "summary_large_image",
-    title: "CAPIMON — Capital markets in motion",
+    title: "CAPX — Capital markets in motion",
     description: DESCRIPTION,
   },
   robots: { index: true, follow: true },
@@ -68,7 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             paint so the first frame never flashes the wrong theme. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{if(localStorage.getItem('capimon-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}`,
+            __html: `try{if(localStorage.getItem('capx-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}`,
           }}
         />
         {/* Motion emits inline initial styles; without JS they would hide content. */}

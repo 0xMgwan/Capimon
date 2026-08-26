@@ -73,7 +73,7 @@ export function PortfolioView() {
           <div className="eyebrow">Portfolio</div>
           <h1 className="display mt-4 text-4xl">Read your positions off Base.</h1>
           <p className="mt-4 text-[15px] leading-relaxed text-[var(--muted)]">
-            CAPIMON holds nothing. Connect a wallet and we query the B20 contracts on Base directly,
+            CAPX holds nothing. Connect a wallet and we query the B20 contracts on Base directly,
             then mark every balance against the live Chainlink feed.
           </p>
           <div className="mt-7 flex justify-center [&>div>button]:px-8 [&>div>button]:py-3.5">
@@ -129,7 +129,7 @@ export function PortfolioView() {
           <div className="rounded-3xl border border-dashed hairline p-12 text-center">
             <h2 className="font-[family-name:var(--font-display)] text-2xl font-medium tracking-[-0.04em]">No B20 positions yet</h2>
             <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-[var(--muted)]">
-              This wallet holds none of the {markets?.totals.assets ?? 13} tokenized equities CAPIMON tracks
+              This wallet holds none of the {markets?.totals.assets ?? 13} tokenized equities CAPX tracks
               on Base.{" "}
               {pf && pf.cash > 0 && (
                 <span className="inline-flex items-center gap-1.5">

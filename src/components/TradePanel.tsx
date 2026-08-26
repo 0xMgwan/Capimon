@@ -120,7 +120,7 @@ export function TradePanel({ asset, market }: { asset: AssetMeta; market?: Marke
 
   /**
    * The server builds the calldata against the live route; the wallet signs and
-   * sends it. CAPIMON never holds keys and never submits on anyone's behalf.
+   * sends it. CAPX never holds keys and never submits on anyone's behalf.
    */
   const swap = async () => {
     if (!address || !cleared || !executable) return;
@@ -230,7 +230,7 @@ export function TradePanel({ asset, market }: { asset: AssetMeta; market?: Marke
             {quote?.gasUsd ? <Row k="Est. gas" v={usd(quote.gasUsd)} /> : null}
             {quote?.fee ? (
               <Row
-                k={`CAPIMON fee (${quote.fee.percent.toFixed(2)}%)`}
+                k={`CAPX fee (${quote.fee.percent.toFixed(2)}%)`}
                 v={`${usd(quote.fee.amountUsd)} ${quote.fee.token}`}
               />
             ) : null}
@@ -266,7 +266,7 @@ export function TradePanel({ asset, market }: { asset: AssetMeta; market?: Marke
             </p>
             {severity === "unusable" ? (
               <p className="mt-3 text-xs font-medium">
-                CAPIMON will not route this trade. Use issuer mint and redeem instead.
+                CAPX will not route this trade. Use issuer mint and redeem instead.
               </p>
             ) : (
               <label className="mt-3 flex cursor-pointer items-start gap-2.5 text-xs">
@@ -374,7 +374,7 @@ export function TradePanel({ asset, market }: { asset: AssetMeta; market?: Marke
 
       <p className="mt-4 text-[11px] leading-relaxed text-[var(--muted)]">
         This is your own wallet — the transaction is built in your browser and signed by you, and
-        CAPIMON holds nothing.
+        CAPX holds nothing.
         Not available to US persons. Nothing here is investment advice.
       </p>
     </div>

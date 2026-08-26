@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "nodejs";
-export const alt = "CAPIMON — capital markets in motion";
+export const alt = "CAPX — capital markets in motion";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -39,7 +39,7 @@ export default function OpengraphImage() {
           </svg>
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ fontSize: 58, fontWeight: 700, letterSpacing: -3, color: "#0a0a0b", lineHeight: 1 }}>
-              CAPIMON
+              CAPX
             </div>
             <div style={{ width: 250, height: 5, background: BRAND, borderRadius: 999, marginTop: 10, display: "flex" }} />
           </div>

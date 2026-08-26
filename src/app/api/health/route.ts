@@ -30,7 +30,7 @@ export async function GET() {
     try {
       await migrate();
       const rows = await db()<{ n: string }[]>`
-        select count(*)::text as n from information_schema.tables where table_schema = 'capimon'`;
+        select count(*)::text as n from information_schema.tables where table_schema = 'capx'`;
       checks.database = { configured: true, reachable: true, tables: Number(rows[0]?.n ?? 0), error: null };
     } catch (e) {
       checks.database = { configured: true, reachable: false, error: e instanceof Error ? e.message.split("\n")[0] : "unreachable" };

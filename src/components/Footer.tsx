@@ -70,8 +70,8 @@ export function Footer() {
 
         <div className="mt-14 border-t hairline pt-6">
           <p className="max-w-3xl text-[11px] leading-relaxed text-[var(--muted)]">
-            CAPIMON is an interface to B20 tokenized equities issued on Base. Connected wallets are
-            self-custodied; accounts funded in Tanzanian shillings are held by CAPIMON on the
+            CAPX is an interface to B20 tokenized equities issued on Base. Connected wallets are
+            self-custodied; accounts funded in Tanzanian shillings are held by CAPX on the
             holder&rsquo;s behalf. It is not a
             broker-dealer, exchange, or investment adviser, and nothing here is investment advice.
             Tokenized equities are not available to US persons. One B20 token is not permanently one
@@ -79,7 +79,7 @@ export function Footer() {
             by the issuer under KYC; secondary transfers are permissionless subject to onchain policy.
           </p>
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-            <span className="tnum text-xs text-[var(--muted)]">CAPIMON © {new Date().getFullYear()}</span>
+            <span className="tnum text-xs text-[var(--muted)]">CAPX © {new Date().getFullYear()}</span>
             <span className="eyebrow">Built on B20</span>
           </div>
         </div>

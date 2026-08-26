@@ -5,7 +5,7 @@ import "server-only";
  *
  * The fee is a parameter on the aggregator route, so the router pays the
  * receiver inside the swap the user already signs — no extra approval, no extra
- * transaction, and CAPIMON never holds the funds.
+ * transaction, and CAPX never holds the funds.
  *
  * Live at 20 bps. Set FEE_BPS to change it, or FEE_BPS=0 to switch it off
  * without a deploy. Charging a fee on securities transactions carries licensing

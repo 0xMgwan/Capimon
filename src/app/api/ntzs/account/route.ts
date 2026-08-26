@@ -15,7 +15,7 @@ function fail(e: unknown) {
 /**
  * Creates or recovers the caller's nTZS account. `externalId` is the user's own
  * wallet address, and the upstream is idempotent on it — so this doubles as
- * sign-in, and CAPIMON needs no user database of its own.
+ * sign-in, and CAPX needs no user database of its own.
  */
 export async function POST(req: Request) {
   if (!ntzsConfigured) {

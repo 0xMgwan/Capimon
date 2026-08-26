@@ -67,7 +67,7 @@ export function QuickBuy() {
                 </span>
               </h2>
               <p className="mt-5 max-w-sm text-[15px] leading-relaxed text-[var(--muted)]">
-                Everything settles in USDC on Base. Set a size, pick a company, and CAPIMON shows the
+                Everything settles in USDC on Base. Set a size, pick a company, and CAPX shows the
                 live oracle-implied position before you go anywhere near a signature.
               </p>
 

@@ -15,7 +15,7 @@ import { compactUsd, compact } from "@/lib/format";
 /* ------------------------------------------------------------------ */
 
 /**
- * Infrastructure CAPIMON reads from. Each line names the actual dependency, so
+ * Infrastructure CAPX reads from. Each line names the actual dependency, so
  * the strip reads as an architecture note rather than a wall of logos.
  */
 const STACK = [
@@ -87,7 +87,7 @@ export function ProductsSection() {
                   </svg>
                 </div>
                 <h3 className="mt-6 font-[family-name:var(--font-display)] text-3xl font-medium tracking-[-0.04em] sm:text-4xl">
-                  CAPIMON Equities
+                  CAPX Equities
                 </h3>
                 <p className="mt-3 font-[family-name:var(--font-serif)] text-[17px] leading-relaxed text-[var(--muted)]">
                   Public companies as B20 tokens — freely transferable, composable in DeFi,
@@ -124,7 +124,7 @@ export function ProductsSection() {
             </div>
 
             <Link href="/markets" className="mt-8 inline-flex items-center gap-2 rounded-full bg-[var(--fg)] px-5 py-3 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03]">
-              Discover CAPIMON Equities <span>→</span>
+              Discover CAPX Equities <span>→</span>
             </Link>
           </div>
         </Reveal>
@@ -132,9 +132,9 @@ export function ProductsSection() {
         <div className="grid gap-4">
           <Reveal delay={0.08}>
             <SideCard
-              title="CAPIMON Vault"
+              title="CAPX Vault"
               tag="Self-custody"
-              body="Your positions live in your own wallet. CAPIMON reads the chain directly — every balance on the portfolio page is an onchain read, not our ledger."
+              body="Your positions live in your own wallet. CAPX reads the chain directly — every balance on the portfolio page is an onchain read, not our ledger."
               stat={<Counter value={equities} format={(n) => `${Math.round(n)} assets`} />}
               statLabel="Tracked live"
               href="/portfolio"
@@ -143,7 +143,7 @@ export function ProductsSection() {
           </Reveal>
           <Reveal delay={0.16}>
             <SideCard
-              title="CAPIMON Feeds"
+              title="CAPX Feeds"
               tag="Oracle"
               body="Total-return Chainlink feeds, running 24/5 and freezing through corporate actions. Every chart on this site is drawn from onchain rounds."
               stat={<span className="tnum">8 dp</span>}
@@ -231,7 +231,7 @@ export function StatsBand() {
       <div className="mx-auto max-w-[1400px] px-5 sm:px-8">
         <Reveal>
           <h2 className="display max-w-3xl text-[clamp(2rem,5vw,4.2rem)]">
-            <RevealWords text="CAPIMON is building the rails" />{" "}
+            <RevealWords text="CAPX is building the rails" />{" "}
             <span className="font-[family-name:var(--font-serif)] font-light italic text-[var(--muted)]">
               <RevealWords text="for the next market." delay={0.12} />
             </span>
@@ -302,7 +302,7 @@ export function BeliefSection() {
     <section className="border-y hairline">
       <div className="mx-auto max-w-[1400px] px-5 py-24 sm:px-8 sm:py-32">
         <Reveal>
-          <div className="eyebrow">A message from CAPIMON</div>
+          <div className="eyebrow">A message from CAPX</div>
           <h2 className="display mt-4 text-[clamp(2rem,5vw,4rem)]">We believe in</h2>
         </Reveal>
         <div className="mt-14 grid gap-px overflow-hidden rounded-3xl bg-[var(--border)] md:grid-cols-3">
@@ -325,10 +325,10 @@ export function BeliefSection() {
 
 const PILLARS = [
   { t: "Native precompiles", b: "B20 tokens are not redeployed contracts. They are native to Base, audited by Base and Spearbit, with Cantina and HackerOne bounty coverage." },
-  { t: "Verifiable marks", b: "Chainlink total-return feeds publish price × multiplier onchain. CAPIMON reads updatedAt and flags anything stale rather than showing a confident lie." },
+  { t: "Verifiable marks", b: "Chainlink total-return feeds publish price × multiplier onchain. CAPX reads updatedAt and flags anything stale rather than showing a confident lie." },
   { t: "Policy-aware transfers", b: "Onchain policy registries gate transfers against sanctions lists. Holding and secondary transfer are permissionless; mint and redeem run under issuer KYC." },
-  { t: "Corporate actions, onchain", b: "Splits and dividends move the WAD multiplier instead of rewriting balances. CAPIMON applies the current multiplier everywhere a share count is shown." },
-  { t: "Custody is a choice", b: "Connect your own wallet and CAPIMON never holds your assets or your keys — positions are read from the chain and you sign every transaction. Accounts funded with shillings are custodial: CAPIMON holds those assets for you and records what you are owed." },
+  { t: "Corporate actions, onchain", b: "Splits and dividends move the WAD multiplier instead of rewriting balances. CAPX applies the current multiplier everywhere a share count is shown." },
+  { t: "Custody is a choice", b: "Connect your own wallet and CAPX never holds your assets or your keys — positions are read from the chain and you sign every transaction. Accounts funded with shillings are custodial: CAPX holds those assets for you and records what you are owed." },
 ];
 
 export function PillarsSection() {

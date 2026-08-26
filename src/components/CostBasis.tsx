@@ -20,7 +20,7 @@ export function CostBasis({ address }: { address: string }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `capimon-activity-${address.slice(0, 8)}.csv`;
+    a.download = `capx-activity-${address.slice(0, 8)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };

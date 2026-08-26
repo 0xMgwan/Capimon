@@ -8,18 +8,18 @@ import { requireDb, bad, notConfigured } from "@/lib/apiHelpers";
 export const dynamic = "force-dynamic";
 
 /**
- * Moves a user's shillings into their CAPIMON trading balance:
- * swap nTZS to USDC inside their nTZS account, send that USDC to the CAPIMON
+ * Moves a user's shillings into their CAPX trading balance:
+ * swap nTZS to USDC inside their nTZS account, send that USDC to the CAPX
  * treasury, then credit their ledger.
  *
- * From here CAPIMON holds the funds. The credit is keyed to the transfer id, so
+ * From here CAPX holds the funds. The credit is keyed to the transfer id, so
  * a retry after an uncertain response cannot credit the same money twice.
  */
 export async function POST(req: Request) {
   const gate = requireDb();
   if (gate) return gate;
   if (!ntzsConfigured) return notConfigured("nTZS");
-  if (!treasuryConfigured) return notConfigured("The CAPIMON treasury");
+  if (!treasuryConfigured) return notConfigured("The CAPX treasury");
 
   try {
     const user = await currentUser();

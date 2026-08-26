@@ -11,7 +11,7 @@ import "server-only";
  */
 
 const BASE_URL = "https://aggregator-api.kyberswap.com/base/api/v1";
-const CLIENT_ID = "capimon";
+const CLIENT_ID = "capx";
 const TIMEOUT_MS = 12_000;
 
 export type RouteLeg = { exchange: string; swapAmount: string; pool: string };

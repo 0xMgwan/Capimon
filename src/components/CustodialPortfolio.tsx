@@ -8,7 +8,7 @@ import { Reveal } from "./Reveal";
 import { UsdcIcon } from "./icons/Usdc";
 import { usd } from "@/lib/format";
 
-/** The book CAPIMON holds for a shilling-funded account. */
+/** The book CAPX holds for a shilling-funded account. */
 export function CustodialPortfolio() {
   const { account, signOut } = useCapimonAccount();
   if (!account) return null;
@@ -24,7 +24,7 @@ export function CustodialPortfolio() {
             <h1 className="display mt-3 text-[clamp(2rem,5vw,3.6rem)]">Your book.</h1>
             <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
               {account.user.email}
-              <span className="rounded-full surface px-2 py-0.5 text-[11px]">held by CAPIMON</span>
+              <span className="rounded-full surface px-2 py-0.5 text-[11px]">held by CAPX</span>
               <button onClick={signOut} className="underline underline-offset-2 hover:text-[var(--fg)]">Sign out</button>
             </p>
           </div>
@@ -110,9 +110,9 @@ export function CustodialPortfolio() {
       )}
 
       <p className="mt-6 text-xs leading-relaxed text-[var(--muted)]">
-        CAPIMON holds these assets on your behalf and this ledger records what you are owed. Prefer
+        CAPX holds these assets on your behalf and this ledger records what you are owed. Prefer
         to hold your own keys? <Link href="/markets" className="underline underline-offset-2">Connect a wallet</Link> and
-        CAPIMON holds nothing.
+        CAPX holds nothing.
       </p>
     </div>
   );

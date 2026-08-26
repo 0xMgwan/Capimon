@@ -13,7 +13,7 @@ const MAX_SLIPPAGE_BPS = 300;
 const UNUSABLE_IMPACT = 15;
 
 /**
- * Builds swap calldata for the user's wallet to sign. CAPIMON never holds keys
+ * Builds swap calldata for the user's wallet to sign. CAPX never holds keys
  * and never submits — the browser sends this to the connected wallet.
  */
 export async function POST(req: Request) {

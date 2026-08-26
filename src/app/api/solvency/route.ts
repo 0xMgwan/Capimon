@@ -18,7 +18,7 @@ function authorised(req: Request) {
 /**
  * Whether client assets are fully backed.
  *
- * Unauthenticated callers get the headline only — anyone trusting CAPIMON with
+ * Unauthenticated callers get the headline only — anyone trusting CAPX with
  * their money is entitled to know whether it is solvent, but the per-asset
  * position is operational detail. `ADMIN_TOKEN` unlocks the breakdown.
  */

@@ -8,7 +8,7 @@ import { treasuryConfigured } from "@/lib/treasury";
 
 export const dynamic = "force-dynamic";
 
-/** The signed-in custodial account: what CAPIMON holds for them, marked live. */
+/** The signed-in custodial account: what CAPX holds for them, marked live. */
 export async function GET() {
   const gate = requireDb();
   if (gate) return gate;

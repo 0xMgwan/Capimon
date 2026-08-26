@@ -20,7 +20,7 @@ const ICONS: Record<string, (p: { className?: string }) => React.ReactElement> =
 /**
  * One door with two ways through it.
  *
- * Email opens a custodial account CAPIMON holds for you; a wallet keeps you in
+ * Email opens a custodial account CAPX holds for you; a wallet keeps you in
  * self-custody. Both are first-class, and the modal names the difference rather
  * than burying it — it decides who holds the assets.
  */
@@ -80,7 +80,7 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
             className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-sm"
           />
           <motion.div
-            role="dialog" aria-modal="true" aria-label="Sign in to CAPIMON"
+            role="dialog" aria-modal="true" aria-label="Sign in to CAPX"
             initial={{ opacity: 0, y: 24, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
@@ -93,7 +93,7 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
               <div className="flex items-center gap-2.5">
                 <Logo className="h-7 w-7" />
                 <h2 className="font-[family-name:var(--font-display)] text-lg font-medium tracking-[-0.03em]">
-                  Welcome to CAPIMON
+                  Welcome to CAPX
                 </h2>
               </div>
               <button onClick={onClose} aria-label="Close"
@@ -155,7 +155,7 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
                 </button>
 
                 <p className="mt-2.5 text-[11px] leading-relaxed text-[var(--muted)]">
-                  An email account is <span className="text-[var(--fg)]">custodial</span> — CAPIMON
+                  An email account is <span className="text-[var(--fg)]">custodial</span> — CAPX
                   holds your assets and records what you are owed. Fund it with mobile money in
                   shillings.
                 </p>
@@ -191,7 +191,7 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
             </div>
 
             <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
-              A wallet keeps you in <span className="text-[var(--fg)]">self-custody</span> — CAPIMON
+              A wallet keeps you in <span className="text-[var(--fg)]">self-custody</span> — CAPX
               holds nothing and you sign every transaction.
             </p>
 

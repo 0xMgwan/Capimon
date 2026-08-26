@@ -5,7 +5,7 @@ import { B20_REGISTRY, ASSETS } from "@/lib/assets";
 
 export const metadata: Metadata = {
   title: "How it works",
-  description: "The B20 standard, Chainlink total-return feeds, multipliers and onchain policy — what CAPIMON is actually reading.",
+  description: "The B20 standard, Chainlink total-return feeds, multipliers and onchain policy — what CAPX is actually reading.",
 };
 
 const STEPS = [
@@ -18,13 +18,13 @@ const STEPS = [
   {
     n: "02",
     t: "Chainlink publishes a total-return mark",
-    b: "Each asset has a Chainlink feed on Base reporting price × multiplier, WAD-scaled, running 24/5 and freezing through corporate actions. CAPIMON reads updatedAt on every round and flags a feed that has missed a session instead of showing you a confident number that isn't.",
+    b: "Each asset has a Chainlink feed on Base reporting price × multiplier, WAD-scaled, running 24/5 and freezing through corporate actions. CAPX reads updatedAt on every round and flags a feed that has missed a session instead of showing you a confident number that isn't.",
     refs: [{ label: "Chainlink on Base", href: "https://data.chain.link/base/base" }],
   },
   {
     n: "03",
     t: "Corporate actions move the multiplier",
-    b: "Splits and dividends do not rewrite balances. They adjust a WAD-precision multiplier, so one token is not permanently one share. CAPIMON applies the current multiplier everywhere a share count appears — portfolio quantities use scaledBalanceOf, and supply figures are multiplier-adjusted share-equivalents.",
+    b: "Splits and dividends do not rewrite balances. They adjust a WAD-precision multiplier, so one token is not permanently one share. CAPX applies the current multiplier everywhere a share count appears — portfolio quantities use scaledBalanceOf, and supply figures are multiplier-adjusted share-equivalents.",
     refs: [],
   },
   {
@@ -35,8 +35,8 @@ const STEPS = [
   },
   {
     n: "05",
-    t: "CAPIMON reads, you sign",
-    b: "Prices, supply and balances are read straight from Base. Trades are routed by aggregating every venue on the chain — Aerodrome concentrated liquidity, Uniswap v3 and v4, PancakeSwap — because equity liquidity moves between them and no single pool tells the truth. Every fill is checked against the Chainlink mark before it is offered, and CAPIMON refuses to route anything more than 15% away from it.",
+    t: "CAPX reads, you sign",
+    b: "Prices, supply and balances are read straight from Base. Trades are routed by aggregating every venue on the chain — Aerodrome concentrated liquidity, Uniswap v3 and v4, PancakeSwap — because equity liquidity moves between them and no single pool tells the truth. Every fill is checked against the Chainlink mark before it is offered, and CAPX refuses to route anything more than 15% away from it.",
     refs: [
       { label: "Live market API", href: "/api/markets" },
       { label: "Routable venues", href: "/api/venues" },
@@ -47,7 +47,7 @@ const STEPS = [
 const FAQ = [
   {
     q: "Is one token one share?",
-    a: "No. Redemption applies the current onchain multiplier, which absorbs splits and dividends. CAPIMON shows the multiplier on every asset page and adjusts every share count it displays.",
+    a: "No. Redemption applies the current onchain multiplier, which absorbs splits and dividends. CAPX shows the multiplier on every asset page and adjusts every share count it displays.",
   },
   {
     q: "Why does an asset show zero onchain supply?",
@@ -55,11 +55,11 @@ const FAQ = [
   },
   {
     q: "Why can't I trade every asset?",
-    a: "Secondary trading needs minted supply and a venue holding it. Four assets route today at roughly the oracle mark; the rest have nothing minted on Base yet, so CAPIMON marks them mint-only rather than inventing a fill. The markets table labels each one.",
+    a: "Secondary trading needs minted supply and a venue holding it. Four assets route today at roughly the oracle mark; the rest have nothing minted on Base yet, so CAPX marks them mint-only rather than inventing a fill. The markets table labels each one.",
   },
   {
     q: "Who can use this?",
-    a: "Tokenized equities are not available to US persons. Connect your own wallet and CAPIMON holds nothing. Fund an account with Tanzanian shillings and CAPIMON holds those assets for you, recording your entitlement in its own ledger — that is custody, and it is the trade-off for not needing a wallet. Nothing here is investment advice.",
+    a: "Tokenized equities are not available to US persons. Connect your own wallet and CAPX holds nothing. Fund an account with Tanzanian shillings and CAPX holds those assets for you, recording your entitlement in its own ledger — that is custody, and it is the trade-off for not needing a wallet. Nothing here is investment advice.",
   },
 ];
 
@@ -75,7 +75,7 @@ export default function HowItWorks() {
           </span>
         </h1>
         <p className="mt-6 max-w-xl font-[family-name:var(--font-serif)] text-lg leading-relaxed text-[var(--muted)]">
-          CAPIMON is a thin, honest interface over machinery that already exists on Base. Here is exactly
+          CAPX is a thin, honest interface over machinery that already exists on Base. Here is exactly
           what it reads, and where you can check it yourself.
         </p>
       </Reveal>
@@ -110,7 +110,7 @@ export default function HowItWorks() {
         <Reveal delay={0.1}>
           <div className="lg:sticky lg:top-32 lg:self-start">
             <div className="rounded-3xl border hairline p-6">
-              <div className="eyebrow">Contracts CAPIMON reads</div>
+              <div className="eyebrow">Contracts CAPX reads</div>
               <div className="scroll-thin mt-4 max-h-[420px] space-y-2.5 overflow-y-auto pr-1">
                 {ASSETS.map((a) => (
                   <div key={a.symbol} className="flex items-center justify-between gap-3 text-xs">

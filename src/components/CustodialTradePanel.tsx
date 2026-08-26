@@ -21,7 +21,7 @@ const PRESETS = [10, 50, 100, 500];
 /**
  * Buying and selling for a signed-in custodial account.
  *
- * CAPIMON trades from its treasury and credits the account's ledger, so there
+ * CAPX trades from its treasury and credits the account's ledger, so there
  * is no wallet, no approval and no signature — which is the whole point, and
  * also the thing the user is trusting us with. The panel says so rather than
  * letting it feel like magic.
@@ -157,7 +157,7 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
         <Row k="Oracle mark" v={market ? usd(market.price) : "—"} />
         {quote?.executionPrice ? <Row k="Execution price" v={usd(quote.executionPrice)} /> : null}
         {quote?.venues?.length ? <Row k="Route" v={quote.venues.join(" + ")} /> : null}
-        {quote?.fee ? <Row k={`CAPIMON fee (${quote.fee.percent.toFixed(2)}%)`} v={`${usd(quote.fee.amountUsd)} USDC`} /> : null}
+        {quote?.fee ? <Row k={`CAPX fee (${quote.fee.percent.toFixed(2)}%)`} v={`${usd(quote.fee.amountUsd)} USDC`} /> : null}
       </dl>
 
       <div className="mt-5">
@@ -171,7 +171,7 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
           </p>
         ) : blocked ? (
           <p className="rounded-2xl border border-[var(--color-down)]/45 bg-[var(--color-down)]/[0.06] p-4 text-xs leading-relaxed text-[var(--color-down)]">
-            The best route is {Math.abs(quote?.priceImpact ?? 0).toFixed(1)}% from the mark. CAPIMON
+            The best route is {Math.abs(quote?.priceImpact ?? 0).toFixed(1)}% from the mark. CAPX
             will not trade at that price.
           </p>
         ) : insufficient ? (
@@ -215,8 +215,8 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
       </AnimatePresence>
 
       <p className="mt-4 text-[11px] leading-relaxed text-[var(--muted)]">
-        CAPIMON executes this trade from its treasury and credits your account — there is no wallet
-        and nothing to sign, and CAPIMON holds the shares on your behalf.{" "}
+        CAPX executes this trade from its treasury and credits your account — there is no wallet
+        and nothing to sign, and CAPX holds the shares on your behalf.{" "}
         <Link href="/join" className="underline underline-offset-2 hover:text-[var(--fg)]">What that means</Link>.
         Not available to US persons. Nothing here is investment advice.
       </p>

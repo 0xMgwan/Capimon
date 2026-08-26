@@ -44,6 +44,7 @@ export function passwordProblem(password: string): string | null {
 export type SessionUser = {
   id: string;
   email: string;
+  username: string | null;
   name: string | null;
   phone: string | null;
   country: string;
@@ -89,7 +90,7 @@ export async function currentUser(): Promise<SessionUser | null> {
     if (!token) return null;
     await migrate();
     const rows = await db()<SessionUser[]>`
-      select u.id, u.email, u.name, u.phone, u.country,
+      select u.id, u.email, u.username, u.name, u.phone, u.country,
              u.ntzs_user_id as "ntzsUserId", u.kyc_status as "kycStatus"
         from capx.sessions s
         join capx.users u on u.id = s.user_id

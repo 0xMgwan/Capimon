@@ -80,7 +80,7 @@ export function Nav() {
 
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <div className="hidden sm:block"><WalletButton /></div>
+            <WalletButton />
             {/* Before connecting there is no tab bar, so the menu carries
                 navigation on phones. */}
             {!isConnected && (

@@ -22,7 +22,7 @@ export function AccountForm({
   /** Tighter spacing for the modal. */
   compact?: boolean;
 }) {
-  const [form, setForm] = useState({ email: "", password: "", name: "", phone: "", nidaNumber: "" });
+  const [form, setForm] = useState({ email: "", password: "", username: "", name: "", phone: "", nidaNumber: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -89,7 +89,9 @@ export function AccountForm({
       </div>
 
       <div className={`grid gap-2.5 ${compact ? "mt-4" : ""}`}>
-        {field("email", "Email", { type: "email", autoComplete: "email", placeholder: "you@example.com" })}
+        {mode === "signup"
+          ? field("email", "Email", { type: "email", autoComplete: "email", placeholder: "you@example.com" })
+          : field("email", "Email or username", { autoComplete: "username", placeholder: "you@example.com or @handle" })}
         {field("password", "Password", {
           type: "password",
           autoComplete: mode === "signup" ? "new-password" : "current-password",
@@ -97,6 +99,10 @@ export function AccountForm({
         })}
         {mode === "signup" && (
           <>
+            {field("username", "Username", {
+              autoComplete: "username", placeholder: "optional",
+              hint: "3–20 letters, numbers or _",
+            })}
             {field("name", "Full name", { autoComplete: "name", placeholder: "As on your NIDA" })}
             {field("phone", "Mobile money number", { inputMode: "numeric", placeholder: "255712345678" })}
             {field("nidaNumber", "NIDA number", {

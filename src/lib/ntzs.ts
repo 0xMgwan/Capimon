@@ -277,7 +277,7 @@ export async function rampBalance() {
 
 /* ---------------------------------------------------------- capabilities -- */
 
-export type Capability = "wallets" | "ramp";
+export type Capability = "wallets" | "ramp" | "collections";
 
 /**
  * What this key can actually do.
@@ -292,9 +292,20 @@ export async function probeCapabilities(omnibusExternalId: string, omnibusEmail:
   const result: Record<Capability, { available: boolean; detail?: string }> = {
     wallets: { available: false },
     ramp: { available: false },
+    collections: { available: false },
   };
 
   await Promise.all([
+    // Reading a deposit that cannot exist: a 404 means the endpoint is open to
+    // this key, a 403 means the capability is not granted. Nothing is collected
+    // either way.
+    getDeposit("00000000-0000-0000-0000-000000000000")
+      .then(() => { result.collections = { available: true }; })
+      .catch((e) => {
+        const err = e as NtzsError;
+        const denied = err?.status === 403;
+        result.collections = { available: !denied, detail: denied ? err.message : undefined };
+      }),
     rampBalance()
       .then(() => { result.ramp = { available: true }; })
       .catch((e) => { result.ramp = { available: false, detail: e instanceof Error ? e.message : "unavailable" }; }),

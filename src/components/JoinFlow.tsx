@@ -11,7 +11,7 @@ import { usd } from "@/lib/format";
 const TZS = (n: number) => `${Math.round(n).toLocaleString()} TZS`;
 
 type Account = {
-  user: { id: string; email: string; name: string | null; phone: string | null; ntzsUserId: string | null; kycStatus: string };
+  user: { id: string; email: string; username: string | null; name: string | null; phone: string | null; ntzsUserId: string | null; kycStatus: string };
   cash: number;
   equity: number;
   total: number;

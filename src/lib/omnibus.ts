@@ -64,6 +64,8 @@ export type CollectionRoute = "ramp" | "omnibus-wallet" | "none";
 export async function collectionRoute(): Promise<CollectionRoute> {
   const caps = await capabilities();
   if (caps.ramp.available) return "ramp";
-  if (caps.wallets.available) return "omnibus-wallet";
+  // The wallet path still collects through /deposits, so it needs `collections`
+  // as well as `wallets` — having one without the other gets no further.
+  if (caps.wallets.available && caps.collections.available) return "omnibus-wallet";
   return "none";
 }

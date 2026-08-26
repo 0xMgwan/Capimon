@@ -80,6 +80,10 @@ export async function migrate() {
           expires_at  timestamptz not null
         )`;
       await sql`create index if not exists sessions_user_idx on capx.sessions(user_id)`;
+      // Case-insensitive uniqueness: two people cannot hold the same handle in
+      // different capitalisations.
+      await sql`create unique index if not exists users_username_idx
+                  on capx.users (lower(username)) where username is not null`;
       await sql`
         create table if not exists capx.ledger_entries (
           id           bigserial primary key,
@@ -151,6 +155,7 @@ export async function migrate() {
         users: [
           "nida_number text",
           "is_admin boolean not null default false",
+          "username text",
         ],
         deposits: [
           "ntzs_status text", "ntzs_reference text", "swap_ref text", "transfer_tx text",

@@ -13,7 +13,7 @@ import { AuthModal } from "./AuthModal";
  * shows whichever identity the visitor actually has — a wallet address for
  * self-custody, an email for a custodial account.
  */
-export function WalletButton({ compact = false }: { compact?: boolean }) {
+export function WalletButton() {
   const { address, isConnected } = useAccount();
   const { account, signOut } = useCapimonAccount();
   const [authOpen, setAuthOpen] = useState(false);
@@ -84,14 +84,17 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
           className="flex items-center gap-2 rounded-full border hairline surface px-4 py-2 text-sm font-medium transition-colors hover:border-[var(--color-accent)]"
         >
           <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-up)]" />
-          <span className="max-w-[10rem] truncate">{account.user.email}</span>
+          <span className="max-w-[7rem] truncate sm:max-w-[10rem]">
+            {account.user.username ? `@${account.user.username}` : account.user.name ?? account.user.email}
+          </span>
         </button>
         {open && (
           <div className="absolute right-0 z-50 mt-2 w-60 rounded-2xl border hairline bg-[var(--bg)] p-2 shadow-2xl shadow-black/10">
             <div className="rounded-xl surface p-3">
-              <div className="eyebrow">Custodial account</div>
-              <div className="tnum mt-1 text-sm">{usd(account.total)}</div>
-              <div className="mt-1 text-[11px] text-[var(--muted)]">held by CAPX for you</div>
+              <div className="eyebrow">Signed in</div>
+              <div className="mt-1 truncate text-sm">{account.user.email}</div>
+              <div className="tnum mt-2 text-sm">{usd(account.total)}</div>
+              <div className="mt-0.5 text-[11px] text-[var(--muted)]">held by CAPX for you</div>
             </div>
             <a href="/portfolio" className="mt-1 block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">Portfolio</a>
             <a href="/join" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">Fund with shillings</a>
@@ -113,7 +116,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
         onClick={() => setAuthOpen(true)}
         className="rounded-full bg-[var(--fg)] px-5 py-2 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95"
       >
-        {compact ? "Sign in" : "Sign in"}
+        Sign in
       </button>
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
     </>

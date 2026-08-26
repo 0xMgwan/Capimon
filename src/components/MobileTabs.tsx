@@ -39,7 +39,7 @@ export function MobileTabs() {
     <>
     {/* Clearance for the fixed bar, scoped to when the bar actually exists. */}
     <div className="h-[4.25rem] md:hidden" />
-    <nav className="safe-b fixed inset-x-0 bottom-0 z-50 border-t hairline bg-[var(--nav)] backdrop-blur-xl md:hidden">
+    <nav className="safe-b fixed inset-x-0 bottom-0 z-50 border-t hairline bg-[var(--bg)] md:hidden">
       <div className="flex">
         {TABS.map((t) => {
           const active = t.href === "/" ? path === "/" : path.startsWith(t.href);

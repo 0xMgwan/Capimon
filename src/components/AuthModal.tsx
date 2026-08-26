@@ -9,6 +9,7 @@ import { WALLETS } from "@/lib/wallets";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { CoinbaseIcon, MetaMaskIcon, PhantomIcon } from "./icons/Wallets";
 import { Logo } from "./Logo";
+import { useBodyLock } from "@/lib/useBodyLock";
 import { AccountForm, type AccountMode } from "./AccountForm";
 
 const ICONS: Record<string, (p: { className?: string }) => React.ReactElement> = {
@@ -31,16 +32,13 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
 
   const [mode, setMode] = useState<AccountMode>("signup");
 
+  useBodyLock(open);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
   if (!mounted) return null;
@@ -52,14 +50,14 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-sm"
+            className="fixed inset-0 z-[80] bg-black/60"
           />
           <motion.div
             role="dialog" aria-modal="true" aria-label="Sign in to CAPX"
-            initial={{ opacity: 0, y: 24, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 16, scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 380, damping: 34 }}
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
             // vh is the fallback; dvh only applies where the browser supports
             // it, so the sheet is constrained either way and never runs off the
             // bottom of the screen.

@@ -20,7 +20,7 @@ export function TickerTape() {
   const loop = rows.length ? [...rows, ...rows] : [];
 
   return (
-    <div className="border-b hairline bg-[var(--bg)]/95 backdrop-blur-xl">
+    <div className="border-b hairline bg-[var(--bg)] md:bg-[var(--bg)]/95 md:backdrop-blur-xl">
       <div className="flex items-center">
         <div className="flex shrink-0 items-center gap-2 border-r hairline px-3 py-2 sm:px-4">
           <span

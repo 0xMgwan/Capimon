@@ -64,6 +64,7 @@ html { scroll-behavior: smooth; overflow-x: clip; }
 @media (hover: none) {
   .marquee:hover .marquee-track { animation-play-state: running; }
 }
+
 button, a { -webkit-tap-highlight-color: transparent; }
 
 body {
@@ -102,6 +103,12 @@ body {
 /* --- motion ------------------------------------------------------ */
 @keyframes marquee { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
 .marquee-track { animation: marquee var(--marquee-duration, 40s) linear infinite; will-change: transform; }
+
+/* Nothing behind an overlay needs to keep animating. Paused rather than hidden,
+   so the strip resumes mid-scroll instead of jumping. */
+body.overlay-open .marquee-track,
+body.overlay-open .live-dot,
+body.overlay-open .grain::after { animation-play-state: paused; }
 .marquee:hover .marquee-track { animation-play-state: paused; }
 
 @keyframes flash-up { 0% { background-color: color-mix(in oklab, var(--color-up) 26%, transparent); } 100% { background-color: transparent; } }

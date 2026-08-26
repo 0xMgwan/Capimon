@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion, useScroll, useTransform, useReducedMotion } from "motion/react";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMarkets } from "@/lib/useMarkets";
 import { Counter } from "./Counter";
 import { RevealWords } from "./Reveal";
@@ -10,9 +10,24 @@ import { compactUsd } from "@/lib/format";
 import { Sparkline } from "./Sparkline";
 import { AssetLogo } from "./AssetLogo";
 
+/** True when the backdrop should hold still: reduced motion, or a phone. */
+function useStillBackdrop() {
+  const reduced = useReducedMotion();
+  const [small, setSmall] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const apply = () => setSmall(mq.matches);
+    const raf = requestAnimationFrame(apply);
+    mq.addEventListener("change", apply);
+    return () => { cancelAnimationFrame(raf); mq.removeEventListener("change", apply); };
+  }, []);
+  return reduced || small;
+}
+
 export function Hero() {
   const ref = useRef<HTMLElement>(null);
   const reduced = useReducedMotion();
+  const still = useStillBackdrop();
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end start"] });
   const y = useTransform(scrollYProgress, [0, 1], ["0%", "22%"]);
   const opacity = useTransform(scrollYProgress, [0, 0.75], [1, 0]);
@@ -28,19 +43,19 @@ export function Hero() {
       <motion.div style={reduced ? undefined : { scale }} className="absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-[var(--bg)]" />
         <motion.div
-          animate={reduced ? undefined : { x: [0, 60, -30, 0], y: [0, -40, 30, 0] }}
+          animate={still ? undefined : { x: [0, 60, -30, 0], y: [0, -40, 30, 0] }}
           transition={{ duration: 26, repeat: Infinity, ease: "easeInOut" }}
           className="absolute -left-[10%] top-[6%] h-[46vw] w-[46vw] rounded-full blur-[100px]"
           style={{ background: "radial-gradient(circle, color-mix(in oklab, var(--color-accent) 42%, transparent), transparent 70%)" }}
         />
         <motion.div
-          animate={reduced ? undefined : { x: [0, -70, 40, 0], y: [0, 50, -20, 0] }}
+          animate={still ? undefined : { x: [0, -70, 40, 0], y: [0, 50, -20, 0] }}
           transition={{ duration: 32, repeat: Infinity, ease: "easeInOut" }}
           className="absolute -right-[8%] top-[26%] h-[40vw] w-[40vw] rounded-full blur-[110px]"
           style={{ background: "radial-gradient(circle, color-mix(in oklab, #34d1bf 34%, transparent), transparent 70%)" }}
         />
         <motion.div
-          animate={reduced ? undefined : { x: [0, 40, -50, 0], y: [0, -30, 40, 0] }}
+          animate={still ? undefined : { x: [0, 40, -50, 0], y: [0, -30, 40, 0] }}
           transition={{ duration: 38, repeat: Infinity, ease: "easeInOut" }}
           className="absolute bottom-[2%] left-[26%] h-[36vw] w-[36vw] rounded-full blur-[110px]"
           style={{ background: "radial-gradient(circle, color-mix(in oklab, #ffb86b 30%, transparent), transparent 70%)" }}
@@ -79,7 +94,7 @@ export function Hero() {
             </Link>
             <Link
               href="/how-it-works"
-              className="rounded-full border hairline bg-[var(--bg)]/60 px-6 py-4 text-center text-sm font-medium backdrop-blur transition-colors hover:surface sm:py-3.5"
+              className="rounded-full border hairline bg-[var(--bg)] px-6 py-4 text-center text-sm font-medium sm:bg-[var(--bg)]/60 sm:backdrop-blur transition-colors hover:surface sm:py-3.5"
             >
               How it works
             </Link>
@@ -92,14 +107,14 @@ export function Hero() {
           transition={{ duration: 0.8, delay: 0.62, ease: [0.16, 1, 0.3, 1] }}
           className="mt-10 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border hairline bg-[var(--border)] sm:mt-14 lg:grid-cols-4"
         >
-          <div className="bg-[var(--bg)]/80 p-4 backdrop-blur sm:p-5">
+          <div className="bg-[var(--bg)] p-4 sm:bg-[var(--bg)]/80 sm:p-5 sm:backdrop-blur">
             <div className="eyebrow">Onchain value</div>
             <div className="tnum mt-2 text-xl font-medium sm:text-2xl">
               <Counter value={tvl} format={(n) => compactUsd(n)} />
             </div>
             <div className="mt-1 text-[11px] text-[var(--muted)]">supply × live mark</div>
           </div>
-          <div className="bg-[var(--bg)]/80 p-4 backdrop-blur sm:p-5">
+          <div className="bg-[var(--bg)] p-4 sm:bg-[var(--bg)]/80 sm:p-5 sm:backdrop-blur">
             <div className="eyebrow">Listed assets</div>
             <div className="tnum mt-2 text-xl font-medium sm:text-2xl">
               <Counter value={data?.totals.assets ?? 0} format={(n) => Math.round(n).toString()} />
@@ -107,7 +122,7 @@ export function Hero() {
             <div className="mt-1 text-[11px] text-[var(--muted)]">tokenized equities</div>
           </div>
           {movers.map((m) => (
-            <Link key={m.symbol} href={`/markets/${m.ticker.toLowerCase()}`} className="group bg-[var(--bg)]/80 p-4 backdrop-blur transition-colors hover:bg-[var(--bg)] sm:p-5">
+            <Link key={m.symbol} href={`/markets/${m.ticker.toLowerCase()}`} className="group bg-[var(--bg)] p-4 transition-colors hover:bg-[var(--bg)] sm:bg-[var(--bg)]/80 sm:p-5 sm:backdrop-blur">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-1.5">
                   <AssetLogo logo={m.logo} ticker={m.ticker} color={m.color} size={14} />

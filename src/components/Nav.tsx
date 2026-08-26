@@ -9,6 +9,7 @@ import { useAccount } from "wagmi";
 import { Logo, Wordmark } from "./Logo";
 import { WalletButton } from "./WalletButton";
 import { ThemeToggle } from "./ThemeToggle";
+import { useBodyLock } from "@/lib/useBodyLock";
 
 const LINKS = [
   { href: "/markets", label: "Markets" },
@@ -26,6 +27,8 @@ export function Nav() {
   const menu = menuAt === path;
   const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
 
+  useBodyLock(menu);
+
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
     // Probe on the next frame — a restored scroll position still resolves before paint.
@@ -42,7 +45,7 @@ export function Nav() {
       <motion.div
         animate={{ paddingTop: scrolled ? 10 : 16, paddingBottom: scrolled ? 10 : 16 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className={`bg-[var(--nav)] backdrop-blur-xl transition-colors duration-300 ${
+        className={`bg-[var(--bg)] transition-colors duration-300 md:bg-[var(--nav)] md:backdrop-blur-xl ${
           scrolled ? "border-b hairline" : "border-b border-transparent"
         }`}
       >
@@ -104,11 +107,11 @@ export function Nav() {
                 <motion.div
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                   onClick={() => setMenuAt(null)}
-                  className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-sm md:hidden"
+                  className="fixed inset-0 z-[60] bg-black/45 md:hidden"
                 />
                 <motion.div
                   initial={{ y: "-100%" }} animate={{ y: 0 }} exit={{ y: "-100%" }}
-                  transition={{ type: "spring", stiffness: 380, damping: 38 }}
+                  transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
                   className="safe-t fixed inset-x-0 top-0 z-[70] rounded-b-3xl border-b hairline bg-[var(--bg)] p-5 pt-6 shadow-2xl md:hidden"
                 >
                   <div className="flex items-center justify-between">

@@ -8,6 +8,7 @@ import type { Venue } from "@/lib/useVenues";
 import { AssetLogo } from "./AssetLogo";
 import { Sparkline } from "./Sparkline";
 import { usd } from "@/lib/format";
+import { useBodyLock } from "@/lib/useBodyLock";
 
 /**
  * Company selector for the order ticket. A popover on desktop, a bottom sheet
@@ -34,6 +35,8 @@ export function AssetPicker({
     () => false,
   );
 
+  useBodyLock(open);
+
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
@@ -41,15 +44,10 @@ export function AssetPicker({
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey);
     const raf = requestAnimationFrame(() => inputRef.current?.focus());
-    // Phones only: stop the page scrolling behind the sheet.
-    const sheet = window.matchMedia("(max-width: 639px)").matches;
-    const prevOverflow = document.body.style.overflow;
-    if (sheet) document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("mousedown", onDoc);
       document.removeEventListener("keydown", onKey);
       cancelAnimationFrame(raf);
-      if (sheet) document.body.style.overflow = prevOverflow;
     };
   }, [open]);
 
@@ -177,11 +175,11 @@ export function AssetPicker({
                   <motion.div
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                     onClick={() => setOpen(false)}
-                    className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm sm:hidden"
+                    className="fixed inset-0 z-[60] bg-black/55 sm:hidden"
                   />
                   <motion.div
                     initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-                    transition={{ type: "spring", stiffness: 380, damping: 38 }}
+                    transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
                     className="safe-b fixed inset-x-0 bottom-0 z-[70] overflow-hidden rounded-t-3xl border-t hairline bg-[var(--bg)] shadow-2xl sm:hidden"
                   >
                     <div className="flex justify-center pt-2.5">

@@ -21,6 +21,11 @@ type Quote = {
   severity?: Severity; safe?: boolean; overridable?: boolean;
   venues?: string[]; hops?: number; gasUsd?: number; router?: `0x${string}`;
   supply?: number; source?: "aggregator" | "aerodrome"; degraded?: boolean; pool?: string;
+  feeApplied?: boolean;
+  fee?: {
+    bps: number; percent: number; receiver: string; token: "USDC";
+    chargedOn: "input" | "output"; amountUsd: number;
+  } | null;
 };
 
 const SLIPPAGE_BPS = 100; // 1%
@@ -223,6 +228,12 @@ export function TradePanel({ asset, market }: { asset: AssetMeta; market?: Marke
               }
             />
             {quote?.gasUsd ? <Row k="Est. gas" v={usd(quote.gasUsd)} /> : null}
+            {quote?.fee ? (
+              <Row
+                k={`CAPIMON fee (${quote.fee.percent.toFixed(2)}%)`}
+                v={`${usd(quote.fee.amountUsd)} ${quote.fee.token}`}
+              />
+            ) : null}
             <Row k="Max slippage" v={`${SLIPPAGE_BPS / 100}%`} />
           </>
         )}
@@ -352,6 +363,13 @@ export function TradePanel({ asset, market }: { asset: AssetMeta; market?: Marke
           className="mt-3 block text-xs text-[var(--color-up)]">
           Settled onchain — view transaction ↗
         </a>
+      )}
+
+      {quote?.fee && (
+        <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
+          The {quote.fee.percent.toFixed(2)}% platform fee is already reflected in the amount above
+          and is taken by the router during the swap — there is no separate approval or transaction.
+        </p>
       )}
 
       <p className="mt-4 text-[11px] leading-relaxed text-[var(--muted)]">

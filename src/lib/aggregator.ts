@@ -35,6 +35,14 @@ export type Route = {
   venues: string[];
 };
 
+/** Fee parameters the router applies inside the swap, when one is configured. */
+export type RouteFee = {
+  feeAmount: number;
+  chargeFeeBy: "currency_in" | "currency_out";
+  isInBps: true;
+  feeReceiver: `0x${string}`;
+};
+
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
@@ -60,8 +68,18 @@ export async function getRoute(
   tokenIn: `0x${string}`,
   tokenOut: `0x${string}`,
   amountInRaw: bigint,
+  fee?: RouteFee | null,
 ): Promise<Route | null> {
-  const url = `${BASE_URL}/routes?tokenIn=${tokenIn}&tokenOut=${tokenOut}&amountIn=${amountInRaw}`;
+  const params = new URLSearchParams({
+    tokenIn, tokenOut, amountIn: amountInRaw.toString(),
+  });
+  if (fee) {
+    params.set("feeAmount", String(fee.feeAmount));
+    params.set("chargeFeeBy", fee.chargeFeeBy);
+    params.set("isInBps", "true");
+    params.set("feeReceiver", fee.feeReceiver);
+  }
+  const url = `${BASE_URL}/routes?${params}`;
   try {
     const data = await call<{ routerAddress: `0x${string}`; routeSummary: RouteSummary }>(url);
     if (!data.routeSummary) return null;

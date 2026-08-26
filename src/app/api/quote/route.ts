@@ -4,6 +4,7 @@ import { BY_SYMBOL, USDC_BASE } from "@/lib/assets";
 import { getMarkets } from "@/lib/markets";
 import { getRoute, venueLabel } from "@/lib/aggregator";
 import { quote as aeroQuote } from "@/lib/aerodrome";
+import { feeParams, feeDisclosure } from "@/lib/fees";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,7 @@ export async function GET(req: Request) {
     let route: Awaited<ReturnType<typeof getRoute>> = null;
     let degraded = false;
     try {
-      route = await getRoute(tokenIn, tokenOut, amountInRaw);
+      route = await getRoute(tokenIn, tokenOut, amountInRaw, feeParams(side));
     } catch {
       degraded = true;
     }
@@ -68,7 +69,7 @@ export async function GET(req: Request) {
           executionPrice: side === "buy" ? amount / amountOut : amountOut / amount,
           priceImpact: impact, ...g,
           severity: g.severity, safe: g.safe, overridable: g.overridable,
-          venues: ["Aerodrome CL"], hops: 1,
+          venues: ["Aerodrome CL"], hops: 1, fee: null, feeApplied: false,
           tickSpacing: direct.pool.tickSpacing, pool: direct.pool.address,
           note: "Aggregated routing is unavailable — quoting the deepest Aerodrome pool directly. The fill may be slightly worse than a split route.",
         }, { headers: { "cache-control": "no-store" } });
@@ -100,6 +101,9 @@ export async function GET(req: Request) {
       priceImpact: impact, severity, safe, overridable,
       venues: route.venues.map(venueLabel),
       hops: route.routeSummary.route.length,
+      // amountOut is already net of the fee — the router takes it in-swap.
+      fee: feeDisclosure(side, side === "buy" ? amount : amountOut),
+      feeApplied: !!feeParams(side),
       amountInUsd: Number(route.routeSummary.amountInUsd),
       amountOutUsd: Number(route.routeSummary.amountOutUsd),
       gas: route.routeSummary.gas,

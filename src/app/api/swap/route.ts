@@ -4,6 +4,7 @@ import { BY_SYMBOL, USDC_BASE } from "@/lib/assets";
 import { getMarkets } from "@/lib/markets";
 import { getRoute, buildRoute } from "@/lib/aggregator";
 import { quote as aeroQuote, buildSwap as buildAeroSwap } from "@/lib/aerodrome";
+import { feeParams } from "@/lib/fees";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
 
     let route: Awaited<ReturnType<typeof getRoute>> = null;
     try {
-      route = await getRoute(tokenIn, tokenOut, amountInRaw);
+      route = await getRoute(tokenIn, tokenOut, amountInRaw, feeParams(side));
     } catch {
       /* fall through to the direct Aerodrome path */
     }
@@ -64,7 +65,7 @@ export async function POST(req: Request) {
         recipient: sender as `0x${string}`, amountIn: amountInRaw, amountOutMinimum: minOut,
       });
       return NextResponse.json({
-        ok: true, source: "aerodrome", ...built,
+        ok: true, source: "aerodrome", feeApplied: false, ...built,
         gas: direct.gasEstimate.toString(),
         amountOut: direct.amountOut.toString(),
         priceImpact: impact,
@@ -86,6 +87,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       source: "aggregator",
+      feeApplied: !!feeParams(side),
       to: built.routerAddress,
       data: built.data,
       value: built.transactionValue ?? "0",

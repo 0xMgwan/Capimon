@@ -198,7 +198,11 @@ export function WalletSection() {
               </Link>
               {account.positions.length > 0 ? (
                 <Link
-                  href="#holdings"
+                  href={
+                    account.positions.length === 1
+                      ? `/markets/${account.positions[0].ticker.toLowerCase()}`
+                      : "#holdings"
+                  }
                   className="whitespace-nowrap rounded-full border hairline py-3 text-center text-[13px] font-medium transition-colors hover:surface"
                 >
                   Sell shares

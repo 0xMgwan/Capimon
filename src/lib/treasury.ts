@@ -90,15 +90,36 @@ export function treasuryAddress(): `0x${string}` | null {
 
 async function ensureAllowance(token: `0x${string}`, spender: `0x${string}`, needed: bigint) {
   const { account, wallet } = signer();
-  const allowance = (await publicClient.readContract({
-    address: token, abi: b20Abi, functionName: "allowance", args: [account.address, spender],
-  })) as bigint;
+  const read = async () =>
+    (await publicClient.readContract({
+      address: token, abi: b20Abi, functionName: "allowance", args: [account.address, spender],
+    })) as bigint;
+
+  let allowance = await read();
   if (allowance >= needed) return null;
 
   const hash = await wallet.writeContract({
     address: token, abi: b20Abi, functionName: "approve", args: [spender, maxUint256],
   });
-  await publicClient.waitForTransactionReceipt({ hash });
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") {
+    throw new Error(`Approval ${hash} for ${token} reverted — not trading against a failed allowance.`);
+  }
+
+  // Confirm the allowance is actually visible before trading on it. A fallback
+  // RPC can still read the pre-approve value right after the tx mines, and
+  // sending the swap against a stale-zero allowance is exactly what produced
+  // TRANSFER_FROM_FAILED on the first trade of each token.
+  for (let i = 0; i < 8 && allowance < needed; i++) {
+    await new Promise((r) => setTimeout(r, 1200));
+    allowance = await read();
+  }
+  if (allowance < needed) {
+    throw new Error(
+      `Approved ${token} but the allowance still reads ${allowance} < ${needed} across RPCs — ` +
+      `not sending a trade that would revert. Retry in a moment.`,
+    );
+  }
   return hash;
 }
 

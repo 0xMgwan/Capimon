@@ -3,7 +3,7 @@ import { createDeposit, NtzsError, ntzsConfigured } from "@/lib/ntzs";
 import { currentUser } from "@/lib/auth";
 import { db, migrate } from "@/lib/db";
 import { omnibusUserId } from "@/lib/omnibus";
-import { requireDb, bad, notConfigured } from "@/lib/apiHelpers";
+import { requireDb, bad, boom, notConfigured } from "@/lib/apiHelpers";
 
 export const dynamic = "force-dynamic";
 
@@ -62,10 +62,7 @@ export async function POST(req: Request) {
       );
     }
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, code: "server_error", error: e instanceof Error ? e.message : "Deposit failed" },
-      { status: 500 },
-    );
+    return boom(e, "Could not start the deposit.");
   }
 }
 

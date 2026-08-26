@@ -135,15 +135,33 @@ export async function migrate() {
           created_at     timestamptz not null default now(),
           settled_at     timestamptz
         )`;
-      // Columns added after the table first shipped.
-      for (const col of [
-        "ntzs_status text", "ntzs_reference text", "swap_ref text", "transfer_tx text",
-        "rate_tzs_usdc numeric(38,8)", "metadata jsonb not null default '{}'::jsonb",
-      ]) {
-        await sql.unsafe(`alter table capx.deposits add column if not exists ${col}`);
-      }
       await sql`create index if not exists deposits_user_idx on capx.deposits(user_id, created_at desc)`;
       await sql`create index if not exists deposits_status_idx on capx.deposits(status)`;
+
+      /*
+       * Columns added after a table first shipped.
+       *
+       * `create table if not exists` is a no-op on an existing table, so a new
+       * column in the definition above never reaches a database that already
+       * has the table. Every late addition has to be listed here as well —
+       * missing one surfaces as a runtime "column does not exist" on the write
+       * path, which is the worst place to find it.
+       */
+      const lateColumns: Record<string, string[]> = {
+        users: [
+          "nida_number text",
+          "is_admin boolean not null default false",
+        ],
+        deposits: [
+          "ntzs_status text", "ntzs_reference text", "swap_ref text", "transfer_tx text",
+          "rate_tzs_usdc numeric(38,8)", "metadata jsonb not null default '{}'::jsonb",
+        ],
+      };
+      for (const [table, columns] of Object.entries(lateColumns)) {
+        for (const col of columns) {
+          await sql.unsafe(`alter table capx.${table} add column if not exists ${col}`);
+        }
+      }
     })().catch((e) => {
       migrated = null;
       throw e;

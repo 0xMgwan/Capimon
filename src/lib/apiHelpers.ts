@@ -17,7 +17,19 @@ export function bad(error: string, code = "bad_request", status = 400) {
   return NextResponse.json({ ok: false, code, error }, { status });
 }
 
-export function boom(e: unknown, fallback = "Request failed") {
-  const message = e instanceof Error ? e.message : fallback;
-  return NextResponse.json({ ok: false, code: "server_error", error: message }, { status: 500 });
+/**
+ * Unexpected failures.
+ *
+ * The detail goes to the server log with a reference; the caller gets the
+ * reference and nothing else. A database error rendered in a signup form tells
+ * a stranger the shape of your schema, and tells the person trying to sign up
+ * nothing they can act on.
+ */
+export function boom(e: unknown, fallback = "Something went wrong on our side.") {
+  const ref = Math.random().toString(36).slice(2, 10);
+  console.error(`[capx:${ref}]`, e);
+  return NextResponse.json(
+    { ok: false, code: "server_error", error: `${fallback} Reference ${ref}.`, ref },
+    { status: 500 },
+  );
 }

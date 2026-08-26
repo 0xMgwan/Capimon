@@ -67,6 +67,8 @@ export async function migrate() {
           phone          text,
           country        text not null default 'TZ',
           ntzs_user_id   text,
+          nida_number    text,
+          is_admin       boolean not null default false,
           kyc_status     text not null default 'none',
           created_at     timestamptz not null default now()
         )`;
@@ -109,6 +111,24 @@ export async function migrate() {
           settled_at    timestamptz
         )`;
       await sql`create index if not exists orders_user_idx on capx.orders(user_id, created_at desc)`;
+      // Deposits land in one omnibus nTZS wallet, so the only record of who sent
+      // what is this table. It is the attribution, and it is written before the
+      // money is asked for.
+      await sql`
+        create table if not exists capx.deposits (
+          id             uuid primary key default gen_random_uuid(),
+          user_id        uuid not null references capx.users(id) on delete cascade,
+          ntzs_deposit_id text unique,
+          amount_tzs     integer not null,
+          phone          text not null,
+          status         text not null default 'pending',
+          usdc_credited  numeric(38,6),
+          error          text,
+          created_at     timestamptz not null default now(),
+          settled_at     timestamptz
+        )`;
+      await sql`create index if not exists deposits_user_idx on capx.deposits(user_id, created_at desc)`;
+      await sql`create index if not exists deposits_status_idx on capx.deposits(status)`;
     })().catch((e) => {
       migrated = null;
       throw e;

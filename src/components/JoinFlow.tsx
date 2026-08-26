@@ -46,7 +46,6 @@ export function JoinFlow() {
 
   const [form, setForm] = useState({ email: "", password: "", name: "", phone: "", nidaNumber: "" });
   const [amountTzs, setAmountTzs] = useState(50_000);
-  const [ntzsBalance, setNtzsBalance] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -68,7 +67,7 @@ export function JoinFlow() {
   };
 
   const signedIn = !!account?.user;
-  const step = !signedIn ? 1 : ntzsBalance <= 0 && account.cash <= 0 ? 2 : account.cash <= 0 ? 3 : 4;
+  const step = !signedIn ? 1 : (account.cash <= 0 && account.equity <= 0) ? 2 : 3;
 
   return (
     <div className="mx-auto max-w-[1400px] px-5 pb-24 pt-12 sm:px-8">
@@ -81,8 +80,8 @@ export function JoinFlow() {
           </span>
         </h1>
         <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-[var(--muted)]">
-          Fund with mobile money in Tanzanian shillings and buy tokenized equities — no wallet, no
-          seed phrase. CAPX holds the assets for you and records what you are owed.
+          Send shillings from your phone and buy tokenized equities — no wallet, no seed phrase,
+          nothing to convert. CAPX holds the assets for you and records what you are owed.
         </p>
       </Reveal>
 
@@ -134,10 +133,10 @@ export function JoinFlow() {
           </Step>
 
           {/* 2 — deposit */}
-          <Step n={2} active={step === 2} done={ntzsBalance > 0 || (account?.cash ?? 0) > 0} title="Fund with mobile money">
+          <Step n={2} active={step === 2} done={(account?.cash ?? 0) > 0 || (account?.equity ?? 0) > 0} title="Fund with mobile money">
             <p className="text-sm leading-relaxed text-[var(--muted)]">
-              You&rsquo;ll get a prompt on your phone. Approving it mints nTZS one-for-one with the
-              shillings you send.
+              You&rsquo;ll get a prompt on your phone. Approve it and your balance appears here —
+              CAPX handles the conversion.
             </p>
             <div className="mt-4 grid gap-2.5">
               <Field label="Amount (TZS)" value={String(amountTzs)} onChange={(v) => setAmountTzs(Number(v.replace(/\D/g, "")) || 0)} inputMode="numeric" hint="min 500" />
@@ -145,11 +144,14 @@ export function JoinFlow() {
             </div>
             <button
               onClick={() => run(async () => {
-                const r = await api<{ note: string }>("/api/ntzs/deposit", {
-                  userId: account?.user.ntzsUserId, amountTzs, phoneNumber: form.phone,
-                });
+                const r = await api<{ note: string }>("/api/ntzs/deposit", { amountTzs, phoneNumber: form.phone });
                 setNotice(r.note);
-                setNtzsBalance(amountTzs);
+                // Settlement is backend work; poll until the balance appears.
+                for (let i = 0; i < 12; i++) {
+                  await new Promise((res) => setTimeout(res, 5000));
+                  await fetch("/api/ntzs/settle", { method: "POST" }).catch(() => {});
+                  await load();
+                }
               })}
               disabled={busy || !signedIn || amountTzs < 500}
               className="mt-4 w-full rounded-full bg-[var(--fg)] py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
@@ -158,27 +160,8 @@ export function JoinFlow() {
             </button>
           </Step>
 
-          {/* 3 — convert */}
-          <Step n={3} active={step === 3} done={(account?.cash ?? 0) > 0} title="Convert to trading balance">
-            <p className="text-sm leading-relaxed text-[var(--muted)]">
-              Your shillings convert to USDC and become your CAPX balance, ready to buy with.
-            </p>
-            <button
-              onClick={() => run(async () => {
-                const r = await api<{ usdcCredited: number }>("/api/ntzs/fund", { amountTzs: ntzsBalance || amountTzs });
-                setNotice(`${usd(r.usdcCredited)} credited to your balance.`);
-                setNtzsBalance(0);
-                await load();
-              })}
-              disabled={busy || !signedIn}
-              className="mt-4 w-full rounded-full bg-[var(--fg)] py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
-            >
-              {busy ? "Converting…" : "Convert to USDC"}
-            </button>
-          </Step>
-
-          {/* 4 — trade */}
-          <Step n={4} active={step === 4} done={false} title="Buy shares" last>
+          {/* 3 — trade */}
+          <Step n={3} active={step === 3} done={false} title="Buy shares" last>
             <div className="rounded-2xl surface p-4">
               <div className="flex items-center justify-between text-sm">
                 <span className="flex items-center gap-1.5 text-[var(--muted)]"><UsdcIcon className="h-3.5 w-3.5" /> Available</span>
@@ -227,10 +210,10 @@ export function JoinFlow() {
             <div className="mt-5 rounded-3xl border hairline p-6">
               <div className="eyebrow">Where your money goes</div>
               <ol className="mt-4 space-y-4 text-sm leading-relaxed text-[var(--muted)]">
-                <li><span className="text-[var(--fg)]">Mobile money → nTZS.</span> Held against the shilling reserve.</li>
-                <li><span className="text-[var(--fg)]">nTZS → USDC.</span> Converted at the live rate.</li>
-                <li><span className="text-[var(--fg)]">USDC → CAPX.</span> Held in the treasury; your balance is credited.</li>
-                <li><span className="text-[var(--fg)]">USDC → shares.</span> CAPX trades and records your holding.</li>
+                <li><span className="text-[var(--fg)]">You send shillings.</span> Approve the prompt on your phone.</li>
+                <li><span className="text-[var(--fg)]">CAPX converts them.</span> Settlement, conversion and custody happen in the background.</li>
+                <li><span className="text-[var(--fg)]">Your balance appears.</span> Ready to buy with.</li>
+                <li><span className="text-[var(--fg)]">You buy shares.</span> CAPX trades and records your holding.</li>
               </ol>
               <p className="mt-5 border-t hairline pt-4 text-[11px] leading-relaxed text-[var(--muted)]">
                 Tokenized equities are not available to US persons. Nothing here is investment advice.

@@ -1,64 +1,85 @@
 import { NextResponse } from "next/server";
-import { createDeposit, getDeposit, NtzsError, ntzsConfigured } from "@/lib/ntzs";
+import { createDeposit, NtzsError, ntzsConfigured } from "@/lib/ntzs";
+import { currentUser } from "@/lib/auth";
+import { db, migrate } from "@/lib/db";
+import { omnibusUserId } from "@/lib/omnibus";
+import { requireDb, bad, notConfigured } from "@/lib/apiHelpers";
 
 export const dynamic = "force-dynamic";
 
 const MIN_TZS = 500;
 
-function fail(e: unknown) {
-  const err = e instanceof NtzsError ? e : null;
-  return NextResponse.json(
-    { ok: false, code: err?.code ?? "ntzs_error", error: err?.message ?? "Deposit failed", retry: err?.retry },
-    { status: err?.status ?? 502 },
-  );
-}
-
 /**
- * Starts a mobile money collection. The payer gets a prompt on their phone, so
- * a 201 means "submitted", not "paid" — the caller polls until terminal.
+ * Starts a mobile money collection into the CAPX omnibus account.
+ *
+ * The local row is written before the money is asked for. With one shared
+ * wallet upstream, this table is the only record of whose deposit it was — if
+ * the row were written after a successful call, a crash in between would leave
+ * money in the omnibus with no owner.
  */
 export async function POST(req: Request) {
-  if (!ntzsConfigured) {
-    return NextResponse.json({ ok: false, code: "not_configured", error: "nTZS is not configured" }, { status: 503 });
-  }
+  const gate = requireDb();
+  if (gate) return gate;
+  if (!ntzsConfigured) return notConfigured("nTZS");
+
   try {
+    const user = await currentUser();
+    if (!user) return NextResponse.json({ ok: false, code: "unauthenticated" }, { status: 401 });
+
     const body = await req.json();
-    const userId = String(body.userId ?? "");
-    const phoneNumber = String(body.phoneNumber ?? "").replace(/[^\d]/g, "");
+    const phoneNumber = String(body.phoneNumber ?? user.phone ?? "").replace(/[^\d]/g, "");
     const amountTzs = Math.round(Number(body.amountTzs));
+    if (!phoneNumber) return bad("A mobile money number is required.");
+    if (!Number.isFinite(amountTzs) || amountTzs < MIN_TZS) return bad(`Minimum deposit is ${MIN_TZS} TZS.`);
 
-    if (!userId) return NextResponse.json({ ok: false, error: "userId required" }, { status: 400 });
-    if (!phoneNumber) return NextResponse.json({ ok: false, error: "a mobile money number is required" }, { status: 400 });
-    if (!Number.isFinite(amountTzs) || amountTzs < MIN_TZS) {
-      return NextResponse.json({ ok: false, error: `Minimum deposit is ${MIN_TZS} TZS` }, { status: 400 });
-    }
+    await migrate();
+    const sql = db();
+    const rows = await sql<{ id: string }[]>`
+      insert into capx.deposits (user_id, amount_tzs, phone)
+      values (${user.id}, ${amountTzs}, ${phoneNumber})
+      returning id`;
+    const localId = rows[0].id;
 
-    const deposit = await createDeposit({ userId, amountTzs, phoneNumber });
-    return NextResponse.json(
-      { ok: true, deposit, note: "Approve the prompt on your phone. The balance updates once it settles." },
-      { headers: { "cache-control": "no-store" } },
-    );
-  } catch (e) {
-    // On an uncertain initiation the collection may still have been taken, so
-    // the honest answer is "check", never a silent retry.
-    if (e instanceof NtzsError && e.retry === "verify") {
+    try {
+      const deposit = await createDeposit({ userId: await omnibusUserId(), amountTzs, phoneNumber });
+      await sql`update capx.deposits set ntzs_deposit_id = ${String(deposit.id)} where id = ${localId}`;
+      return NextResponse.json({
+        ok: true, depositId: localId, status: deposit.status ?? "submitted",
+        note: "Approve the prompt on your phone. Your balance updates once it settles.",
+      });
+    } catch (e) {
+      const err = e instanceof NtzsError ? e : null;
+      // An uncertain initiation may still have taken the money, so the row stays
+      // open for reconciliation rather than being marked failed.
+      const uncertain = err?.retry === "verify";
+      await sql`update capx.deposits set status = ${uncertain ? "uncertain" : "failed"},
+                error = ${err?.message ?? "initiation failed"} where id = ${localId}`;
       return NextResponse.json(
-        { ok: false, code: e.code, error: e.message, retry: "verify",
-          note: "The collection may still have been taken. Check your balance before trying again." },
-        { status: e.status },
+        { ok: false, code: err?.code ?? "deposit_failed", error: err?.message ?? "Deposit failed",
+          depositId: localId,
+          note: uncertain ? "The collection may still have been taken. Check your balance before trying again." : undefined },
+        { status: err?.status ?? 502 },
       );
     }
-    return fail(e);
+  } catch (e) {
+    return NextResponse.json(
+      { ok: false, code: "server_error", error: e instanceof Error ? e.message : "Deposit failed" },
+      { status: 500 },
+    );
   }
 }
 
-/** Poll a deposit until its status is terminal. */
-export async function GET(req: Request) {
-  const id = new URL(req.url).searchParams.get("id") ?? "";
-  if (!id) return NextResponse.json({ ok: false, error: "id required" }, { status: 400 });
-  try {
-    return NextResponse.json({ ok: true, deposit: await getDeposit(id) }, { headers: { "cache-control": "no-store" } });
-  } catch (e) {
-    return fail(e);
-  }
+/** The caller's own deposits, newest first. */
+export async function GET() {
+  const gate = requireDb();
+  if (gate) return gate;
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ ok: false, code: "unauthenticated" }, { status: 401 });
+
+  await migrate();
+  const deposits = await db()`
+    select id::text, ntzs_deposit_id, amount_tzs, status, usdc_credited::text, created_at, settled_at
+      from capx.deposits where user_id = ${user.id}
+     order by created_at desc limit 25`;
+  return NextResponse.json({ ok: true, deposits }, { headers: { "cache-control": "no-store" } });
 }

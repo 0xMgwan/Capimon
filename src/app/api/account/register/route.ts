@@ -28,11 +28,11 @@ export async function POST(req: Request) {
     await migrate();
     const sql = db();
 
-    const existing = await sql<{ id: string }[]>`select id from users where email = ${email} limit 1`;
+    const existing = await sql<{ id: string }[]>`select id from capimon.users where email = ${email} limit 1`;
     if (existing.length) return bad("An account already exists for that email.", "email_taken", 409);
 
     const rows = await sql<{ id: string }[]>`
-      insert into users (email, password_hash, name, phone)
+      insert into capimon.users (email, password_hash, name, phone)
       values (${email}, ${await hashPassword(password)}, ${name}, ${phone})
       returning id`;
     const userId = rows[0].id;
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
       try {
         const u = await upsertUser({ externalId: userId, email, name: name ?? undefined });
         ntzsUserId = u.id;
-        await sql`update users set ntzs_user_id = ${ntzsUserId} where id = ${userId}`;
+        await sql`update capimon.users set ntzs_user_id = ${ntzsUserId} where id = ${userId}`;
       } catch (e) {
         // A missing identity is expected at this stage, not a failure to register.
         ntzsNote = e instanceof NtzsError ? e.message : "nTZS account will be created when you fund.";

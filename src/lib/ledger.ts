@@ -46,7 +46,7 @@ export async function record(entries: Entry[]) {
     await sql.begin(async (tx) => {
       for (const e of entries) {
         await tx`
-          insert into ledger_entries (user_id, kind, asset, amount, ref, metadata)
+          insert into capimon.ledger_entries (user_id, kind, asset, amount, ref, metadata)
           values (${e.userId}, ${e.kind}, ${e.asset}, ${e.amount}, ${e.ref ?? null},
                   ${sql.json((e.metadata ?? {}) as Record<string, string | number | boolean | null>)})`;
       }
@@ -65,7 +65,7 @@ export async function balances(userId: string): Promise<Balance[]> {
   await migrate();
   const rows = await db()<{ asset: string; amount: string }[]>`
     select asset, sum(amount)::text as amount
-      from ledger_entries
+      from capimon.ledger_entries
      where user_id = ${userId}
      group by asset
     having sum(amount) <> 0
@@ -77,7 +77,7 @@ export async function balanceOf(userId: string, asset: string) {
   await migrate();
   const rows = await db()<{ amount: string | null }[]>`
     select sum(amount)::text as amount
-      from ledger_entries
+      from capimon.ledger_entries
      where user_id = ${userId} and asset = ${asset}`;
   return Number(rows[0]?.amount ?? 0);
 }
@@ -89,7 +89,7 @@ export async function history(userId: string, limit = 100) {
       metadata: Record<string, unknown>; created_at: string }[]
   >`
     select id::text, kind, asset, amount::text, ref, metadata, created_at
-      from ledger_entries
+      from capimon.ledger_entries
      where user_id = ${userId}
      order by id desc
      limit ${limit}`;
@@ -104,7 +104,7 @@ export async function totalLiabilities() {
   await migrate();
   const rows = await db()<{ asset: string; amount: string }[]>`
     select asset, sum(amount)::text as amount
-      from ledger_entries
+      from capimon.ledger_entries
      group by asset
     having sum(amount) <> 0
      order by asset`;

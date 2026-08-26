@@ -16,7 +16,7 @@ export async function POST(req: Request) {
 
     await migrate();
     const rows = await db()<{ id: string; password_hash: string }[]>`
-      select id, password_hash from users where email = ${email} limit 1`;
+      select id, password_hash from capimon.users where email = ${email} limit 1`;
 
     // Same answer whether the email exists or the password is wrong, so this
     // cannot be used to enumerate accounts.

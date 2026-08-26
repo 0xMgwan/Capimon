@@ -56,7 +56,7 @@ export async function createSession(userId: string) {
   const sql = db();
   const token = randomBytes(32).toString("base64url");
   const expires = new Date(Date.now() + SESSION_DAYS * 864e5);
-  await sql`insert into sessions (token, user_id, expires_at) values (${token}, ${userId}, ${expires})`;
+  await sql`insert into capimon.sessions (token, user_id, expires_at) values (${token}, ${userId}, ${expires})`;
 
   const jar = await cookies();
   jar.set(SESSION_COOKIE, token, {
@@ -75,7 +75,7 @@ export async function destroySession() {
   if (token) {
     try {
       await migrate();
-      await db()`delete from sessions where token = ${token}`;
+      await db()`delete from capimon.sessions where token = ${token}`;
     } catch { /* the cookie still goes */ }
   }
   jar.delete(SESSION_COOKIE);
@@ -91,8 +91,8 @@ export async function currentUser(): Promise<SessionUser | null> {
     const rows = await db()<SessionUser[]>`
       select u.id, u.email, u.name, u.phone, u.country,
              u.ntzs_user_id as "ntzsUserId", u.kyc_status as "kycStatus"
-        from sessions s
-        join users u on u.id = s.user_id
+        from capimon.sessions s
+        join capimon.users u on u.id = s.user_id
        where s.token = ${token} and s.expires_at > now()
        limit 1`;
     return rows[0] ?? null;

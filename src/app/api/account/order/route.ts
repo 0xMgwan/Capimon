@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     await migrate();
     const sql = db();
     const orders = await sql<{ id: string }[]>`
-      insert into orders (user_id, side, symbol, usdc_amount, qty)
+      insert into capimon.orders (user_id, side, symbol, usdc_amount, qty)
       values (${user.id}, ${side}, ${asset.symbol},
               ${side === "buy" ? amount : null}, ${side === "sell" ? amount : null})
       returning id`;
@@ -72,14 +72,14 @@ export async function POST(req: Request) {
       );
 
       await sql`
-        update orders set status = 'settled', tx_hash = ${exec.txHash}, price = ${exec.price},
+        update capimon.orders set status = 'settled', tx_hash = ${exec.txHash}, price = ${exec.price},
                qty = ${exec.qty}, usdc_amount = ${exec.usdc}, settled_at = now()
          where id = ${orderId}`;
 
       return NextResponse.json({ ok: true, orderId, ...exec });
     } catch (e) {
       const message = e instanceof Error ? e.message : "execution failed";
-      await sql`update orders set status = 'failed', error = ${message} where id = ${orderId}`;
+      await sql`update capimon.orders set status = 'failed', error = ${message} where id = ${orderId}`;
       return NextResponse.json(
         { ok: false, code: "execution_failed", orderId, error: message,
           note: "Nothing was debited from your balance." },

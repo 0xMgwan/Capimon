@@ -45,8 +45,11 @@ export async function migrate() {
   if (!migrated) {
     migrated = (async () => {
       const sql = db();
+      // Everything lives in its own schema so CAPIMON can share a database with
+      // anything else without either side colliding.
+      await sql`create schema if not exists capimon`;
       await sql`
-        create table if not exists users (
+        create table if not exists capimon.users (
           id             uuid primary key default gen_random_uuid(),
           email          text not null unique,
           password_hash  text not null,
@@ -58,17 +61,17 @@ export async function migrate() {
           created_at     timestamptz not null default now()
         )`;
       await sql`
-        create table if not exists sessions (
+        create table if not exists capimon.sessions (
           token       text primary key,
-          user_id     uuid not null references users(id) on delete cascade,
+          user_id     uuid not null references capimon.users(id) on delete cascade,
           created_at  timestamptz not null default now(),
           expires_at  timestamptz not null
         )`;
-      await sql`create index if not exists sessions_user_idx on sessions(user_id)`;
+      await sql`create index if not exists sessions_user_idx on capimon.sessions(user_id)`;
       await sql`
-        create table if not exists ledger_entries (
+        create table if not exists capimon.ledger_entries (
           id           bigserial primary key,
-          user_id      uuid not null references users(id) on delete cascade,
+          user_id      uuid not null references capimon.users(id) on delete cascade,
           kind         text not null,
           asset        text not null,
           amount       numeric(38,8) not null,
@@ -76,13 +79,13 @@ export async function migrate() {
           metadata     jsonb not null default '{}'::jsonb,
           created_at   timestamptz not null default now()
         )`;
-      await sql`create index if not exists ledger_user_asset_idx on ledger_entries(user_id, asset)`;
+      await sql`create index if not exists ledger_user_asset_idx on capimon.ledger_entries(user_id, asset)`;
       // One row per external reference makes every money-moving write idempotent.
-      await sql`create unique index if not exists ledger_ref_idx on ledger_entries(ref) where ref is not null`;
+      await sql`create unique index if not exists ledger_ref_idx on capimon.ledger_entries(ref) where ref is not null`;
       await sql`
-        create table if not exists orders (
+        create table if not exists capimon.orders (
           id            uuid primary key default gen_random_uuid(),
-          user_id       uuid not null references users(id) on delete cascade,
+          user_id       uuid not null references capimon.users(id) on delete cascade,
           side          text not null,
           symbol        text not null,
           usdc_amount   numeric(38,6),
@@ -95,7 +98,7 @@ export async function migrate() {
           created_at    timestamptz not null default now(),
           settled_at    timestamptz
         )`;
-      await sql`create index if not exists orders_user_idx on orders(user_id, created_at desc)`;
+      await sql`create index if not exists orders_user_idx on capimon.orders(user_id, created_at desc)`;
     })().catch((e) => {
       migrated = null;
       throw e;

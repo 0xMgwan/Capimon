@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { wagmiConfig } from "@/lib/wallets";
 import { MarketsProvider } from "@/lib/useMarkets";
+import { CapimonAccountProvider } from "@/lib/useCapimonAccount";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
@@ -14,7 +15,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
-        <MarketsProvider>{children}</MarketsProvider>
+        <CapimonAccountProvider>
+          <MarketsProvider>{children}</MarketsProvider>
+        </CapimonAccountProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );

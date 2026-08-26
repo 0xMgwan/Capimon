@@ -6,6 +6,9 @@ import type { AssetMeta } from "@/lib/assets";
 import { useMarket, useMarkets } from "@/lib/useMarkets";
 import { PriceChart } from "./PriceChart";
 import { TradePanel } from "./TradePanel";
+import { CustodialTradePanel } from "./CustodialTradePanel";
+import { useCapimonAccount } from "@/lib/useCapimonAccount";
+import { useAccount } from "wagmi";
 import { Sparkline } from "./Sparkline";
 import { AssetLogo } from "./AssetLogo";
 import { Reveal } from "./Reveal";
@@ -13,6 +16,11 @@ import { compact, compactUsd, usd, short, ago } from "@/lib/format";
 
 export function AssetView({ asset }: { asset: AssetMeta }) {
   const { market, tick } = useMarket(asset.symbol);
+  const { account } = useCapimonAccount();
+  const { isConnected } = useAccount();
+  // A connected wallet always wins: if someone holds their own keys, we never
+  // quietly trade on their behalf instead.
+  const custodial = !isConnected && !!account;
   const { data, loading } = useMarkets();
   const [logo, setLogo] = useState<string | null>(null);
 
@@ -112,7 +120,9 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
 
         <div className="lg:sticky lg:top-32 lg:self-start">
           <Reveal delay={0.08}>
-            <TradePanel asset={asset} market={market} />
+            {custodial
+              ? <CustodialTradePanel asset={asset} market={market} />
+              : <TradePanel asset={asset} market={market} />}
           </Reveal>
 
           {peers.length > 0 && (

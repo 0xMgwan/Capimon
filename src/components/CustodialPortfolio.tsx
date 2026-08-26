@@ -1,0 +1,128 @@
+"use client";
+
+import Link from "next/link";
+import { useCapimonAccount } from "@/lib/useCapimonAccount";
+import { AssetLogo } from "./AssetLogo";
+import { Counter } from "./Counter";
+import { Reveal } from "./Reveal";
+import { UsdcIcon } from "./icons/Usdc";
+import { usd } from "@/lib/format";
+
+/** The book CAPIMON holds for a shilling-funded account. */
+export function CustodialPortfolio() {
+  const { account, signOut } = useCapimonAccount();
+  if (!account) return null;
+
+  const { cash, positions, equity, total, entries } = account;
+
+  return (
+    <div className="mx-auto max-w-[1400px] px-5 pb-24 pt-12 sm:px-8">
+      <Reveal>
+        <div className="flex flex-wrap items-end justify-between gap-6">
+          <div>
+            <div className="eyebrow">Portfolio</div>
+            <h1 className="display mt-3 text-[clamp(2rem,5vw,3.6rem)]">Your book.</h1>
+            <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
+              {account.user.email}
+              <span className="rounded-full surface px-2 py-0.5 text-[11px]">held by CAPIMON</span>
+              <button onClick={signOut} className="underline underline-offset-2 hover:text-[var(--fg)]">Sign out</button>
+            </p>
+          </div>
+          <div className="grid w-full grid-cols-3 gap-px overflow-hidden rounded-2xl bg-[var(--border)] lg:w-auto">
+            <Cell label="Total" value={<Counter value={total} format={usd} />} />
+            <Cell label="Shares" value={<Counter value={equity} format={usd} />} />
+            <Cell
+              label={<span className="inline-flex items-center gap-1.5"><UsdcIcon className="h-3.5 w-3.5" />Cash</span>}
+              value={<Counter value={cash} format={usd} />}
+            />
+          </div>
+        </div>
+      </Reveal>
+
+      <Reveal delay={0.06} className="mt-10">
+        {positions.length === 0 ? (
+          <div className="rounded-3xl border border-dashed hairline p-12 text-center">
+            <h2 className="font-[family-name:var(--font-display)] text-2xl font-medium tracking-[-0.04em]">
+              Nothing held yet
+            </h2>
+            <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-[var(--muted)]">
+              {cash > 0
+                ? `You have ${usd(cash)} ready to invest.`
+                : "Fund your account with mobile money to get started."}
+            </p>
+            <Link
+              href={cash > 0 ? "/markets" : "/join"}
+              className="mt-6 inline-block rounded-full bg-[var(--fg)] px-6 py-3 text-sm font-medium text-[var(--bg)]"
+            >
+              {cash > 0 ? "Browse markets →" : "Fund your account →"}
+            </Link>
+          </div>
+        ) : (
+          <div className="grid gap-2">
+            {positions.map((p) => (
+              <Link
+                key={p.symbol}
+                href={`/markets/${p.ticker.toLowerCase()}`}
+                className="flex items-center gap-3 rounded-2xl border hairline p-4 transition-colors hover:surface"
+              >
+                <AssetLogo logo={p.logo} ticker={p.ticker} color={p.color} size={40} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[15px] font-medium">{p.ticker}</div>
+                  <div className="tnum text-xs text-[var(--muted)]">
+                    {p.qty.toFixed(6)} @ {usd(p.price)}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="tnum text-[15px] font-medium">{usd(p.value)}</div>
+                  <div className={`tnum text-xs ${p.change >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                    {p.change >= 0 ? "+" : ""}{p.change.toFixed(2)}%
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </Reveal>
+
+      {entries.length > 0 && (
+        <Reveal delay={0.1} className="mt-10">
+          <div className="rounded-2xl border hairline">
+            <div className="border-b hairline px-4 py-3"><span className="eyebrow">Account activity</span></div>
+            <div className="divide-y divide-[var(--border)]">
+              {entries.slice(0, 12).map((e) => {
+                const amount = Number(e.amount);
+                return (
+                  <div key={e.id} className="flex items-center gap-3 px-4 py-3">
+                    <span className="rounded-full surface px-2 py-0.5 text-[10px] font-medium capitalize">{e.kind}</span>
+                    <span className="min-w-0 flex-1 text-sm">{e.asset}</span>
+                    <span className={`tnum shrink-0 text-sm ${amount >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                      {amount >= 0 ? "+" : ""}{amount.toFixed(e.asset === "USDC" ? 2 : 6)}
+                    </span>
+                    <span className="tnum hidden shrink-0 text-[11px] text-[var(--muted)] sm:block">
+                      {new Date(e.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </Reveal>
+      )}
+
+      <p className="mt-6 text-xs leading-relaxed text-[var(--muted)]">
+        CAPIMON holds these assets on your behalf and this ledger records what you are owed. Prefer
+        to hold your own keys? <Link href="/markets" className="underline underline-offset-2">Connect a wallet</Link> and
+        CAPIMON holds nothing.
+      </p>
+    </div>
+  );
+}
+
+function Cell({ label, value }: { label: React.ReactNode; value: React.ReactNode }) {
+  return (
+    <div className="bg-[var(--bg)] px-3 py-3 sm:px-5 sm:py-4">
+      <div className="eyebrow truncate">{label}</div>
+      <div className="tnum mt-1.5 text-base font-medium sm:text-lg">{value}</div>
+    </div>
+  );
+}

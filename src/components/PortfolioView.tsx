@@ -13,6 +13,8 @@ import { Counter } from "./Counter";
 import { Reveal } from "./Reveal";
 import { UsdcIcon } from "./icons/Usdc";
 import { CostBasis } from "./CostBasis";
+import { useCapimonAccount } from "@/lib/useCapimonAccount";
+import { CustodialPortfolio } from "./CustodialPortfolio";
 import { usd, compactUsd, short } from "@/lib/format";
 
 type Position = {
@@ -23,6 +25,7 @@ type Portfolio = { ok: boolean; positions: Position[]; equity: number; cash: num
 
 export function PortfolioView() {
   const { address: connected, isConnected } = useAccount();
+  const { account: custodial } = useCapimonAccount();
   const params = useSearchParams();
   // ?address=0x… opens any wallet read-only, without connecting one.
   const watched = params.get("address");
@@ -58,6 +61,10 @@ export function PortfolioView() {
     const id = setInterval(load, 20_000);
     return () => { alive = false; clearTimeout(first); clearInterval(id); };
   }, [address]);
+
+  // Signed into a custodial account and no wallet connected: that book is the
+  // one they mean.
+  if (!isConnected && !readOnly && custodial) return <CustodialPortfolio />;
 
   if (!isConnected && !readOnly) {
     return (

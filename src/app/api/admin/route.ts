@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { db, migrate, dbConfigured } from "@/lib/db";
 import { checkSolvency } from "@/lib/solvency";
-import { omnibusBalances } from "@/lib/omnibus";
-import { treasuryAddress, treasuryConfigured } from "@/lib/treasury";
+import { ntzsTreasury, capabilities, collectionRoute } from "@/lib/omnibus";
+import { treasuryAddress, treasuryConfigured, treasuryHoldings } from "@/lib/treasury";
 import { ntzsConfigured } from "@/lib/ntzs";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,7 @@ export async function GET(req: Request) {
     await migrate();
     const sql = db();
 
-    const [deposits, users, orders, totals] = await Promise.all([
+    const [deposits, users, orders, totals, holdingsByAsset, ledgerTotals, withdrawals] = await Promise.all([
       // Everything needed to match a CAPX row against its nTZS counterpart,
       // plus the identity CAPX holds for the depositor.
       sql`select d.id::text, d.amount_tzs, d.status, d.usdc_credited::text, d.phone,
@@ -55,16 +55,37 @@ export async function GET(req: Request) {
                  o.tx_hash, o.error, o.created_at, u.email
             from capx.orders o join capx.users u on u.id = o.user_id
            order by o.created_at desc limit 50`,
-      sql<{ users: number; pending: number; settled_tzs: string | null; credited_usdc: string | null }[]>`
+      sql<{ users: number; pending: number; settled_tzs: string | null; credited_usdc: string | null; settled_orders: number; failed_orders: number }[]>`
         select (select count(*) from capx.users)::int as users,
                (select count(*) from capx.deposits where status in ('pending','uncertain'))::int as pending,
-               (select sum(amount_tzs) from capx.deposits where status = 'settled')::text as settled_tzs,
-               (select sum(usdc_credited) from capx.deposits where status = 'settled')::text as credited_usdc`,
+               (select coalesce(sum(amount_tzs),0) from capx.deposits where status = 'settled')::text as settled_tzs,
+               (select coalesce(sum(usdc_credited),0) from capx.deposits where status = 'settled')::text as credited_usdc,
+               (select count(*) from capx.orders where status = 'settled')::int as settled_orders,
+               (select count(*) from capx.orders where status = 'failed')::int as failed_orders`,
+
+      // Shares owed to clients, aggregated per asset.
+      sql`select asset, sum(amount)::text as qty, count(distinct user_id)::int as holders
+            from capx.ledger_entries
+           where asset <> 'USDC' and asset <> 'TZS'
+           group by asset having sum(amount) <> 0
+           order by asset`,
+
+      sql`select asset, sum(amount)::text as total, count(*)::int as entries
+            from capx.ledger_entries group by asset order by asset`,
+
+      sql`select l.id::text, l.amount::text, l.ref, l.created_at, u.email
+            from capx.ledger_entries l join capx.users u on u.id = l.user_id
+           where l.kind = 'withdrawal' order by l.id desc limit 30`,
     ]);
 
     // Reported separately: an unreachable dependency is not a shortfall.
-    const solvency = treasuryConfigured ? await checkSolvency().catch(() => null) : null;
-    const omnibus = ntzsConfigured ? await omnibusBalances().catch(() => null) : null;
+    const [solvency, ntzs, onchain, caps, route] = await Promise.all([
+      treasuryConfigured ? checkSolvency().catch(() => null) : null,
+      ntzsConfigured ? ntzsTreasury().catch(() => null) : null,
+      treasuryConfigured ? treasuryHoldings().catch(() => null) : null,
+      ntzsConfigured ? capabilities().catch(() => null) : null,
+      ntzsConfigured ? collectionRoute().catch(() => null) : null,
+    ]);
 
     return NextResponse.json({
       ok: true,
@@ -80,9 +101,18 @@ export async function GET(req: Request) {
         settledTzs: Number(totals[0]?.settled_tzs ?? 0),
         creditedUsdc: Number(totals[0]?.credited_usdc ?? 0),
       },
+      totalsExtra: {
+        settledOrders: totals[0]?.settled_orders ?? 0,
+        failedOrders: totals[0]?.failed_orders ?? 0,
+      },
       solvency,
-      omnibus,
+      // The two sides of custody: shillings held at nTZS, shares and USDC held onchain.
+      ntzs,
+      onchain,
+      capabilities: caps,
+      collectionRoute: route,
       treasury: treasuryAddress(),
+      holdingsByAsset, ledgerTotals, withdrawals,
       deposits, users, orders,
     }, { headers: { "cache-control": "no-store" } });
   } catch (e) {

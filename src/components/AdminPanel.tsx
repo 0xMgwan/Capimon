@@ -8,7 +8,15 @@ type Admin = {
   solvency: { ok: boolean; totals: { owedUsd: number; heldUsd: number; shortfallUsd: number };
               assets: { asset: string; owed: number; held: number; covered: boolean }[];
               unavailable?: string } | null;
-  omnibus: { tzs: number; usdc: number } | null;
+  totalsExtra: { settledOrders: number; failedOrders: number };
+  ntzs: { available: true; source: string; tzs: number; usdc: number; walletAddress: string | null }
+      | { available: false; reason: string } | null;
+  onchain: { address: string; usdc: number; holdings: { asset: string; qty: number }[] } | null;
+  capabilities: Record<string, { available: boolean; detail?: string }> | null;
+  collectionRoute: string | null;
+  holdingsByAsset: { asset: string; qty: string; holders: number }[];
+  ledgerTotals: { asset: string; total: string; entries: number }[];
+  withdrawals: { id: string; email: string; amount: string; ref: string | null; created_at: string }[];
   treasury: string | null;
   reconciliation: { credited: string | null; ledger: string | null; deposits: number }[];
   deposits: { id: string; email: string; name: string | null; nida_number: string | null;
@@ -33,7 +41,7 @@ export function AdminPanel() {
   const [data, setData] = useState<Admin | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<"deposits" | "users" | "orders">("deposits");
+  const [tab, setTab] = useState<"deposits" | "users" | "orders" | "holdings" | "withdrawals">("deposits");
   const [openRow, setOpenRow] = useState<string | null>(null);
 
   const load = useCallback(async (t: string) => {
@@ -93,6 +101,8 @@ export function AdminPanel() {
     ["deposits", `Deposits (${data.deposits.length})`],
     ["users", `Users (${data.totals.users})`],
     ["orders", `Orders (${data.orders.length})`],
+    ["holdings", `Holdings (${data.holdingsByAsset?.length ?? 0})`],
+    ["withdrawals", `Withdrawals (${data.withdrawals?.length ?? 0})`],
   ] as const;
 
   return (
@@ -163,11 +173,71 @@ export function AdminPanel() {
         );
       })()}
 
-      <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-4">
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        {/* Shillings sit at nTZS; shares and USDC sit onchain. */}
+        <div className="rounded-2xl border hairline p-5">
+          <div className="eyebrow">Held at nTZS</div>
+          {!data.ntzs ? (
+            <p className="mt-2 text-sm text-[var(--muted)]">nTZS is not configured.</p>
+          ) : data.ntzs.available ? (
+            <>
+              <div className="tnum mt-2 text-2xl font-medium">{TZS(data.ntzs.tzs)}</div>
+              <div className="tnum mt-1 text-xs text-[var(--muted)]">
+                {usd(data.ntzs.usdc)} USDC · source: {data.ntzs.source}
+              </div>
+              {data.ntzs.walletAddress && (
+                <div className="tnum mt-1 truncate text-[11px] text-[var(--muted)]">{data.ntzs.walletAddress}</div>
+              )}
+            </>
+          ) : (
+            <p className="mt-2 text-xs leading-relaxed text-[#b45309]">Not readable — {data.ntzs.reason}</p>
+          )}
+          <div className="mt-3 border-t hairline pt-3 text-[11px] text-[var(--muted)]">
+            Collection route: <span className="text-[var(--fg)]">{data.collectionRoute ?? "unknown"}</span>
+            {data.capabilities && (
+              <span className="mt-1 flex flex-wrap gap-1.5">
+                {Object.entries(data.capabilities).map(([k, v]) => (
+                  <span key={k} title={v.detail}
+                    className={`rounded-full px-2 py-0.5 ${v.available
+                      ? "bg-[var(--color-up)]/10 text-[var(--color-up)]"
+                      : "surface text-[var(--muted)]"}`}>
+                    {k}
+                  </span>
+                ))}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border hairline p-5">
+          <div className="eyebrow">Held onchain</div>
+          {data.onchain ? (
+            <>
+              <div className="tnum mt-2 text-2xl font-medium">{usd(data.onchain.usdc)}</div>
+              <div className="tnum mt-1 truncate text-[11px] text-[var(--muted)]">{data.onchain.address}</div>
+              <div className="tnum mt-3 flex flex-wrap gap-1.5 text-[11px]">
+                {data.onchain.holdings.length === 0
+                  ? <span className="text-[var(--muted)]">No shares held</span>
+                  : data.onchain.holdings.map((h) => (
+                      <span key={h.asset} className="rounded-full surface px-2 py-0.5">
+                        {h.asset} {h.qty.toFixed(4)}
+                      </span>
+                    ))}
+              </div>
+            </>
+          ) : (
+            <p className="mt-2 text-sm text-[var(--muted)]">No treasury configured.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-6">
         <Cell label="Users" value={String(data.totals.users)} />
-        <Cell label="Pending deposits" value={String(data.totals.pendingDeposits)} />
+        <Cell label="Pending" value={String(data.totals.pendingDeposits)} />
         <Cell label="Collected" value={TZS(data.totals.settledTzs)} />
-        <Cell label="Omnibus nTZS" value={data.omnibus ? TZS(data.omnibus.tzs) : "—"} />
+        <Cell label="Credited" value={usd(data.totals.creditedUsdc)} />
+        <Cell label="Orders" value={String(data.totalsExtra?.settledOrders ?? 0)} />
+        <Cell label="Failed" value={String(data.totalsExtra?.failedOrders ?? 0)} />
       </div>
 
       <div className="mt-8 flex gap-1 rounded-full border hairline p-1">
@@ -185,6 +255,8 @@ export function AdminPanel() {
           <thead className="border-b hairline">
             <tr>{(tab === "deposits" ? ["User", "Amount", "Status", "Credited", "Phone", "When"]
                 : tab === "users" ? ["User", "National ID", "Phone", "Deposits", "Balance"]
+                : tab === "holdings" ? ["Asset", "Owed to clients", "Holders", "Onchain", "Covered"]
+                : tab === "withdrawals" ? ["User", "Amount", "Reference", "When"]
                 : ["User", "Side", "Asset", "Amount", "Status", "Tx"]).map((h, i) => (
               <th key={h} className={`px-3 py-3 text-[11px] font-medium uppercase tracking-wider text-[var(--muted)] ${i === 0 ? "text-left" : "text-right"}`}>{h}</th>
             ))}</tr>
@@ -257,6 +329,36 @@ export function AdminPanel() {
                   {u.deposits} · {TZS(u.settled_tzs)}
                 </td>
                 <td className="tnum px-3 py-3 text-right">{usd(Number(u.usdc_balance ?? 0))}</td>
+              </tr>
+            ))}
+            {tab === "holdings" && (data.holdingsByAsset ?? []).map((h) => {
+              const owed = Math.abs(Number(h.qty));
+              const held = data.onchain?.holdings.find((x) => x.asset === h.asset)?.qty ?? 0;
+              const covered = held + 1e-8 >= owed;
+              return (
+                <tr key={h.asset} className="border-b hairline last:border-0">
+                  <td className="px-3 py-3 font-medium">{h.asset}</td>
+                  <td className="tnum px-3 py-3 text-right">{owed.toFixed(6)}</td>
+                  <td className="tnum px-3 py-3 text-right">{h.holders}</td>
+                  <td className="tnum px-3 py-3 text-right">{held.toFixed(6)}</td>
+                  <td className="px-3 py-3 text-right">
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] ${covered
+                      ? "bg-[var(--color-up)]/10 text-[var(--color-up)]"
+                      : "bg-[var(--color-down)]/10 text-[var(--color-down)]"}`}>
+                      {covered ? "covered" : "short"}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+            {tab === "withdrawals" && (data.withdrawals ?? []).map((w) => (
+              <tr key={w.id} className="border-b hairline last:border-0">
+                <td className="px-3 py-3">{w.email}</td>
+                <td className="tnum px-3 py-3 text-right">{TZS(Math.abs(Number(w.amount)))}</td>
+                <td className="tnum px-3 py-3 text-right text-[11px] text-[var(--muted)]">{w.ref ?? "—"}</td>
+                <td className="tnum px-3 py-3 text-right text-[11px] text-[var(--muted)]">
+                  {new Date(w.created_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                </td>
               </tr>
             ))}
             {tab === "orders" && data.orders.map((o) => (

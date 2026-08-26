@@ -36,25 +36,8 @@ export function CustodialPortfolio() {
         </div>
       </Reveal>
 
-      <Reveal delay={0.06} className="mt-10">
-        {positions.length === 0 ? (
-          <div className="rounded-3xl border border-dashed hairline p-12 text-center">
-            <h2 className="font-[family-name:var(--font-display)] text-2xl font-medium tracking-[-0.04em]">
-              Nothing held yet
-            </h2>
-            <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-[var(--muted)]">
-              {tzs > 0
-                ? `You have ${Math.round(tzs).toLocaleString()} TZS ready to invest.`
-                : "Fund your account with mobile money to get started."}
-            </p>
-            <Link
-              href={tzs > 0 ? "/markets" : "/join"}
-              className="mt-6 inline-block rounded-full bg-[var(--fg)] px-6 py-3 text-sm font-medium text-[var(--bg)]"
-            >
-              {tzs > 0 ? "Browse markets →" : "Fund your account →"}
-            </Link>
-          </div>
-        ) : (
+      {positions.length > 0 && (
+        <Reveal delay={0.06} className="mt-10">
           <div className="grid gap-2">
             {positions.map((p) => (
               <Link
@@ -78,8 +61,8 @@ export function CustodialPortfolio() {
               </Link>
             ))}
           </div>
-        )}
-      </Reveal>
+        </Reveal>
+      )}
 
       <WalletSection />
 

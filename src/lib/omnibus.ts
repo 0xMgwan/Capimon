@@ -1,5 +1,5 @@
 import "server-only";
-import { upsertUser, getUser, probeCapabilities, type Capability } from "./ntzs";
+import { upsertUser, getUser, rampBalance, probeCapabilities, type Capability } from "./ntzs";
 
 /**
  * The single nTZS account CAPX collects into.
@@ -39,6 +39,36 @@ export async function omnibusBalances() {
   const id = await omnibusUserId();
   const u = await getUser(id);
   return { id, tzs: Number(u.balanceTzs ?? 0), usdc: Number(u.balanceUsdc ?? 0), walletAddress: u.walletAddress ?? null };
+}
+
+/**
+ * Whatever nTZS-side balance can be read, without assuming which account holds
+ * it. Reported as unavailable rather than zero when it cannot be read — a
+ * missing reading and an empty treasury are very different facts.
+ */
+export async function ntzsTreasury(): Promise<
+  { available: true; source: "omnibus" | "ramp-float"; tzs: number; usdc: number; walletAddress: string | null }
+  | { available: false; reason: string }
+> {
+  const caps = await capabilities();
+  if (caps.wallets.available) {
+    try {
+      const b = await omnibusBalances();
+      return { available: true, source: "omnibus", tzs: b.tzs, usdc: b.usdc, walletAddress: b.walletAddress };
+    } catch (e) {
+      return { available: false, reason: e instanceof Error ? e.message : "omnibus read failed" };
+    }
+  }
+  if (caps.ramp.available) {
+    try {
+      const b = await rampBalance();
+      return { available: true, source: "ramp-float", tzs: 0,
+        usdc: Number(b.balance ?? b.usdc ?? 0), walletAddress: null };
+    } catch (e) {
+      return { available: false, reason: e instanceof Error ? e.message : "ramp balance read failed" };
+    }
+  }
+  return { available: false, reason: "No nTZS balance is readable with this key's capabilities." };
 }
 
 /**

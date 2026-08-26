@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createDeposit, rampQuote, rampOnramp, NtzsError, ntzsConfigured } from "@/lib/ntzs";
 import { currentUser } from "@/lib/auth";
 import { db, migrate } from "@/lib/db";
-import { omnibusUserId, collectionRoute } from "@/lib/omnibus";
+import { omnibusUserId, collectionRoute, capabilities } from "@/lib/omnibus";
 import { requireDb, bad, boom, notConfigured } from "@/lib/apiHelpers";
 
 export const dynamic = "force-dynamic";
@@ -57,14 +57,42 @@ export async function POST(req: Request) {
       }
 
       if (route === "treasury") {
-        // No userId: the collection lands in the partner treasury.
-        const deposit = await createDeposit({ amountTzs, phoneNumber });
+        /*
+         * The published spec makes userId optional and documents omitting it as
+         * the way to collect into the partner treasury. The deployed API
+         * disagrees and rejects the call as "userId and amountTzs are required",
+         * so try the documented shape and fall back to the omnibus wallet when
+         * the deployment insists on a user. The deployment wins over the spec.
+         */
+        let deposit: { id: string; status: string } | null = null;
+        let usedRoute = "treasury";
+        try {
+          deposit = await createDeposit({ amountTzs, phoneNumber });
+        } catch (e) {
+          const err = e as NtzsError;
+          const wantsUser = /userId/i.test(err?.message ?? "");
+          if (!wantsUser) throw e;
+
+          const caps = await capabilities();
+          if (!caps.wallets.available) {
+            await sql`update capx.deposits set status = 'failed',
+                      error = 'treasury collection rejected; wallets not granted' where id = ${localId}`;
+            return NextResponse.json(
+              { ok: false, code: "treasury_collection_unsupported",
+                error: "nTZS is rejecting treasury collection and this key cannot create a user wallet either. Either enable the 'wallets' capability, or have nTZS accept /deposits without a userId as its own documentation describes." },
+              { status: 503 },
+            );
+          }
+          deposit = await createDeposit({ userId: await omnibusUserId(), amountTzs, phoneNumber });
+          usedRoute = "omnibus-wallet";
+        }
+
         await sql`update capx.deposits
                      set ntzs_deposit_id = ${String(deposit.id)},
-                         metadata = metadata || ${sql.json({ route: "treasury" })}
+                         metadata = metadata || ${sql.json({ route: usedRoute })}
                    where id = ${localId}`;
         return NextResponse.json({
-          ok: true, depositId: localId, route: "treasury", status: deposit.status ?? "submitted",
+          ok: true, depositId: localId, route: usedRoute, status: deposit.status ?? "submitted",
           note: "Approve the prompt on your phone. Your balance updates once it settles.",
         });
       }

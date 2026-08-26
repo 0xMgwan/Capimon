@@ -27,19 +27,23 @@ export async function POST(req: Request) {
     const user = await currentUser();
     if (!user) return NextResponse.json({ ok: false, code: "unauthenticated" }, { status: 401 });
 
-    // Refuse to trade at all if client assets are not fully backed. A shortfall
-    // must never be deepened by another order.
-    try {
-      await assertSolvent();
-    } catch (e) {
-      return NextResponse.json(
-        { ok: false, code: "trading_paused", error: e instanceof Error ? e.message : "Trading is paused." },
-        { status: 503 },
-      );
-    }
-
     const body = await req.json();
     const side = body.side === "sell" ? "sell" : "buy";
+
+    // Gate buys, never sells. A buy spends USDC and can deepen a shortfall, so
+    // it must not run against under-backed holdings. A sell does the opposite —
+    // it returns shares to USDC and can only improve backing — so blocking it
+    // would trap a customer's money behind a shortfall they are trying to exit.
+    if (side === "buy") {
+      try {
+        await assertSolvent();
+      } catch (e) {
+        return NextResponse.json(
+          { ok: false, code: "trading_paused", error: e instanceof Error ? e.message : "Trading is paused." },
+          { status: 503 },
+        );
+      }
+    }
     const asset = BY_SYMBOL[String(body.symbol ?? "").toLowerCase()];
     const amount = Number(body.amount);
     // A buy is denominated in the currency the account actually holds: a

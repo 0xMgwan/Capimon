@@ -69,6 +69,15 @@ export async function GET() {
       c.capabilities = { error: e instanceof Error ? e.message : "probe failed" };
     }
 
+    // Raw ramp balance, so the float's real field names are visible — solvency
+    // must count this USDC as backing and had been reading it as zero.
+    try {
+      const { rampBalance } = await import("@/lib/ntzs");
+      c.rampBalanceRaw = await rampBalance();
+    } catch (e) {
+      c.rampBalanceRaw = { error: e instanceof Error ? e.message : "unavailable" };
+    }
+
     // The omnibus needs an actual wallet for deposits to land and for buys to
     // swap — a user record alone is rejected. Report readiness (a boolean, not
     // the address) so a setup gap is visible before someone tries to deposit.

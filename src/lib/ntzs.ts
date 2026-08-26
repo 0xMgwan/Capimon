@@ -120,6 +120,26 @@ export async function upsertUser(input: {
   return call<NtzsUser>("/api/v1/users", { method: "POST", body: input, idempotent: true });
 }
 
+/**
+ * Creates a partner sub-user that is provisioned with a spendable wallet.
+ *
+ * `/api/v1/users` registers a record but does not always give it a wallet, and
+ * a deposit into a walletless user is rejected ("User has no wallet"). The
+ * partners endpoint is the one that provisions the wallet the omnibus needs to
+ * hold shillings and to swap and transfer from. Idempotent on externalId, so it
+ * cannot create a second omnibus.
+ */
+export async function createPartnerUser(input: {
+  externalId: string;
+  email: string;
+  name?: string;
+  phone?: string;
+  nidaNumber?: string;
+  country?: string;
+}) {
+  return call<NtzsUser>("/api/v1/partners/users", { method: "POST", body: input, idempotent: true });
+}
+
 export async function getUser(id: string) {
   return call<NtzsUser>(`/api/v1/users/${encodeURIComponent(id)}`);
 }

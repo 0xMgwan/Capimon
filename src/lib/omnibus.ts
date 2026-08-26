@@ -1,5 +1,5 @@
 import "server-only";
-import { upsertUser, getUser, rampBalance, probeCapabilities, type Capability } from "./ntzs";
+import { upsertUser, createPartnerUser, getUser, rampBalance, probeCapabilities, NtzsError, type Capability } from "./ntzs";
 
 /**
  * The single nTZS account CAPX collects into.
@@ -26,12 +26,48 @@ export async function omnibusUserId(): Promise<string> {
   if (cached) return cached;
   if (!inflight) {
     inflight = (async () => {
-      const user = await upsertUser({ externalId: OMNIBUS_EXTERNAL_ID, email: OMNIBUS_EMAIL, name: "CAPX Treasury" });
-      cached = user.id;
-      return user.id;
+      const id = await provisionOmnibus();
+      cached = id;
+      return id;
     })().finally(() => { inflight = null; });
   }
   return inflight;
+}
+
+/**
+ * Ensures the omnibus exists AND has a wallet — the deposit rail rejects a
+ * walletless user. Provisions through the partners endpoint (which gives a
+ * wallet) and falls back to the plain users endpoint only if that route is not
+ * present. A missing wallet after both is a setup problem worth naming clearly
+ * rather than surfacing later as an opaque "User has no wallet" on a deposit.
+ */
+async function provisionOmnibus(): Promise<string> {
+  const input = { externalId: OMNIBUS_EXTERNAL_ID, email: OMNIBUS_EMAIL, name: "CAPX Treasury" };
+
+  let user;
+  try {
+    user = await createPartnerUser(input);
+  } catch (e) {
+    // 404/405 → the partners endpoint is not on this deployment; fall back.
+    const status = (e as NtzsError)?.status;
+    if (status === 404 || status === 405) user = await upsertUser(input);
+    else throw e;
+  }
+
+  // A freshly created wallet may not report its address on the create response;
+  // confirm against a read before trusting it.
+  if (!user.walletAddress) {
+    const fresh = await getUser(user.id).catch(() => null);
+    if (fresh && !fresh.walletAddress) {
+      throw new NtzsError(
+        "omnibus_no_wallet",
+        "The CAPX omnibus nTZS account has no wallet. Create it once in the nTZS dashboard (or via " +
+        "POST /api/v1/partners/users) and set NTZS_OMNIBUS_USER_ID to its id, then redeploy.",
+        503,
+      );
+    }
+  }
+  return user.id;
 }
 
 /** Live nTZS and USDC balances sitting in the omnibus account. */

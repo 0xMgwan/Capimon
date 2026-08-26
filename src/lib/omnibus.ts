@@ -58,14 +58,18 @@ export async function capabilities(force = false) {
   return caps;
 }
 
-export type CollectionRoute = "ramp" | "omnibus-wallet" | "none";
+export type CollectionRoute = "treasury" | "ramp" | "omnibus-wallet" | "none";
 
-/** Ramp is preferred: fewer moving parts, and no identity perimeter to inherit. */
+/**
+ * Treasury collection is preferred: it needs only `collections`, keeps the money
+ * in the account CAPX already controls, and leaves attribution in the CAPX
+ * ledger where it belongs. Ramp is the fallback for keys without `collections`,
+ * and the per-user wallet path is only used where `wallets` was granted.
+ */
 export async function collectionRoute(): Promise<CollectionRoute> {
   const caps = await capabilities();
+  if (caps.collections.available) return "treasury";
   if (caps.ramp.available) return "ramp";
-  // The wallet path still collects through /deposits, so it needs `collections`
-  // as well as `wallets` — having one without the other gets no further.
-  if (caps.wallets.available && caps.collections.available) return "omnibus-wallet";
+  if (caps.wallets.available) return "omnibus-wallet";
   return "none";
 }

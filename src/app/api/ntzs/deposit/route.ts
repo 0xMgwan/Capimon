@@ -51,9 +51,22 @@ export async function POST(req: Request) {
                   error = 'no collection capability' where id = ${localId}`;
         return NextResponse.json(
           { ok: false, code: "capability_missing",
-            error: "Deposits are not enabled for this deployment yet. The nTZS key needs either the 'ramp' capability (mobile money straight to USDC) or 'wallets'. Request one in the nTZS developer dashboard." },
+            error: "Deposits are not enabled for this deployment yet. The nTZS key needs the 'collections' capability. Request it in the nTZS developer dashboard." },
           { status: 503 },
         );
+      }
+
+      if (route === "treasury") {
+        // No userId: the collection lands in the partner treasury.
+        const deposit = await createDeposit({ amountTzs, phoneNumber });
+        await sql`update capx.deposits
+                     set ntzs_deposit_id = ${String(deposit.id)},
+                         metadata = metadata || ${sql.json({ route: "treasury" })}
+                   where id = ${localId}`;
+        return NextResponse.json({
+          ok: true, depositId: localId, route: "treasury", status: deposit.status ?? "submitted",
+          note: "Approve the prompt on your phone. Your balance updates once it settles.",
+        });
       }
 
       if (route === "ramp") {

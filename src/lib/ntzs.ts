@@ -126,13 +126,57 @@ export async function getUser(id: string) {
 
 /* ------------------------------------------------------------- deposits -- */
 
-/** Mobile money in; nTZS mints 1:1. Minimum 500 TZS, whole shillings only. */
-export async function createDeposit(input: { userId: string; amountTzs: number; phoneNumber: string }) {
+/**
+ * Mobile money in; nTZS mints 1:1. Minimum 500 TZS, whole shillings only.
+ *
+ * `userId` is optional on purpose: omit it and the collection lands in the
+ * partner treasury rather than a per-user wallet. Every account has a treasury
+ * with no grant needed, so that is the path when `wallets` is not held — which
+ * suits an omnibus model anyway, since CAPX attributes deposits in its own
+ * ledger rather than upstream.
+ */
+export async function createDeposit(input: { userId?: string; amountTzs: number; phoneNumber: string }) {
+  const body: Record<string, unknown> = {
+    amountTzs: Math.round(input.amountTzs),
+    phoneNumber: input.phoneNumber,
+    paymentMethod: "mobile_money",
+  };
+  if (input.userId) body.userId = input.userId;
   return call<{ id: string; status: string; [k: string]: unknown }>("/api/v1/deposits", {
+    method: "POST", body, idempotent: true,
+  });
+}
+
+/* --------------------------------------------------------- disbursements -- */
+
+/** Price a payout before executing it. `amountTzs` is what the recipient gets. */
+export async function withdrawalQuote(input: { amountTzs: number; phoneNumber: string }) {
+  return call<{ quoteId?: string | null; recipientName?: string | null; totalFeeTzs?: number;
+                [k: string]: unknown }>("/api/v1/withdrawals/quote", {
+    method: "POST", body: { amountTzs: Math.round(input.amountTzs), phoneNumber: input.phoneNumber },
+  });
+}
+
+/** Execute against a quote. Terms must match it exactly or it is rejected. */
+export async function createWithdrawal(input: { quoteId: string; amountTzs: number; phoneNumber: string }) {
+  return call<{ id?: string; status?: string; [k: string]: unknown }>("/api/v1/withdrawals", {
     method: "POST",
-    body: { ...input, amountTzs: Math.round(input.amountTzs), paymentMethod: "mobile_money" },
+    body: { quoteId: input.quoteId, amountTzs: Math.round(input.amountTzs), phoneNumber: input.phoneNumber },
     idempotent: true,
   });
+}
+
+export async function getWithdrawal(id: string) {
+  return call<{ id?: string; status?: string; [k: string]: unknown }>(
+    `/api/v1/withdrawals/${encodeURIComponent(id)}`,
+  );
+}
+
+/** Resolve the registered name behind a number. Fail-soft: null is not an error. */
+export async function lookupRecipient(phoneNumber: string) {
+  return call<{ name?: string | null }>("/api/v1/lookup/recipient-name", {
+    method: "POST", body: { phoneNumber },
+  }).catch(() => ({ name: null }));
 }
 
 export async function getDeposit(id: string) {

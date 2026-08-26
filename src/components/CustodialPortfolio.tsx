@@ -5,7 +5,6 @@ import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { AssetLogo } from "./AssetLogo";
 import { Counter } from "./Counter";
 import { Reveal } from "./Reveal";
-import { UsdcIcon } from "./icons/Usdc";
 import { WalletSection } from "./WalletSection";
 import { usd } from "@/lib/format";
 
@@ -14,7 +13,7 @@ export function CustodialPortfolio() {
   const { account, signOut } = useCapimonAccount();
   if (!account) return null;
 
-  const { cash, positions, equity, total } = account;
+  const { tzs, positions, equity, total } = account;
 
   return (
     <div className="mx-auto max-w-[1400px] px-5 pb-24 pt-12 sm:px-8">
@@ -30,12 +29,9 @@ export function CustodialPortfolio() {
             </p>
           </div>
           <div className="grid w-full grid-cols-3 gap-px overflow-hidden rounded-2xl bg-[var(--border)] lg:w-auto">
-            <Cell label="Total" value={<Counter value={total} format={usd} />} />
             <Cell label="Shares" value={<Counter value={equity} format={usd} />} />
-            <Cell
-              label={<span className="inline-flex items-center gap-1.5"><UsdcIcon className="h-3.5 w-3.5" />Cash</span>}
-              value={<Counter value={cash} format={usd} />}
-            />
+            <Cell label="Cash" value={<Counter value={tzs} format={(n) => `${Math.round(n).toLocaleString()} TZS`} />} />
+            <Cell label="Total value" value={<Counter value={total} format={usd} />} />
           </div>
         </div>
       </Reveal>
@@ -47,15 +43,15 @@ export function CustodialPortfolio() {
               Nothing held yet
             </h2>
             <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-[var(--muted)]">
-              {cash > 0
-                ? `You have ${usd(cash)} ready to invest.`
+              {tzs > 0
+                ? `You have ${Math.round(tzs).toLocaleString()} TZS ready to invest.`
                 : "Fund your account with mobile money to get started."}
             </p>
             <Link
-              href={cash > 0 ? "/markets" : "/join"}
+              href={tzs > 0 ? "/markets" : "/join"}
               className="mt-6 inline-block rounded-full bg-[var(--fg)] px-6 py-3 text-sm font-medium text-[var(--bg)]"
             >
-              {cash > 0 ? "Browse markets →" : "Fund your account →"}
+              {tzs > 0 ? "Browse markets →" : "Fund your account →"}
             </Link>
           </div>
         ) : (

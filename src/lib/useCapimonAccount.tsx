@@ -10,6 +10,8 @@ export type CustodialPosition = {
 export type CustodialAccount = {
   user: { id: string; email: string; username: string | null; name: string | null; phone: string | null; ntzsUserId: string | null; kycStatus: string };
   cash: number;
+  /** Shilling balance — what a Tanzanian account actually holds. */
+  tzs: number;
   positions: CustodialPosition[];
   equity: number;
   total: number;

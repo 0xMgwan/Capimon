@@ -22,9 +22,11 @@ export async function GET() {
       history(user.id, 50),
     ]);
 
+    // Shilling accounts hold TZS; a legacy USDC balance is still shown.
+    const tzs = bal.find((b) => b.asset === "TZS")?.amount ?? 0;
     const cash = bal.find((b) => b.asset === "USDC")?.amount ?? 0;
     const positions = bal
-      .filter((b) => b.asset !== "USDC")
+      .filter((b) => b.asset !== "USDC" && b.asset !== "TZS")
       .map((b) => {
         const m = markets.find((x) => x.symbol === b.asset);
         const price = m?.price ?? 0;
@@ -40,7 +42,7 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       user,
-      cash, positions, equity, total: equity + cash,
+      cash, tzs, positions, equity, total: equity + cash,
       entries,
       capabilities: { ntzs: ntzsConfigured, trading: treasuryConfigured },
     }, { headers: { "cache-control": "no-store" } });

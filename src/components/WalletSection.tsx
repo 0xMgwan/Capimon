@@ -14,6 +14,7 @@ type Deposit = {
 
 const TZS = (n: number) => `${Math.round(n).toLocaleString()} TZS`;
 const PRESETS = [2_000, 10_000, 50_000, 100_000];
+const MIN_WITHDRAW = 5_000;
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Waiting for your approval",
@@ -37,7 +38,9 @@ export function WalletSection() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
+  const [panel, setPanel] = useState<"none" | "deposit" | "withdraw">("none");
+  const [wdAmount, setWdAmount] = useState(10_000);
+  const [quote, setQuote] = useState<{ quoteId: string; feeTzs: number; recipientName: string | null } | null>(null);
 
   const loadDeposits = useCallback(async () => {
     try {
@@ -69,7 +72,7 @@ export function WalletSection() {
       const j = await r.json();
       if (!j.ok) throw new Error(j.error);
       setNotice(j.note ?? "Approve the prompt on your phone.");
-      setOpen(false);
+      setPanel("none");
       await loadDeposits();
       // Settlement is a background pass; nudge it while the user is watching.
       for (let i = 0; i < 10; i++) {
@@ -79,6 +82,42 @@ export function WalletSection() {
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Deposit failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const priceWithdraw = async () => {
+    setBusy(true); setError(null); setNotice(null);
+    try {
+      const r = await fetch(`/api/ntzs/withdraw?amountTzs=${wdAmount}&phoneNumber=${encodeURIComponent(phoneToUse)}`,
+        { cache: "no-store" });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error);
+      setQuote({ quoteId: j.quoteId, feeTzs: j.feeTzs ?? 0, recipientName: j.recipientName ?? null });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not price that withdrawal");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmWithdraw = async () => {
+    if (!quote) return;
+    setBusy(true); setError(null);
+    try {
+      const r = await fetch("/api/ntzs/withdraw", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ quoteId: quote.quoteId, amountTzs: wdAmount, phoneNumber: phoneToUse }),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.note ? `${j.error} ${j.note}` : j.error);
+      setNotice(j.note ?? "Withdrawal sent.");
+      setQuote(null); setPanel("none");
+      await Promise.all([refresh(), loadDeposits()]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Withdrawal failed");
     } finally {
       setBusy(false);
     }
@@ -95,31 +134,41 @@ export function WalletSection() {
 
       <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,380px)_1fr]">
         <div className="rounded-3xl border hairline p-5">
-          <div className="eyebrow flex items-center gap-1.5">
-            <UsdcIcon className="h-3.5 w-3.5" /> Available to invest
-          </div>
-          <div className="tnum mt-2 text-3xl font-medium tracking-tight">{usd(account.cash)}</div>
-          <div className="mt-1 text-[11px] text-[var(--muted)]">
-            {usd(account.equity)} in shares · {usd(account.total)} total
+          <div className="eyebrow">Available to invest</div>
+          <div className="tnum mt-2 text-3xl font-medium tracking-tight">{TZS(account.tzs)}</div>
+          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--muted)]">
+            {usd(account.equity)} in shares
+            {account.cash > 0 && (
+              <>· <UsdcIcon className="h-3 w-3" /> {usd(account.cash)}</>
+            )}
           </div>
 
           <div className="mt-5 grid gap-2">
             <button
-              onClick={() => setOpen((o) => !o)}
+              onClick={() => setPanel((p) => (p === "deposit" ? "none" : "deposit"))}
               className="w-full rounded-full bg-[var(--fg)] py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95"
             >
-              {open ? "Cancel" : "Add money"}
+              {panel === "deposit" ? "Cancel" : "Add money"}
             </button>
-            <Link
-              href="/markets"
-              className="w-full rounded-full border hairline py-3 text-center text-sm font-medium transition-colors hover:surface"
-            >
-              Buy shares →
-            </Link>
+            <div className="grid grid-cols-2 gap-2">
+              <Link
+                href="/markets"
+                className="rounded-full border hairline py-3 text-center text-sm font-medium transition-colors hover:surface"
+              >
+                Buy shares
+              </Link>
+              <button
+                onClick={() => { setPanel((p) => (p === "withdraw" ? "none" : "withdraw")); setQuote(null); }}
+                disabled={account.tzs < MIN_WITHDRAW}
+                className="rounded-full border hairline py-3 text-sm font-medium transition-colors hover:surface disabled:opacity-40"
+              >
+                {panel === "withdraw" ? "Cancel" : "Withdraw"}
+              </button>
+            </div>
           </div>
 
           <AnimatePresence initial={false}>
-            {open && (
+            {panel === "deposit" && (
               <motion.div
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
@@ -163,6 +212,68 @@ export function WalletSection() {
                     {busy ? "Sending prompt…" : `Deposit ${TZS(amountTzs)}`}
                   </button>
                   <p className="mt-2 text-[11px] text-[var(--muted)]">Minimum 500 TZS.</p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence initial={false}>
+            {panel === "withdraw" && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                className="overflow-hidden"
+              >
+                <div className="mt-4 border-t hairline pt-4">
+                  <div className="eyebrow">Send to mobile money</div>
+                  <input
+                    value={String(wdAmount)}
+                    onChange={(e) => { setWdAmount(Number(e.target.value.replace(/\D/g, "")) || 0); setQuote(null); }}
+                    inputMode="numeric"
+                    aria-label="Amount to withdraw"
+                    className="tnum mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+                  />
+                  <input
+                    value={phoneToUse}
+                    onChange={(e) => { setPhone(e.target.value); setQuote(null); }}
+                    inputMode="numeric" placeholder="Mobile money number"
+                    className="mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+                  />
+
+                  {quote ? (
+                    <div className="mt-3 rounded-xl surface p-3 text-xs">
+                      <div className="flex justify-between gap-3">
+                        <span className="text-[var(--muted)]">Sending to</span>
+                        <span className="truncate">{quote.recipientName ?? phoneToUse}</span>
+                      </div>
+                      <div className="tnum mt-1.5 flex justify-between gap-3">
+                        <span className="text-[var(--muted)]">Fee</span><span>{TZS(quote.feeTzs)}</span>
+                      </div>
+                      <div className="tnum mt-1.5 flex justify-between gap-3 border-t hairline pt-1.5">
+                        <span className="text-[var(--muted)]">They receive</span><span>{TZS(wdAmount)}</span>
+                      </div>
+                      <button
+                        onClick={confirmWithdraw}
+                        disabled={busy}
+                        className="mt-3 w-full rounded-full bg-[var(--fg)] py-3 text-sm font-medium text-[var(--bg)] disabled:opacity-50"
+                      >
+                        {busy ? "Sending…" : "Confirm withdrawal"}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={priceWithdraw}
+                      disabled={busy || wdAmount < MIN_WITHDRAW || !phoneToUse || wdAmount > account.tzs}
+                      className="mt-3 w-full rounded-full bg-[var(--fg)] py-3 text-sm font-medium text-[var(--bg)] disabled:opacity-50"
+                    >
+                      {busy ? "Pricing…" : "Continue"}
+                    </button>
+                  )}
+                  <p className="mt-2 text-[11px] text-[var(--muted)]">
+                    Minimum {MIN_WITHDRAW.toLocaleString()} TZS. The fee is quoted by the network, not by CAPX.
+                  </p>
                 </div>
               </motion.div>
             )}

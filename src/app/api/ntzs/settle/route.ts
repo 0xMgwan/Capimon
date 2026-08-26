@@ -68,6 +68,23 @@ export async function POST() {
         continue;
       }
 
+      // Treasury collection is the ordinary path: shillings land in the partner
+      // treasury and the account is credited in shillings. Nothing is converted
+      // here — the user holds TZS and the swap happens when they buy, so the
+      // rate they get is the rate at the moment they invest.
+      if (d.metadata?.route === "treasury" || !d.metadata?.route) {
+        await record([
+          { userId: d.user_id, kind: "deposit", asset: "TZS", amount: d.amount_tzs.toString(),
+            ref: `deposit:${d.id}`,
+            metadata: { ntzsDepositId: d.ntzs_deposit_id, route: "treasury" } },
+        ]);
+        await sql`update capx.deposits
+                     set status = 'settled', settled_at = now()
+                   where id = ${d.id}`;
+        results.push({ id: d.id, outcome: `credited ${d.amount_tzs.toLocaleString()} TZS` });
+        continue;
+      }
+
       // Ramp settles straight to USDC, so there is nothing to convert. The
       // wallet route lands in shillings and still needs the swap and transfer.
       let usdc = 0;

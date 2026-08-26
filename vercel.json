@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/ntzs/settle",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

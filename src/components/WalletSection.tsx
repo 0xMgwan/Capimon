@@ -19,11 +19,13 @@ const MIN_WITHDRAW = 5_000;
 const presetsFor = (min: number) => [min, min * 4, min * 10, min * 20].map((n) => Math.round(n / 500) * 500);
 
 const STATUS_LABEL: Record<string, string> = {
-  pending: "Waiting for your approval",
+  pending: "Waiting for payment",
   uncertain: "Checking with the network",
   settled: "Added to your balance",
   failed: "Not completed",
 };
+
+const IN_FLIGHT = new Set(["pending", "uncertain"]);
 
 /**
  * The wallet a shilling-funded account actually has: what is available, how to
@@ -37,6 +39,7 @@ export function WalletSection() {
   const [deposits, setDeposits] = useState<Deposit[]>([]);
   const [amountTzs, setAmountTzs] = useState(0);
   const [phone, setPhone] = useState("");
+  const [method, setMethod] = useState<"mobile_money" | "bank_transfer">("mobile_money");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -54,11 +57,21 @@ export function WalletSection() {
     }
   }, []);
 
+  const pendingCount = deposits.filter((d) => IN_FLIGHT.has(d.status)).length;
+
   useEffect(() => {
-    const first = setTimeout(loadDeposits, 0);
-    const id = setInterval(loadDeposits, 20_000);
-    return () => { clearTimeout(first); clearInterval(id); };
-  }, [loadDeposits]);
+    let alive = true;
+    const tick = async () => {
+      if (!alive) return;
+      await loadDeposits();
+      await refresh();
+    };
+    const first = setTimeout(tick, 0);
+    // Watch closely while something is in flight, idle otherwise. The server
+    // credits it either way — this only decides how soon the screen catches up.
+    const id = setInterval(tick, pendingCount > 0 ? 6_000 : 30_000);
+    return () => { alive = false; clearTimeout(first); clearInterval(id); };
+  }, [loadDeposits, refresh, pendingCount]);
 
   if (!account) return null;
   const phoneToUse = phone || account.user.phone || "";
@@ -72,19 +85,13 @@ export function WalletSection() {
       const r = await fetch("/api/ntzs/deposit", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ amountTzs: amount, phoneNumber: phoneToUse }),
+        body: JSON.stringify({ amountTzs: amount, phoneNumber: phoneToUse, paymentMethod: method }),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error);
       setNotice(j.note ?? "Approve the prompt on your phone.");
       setPanel("none");
       await loadDeposits();
-      // Settlement is a background pass; nudge it while the user is watching.
-      for (let i = 0; i < 10; i++) {
-        await new Promise((res) => setTimeout(res, 5000));
-        await fetch("/api/ntzs/settle", { method: "POST" }).catch(() => {});
-        await Promise.all([loadDeposits(), refresh()]);
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Deposit failed");
     } finally {
@@ -136,6 +143,16 @@ export function WalletSection() {
           <h2 className="display mt-2 text-[clamp(1.6rem,3.6vw,2.4rem)]">Cash and activity.</h2>
         </div>
       </div>
+
+      {deposits.some((d) => IN_FLIGHT.has(d.status)) && (
+        <div className="mt-4 flex items-center gap-3 rounded-2xl border border-[#b45309]/40 bg-[#b45309]/[0.06] px-4 py-3">
+          <span className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-[#b45309] border-t-transparent" />
+          <p className="text-xs leading-relaxed text-[var(--muted)]">
+            A deposit is on its way. Approve the prompt on your phone if you have not already —
+            your balance updates here automatically once it clears, and you can safely leave this page.
+          </p>
+        </div>
+      )}
 
       <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,380px)_1fr]">
         <div className="rounded-3xl border hairline p-5">
@@ -197,7 +214,22 @@ export function WalletSection() {
                 className="overflow-hidden"
               >
                 <div className="mt-4 border-t hairline pt-4">
-                  <div className="eyebrow">Amount</div>
+                  <div className="eyebrow">How you are paying</div>
+                  <div className="mt-2 flex rounded-full surface p-1">
+                    {([["mobile_money", "Mobile money"], ["bank_transfer", "Bank"]] as const).map(([k, label]) => (
+                      <button
+                        key={k}
+                        onClick={() => setMethod(k)}
+                        className={`flex-1 rounded-full py-2 text-[13px] font-medium transition-colors ${
+                          method === k ? "bg-[var(--bg)] shadow-sm" : "text-[var(--muted)]"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="eyebrow mt-4">Amount</div>
                   <div className="mt-2 grid grid-cols-4 gap-2">
                     {presets.map((p) => (
                       <button
@@ -229,11 +261,14 @@ export function WalletSection() {
                     disabled={busy || amount < minTzs || !phoneToUse}
                     className="mt-3 w-full rounded-full bg-[var(--fg)] py-3 text-sm font-medium text-[var(--bg)] disabled:opacity-50"
                   >
-                    {busy ? "Sending prompt…" : `Deposit ${TZS(amount)}`}
+                    {busy
+                      ? method === "bank_transfer" ? "Preparing…" : "Sending prompt…"
+                      : `Deposit ${TZS(amount)}`}
                   </button>
-                  <p className="mt-2 text-[11px] text-[var(--muted)]">
+                  <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
                     Minimum {minTzs.toLocaleString()} TZS
-                    {account.depositRoute === "ramp" && " on this rail"}.
+                    {account.depositRoute === "ramp" && method === "mobile_money" && " on this rail"}.
+                    {method === "bank_transfer" && " Bank transfers settle more slowly than mobile money."}
                   </p>
                 </div>
               </motion.div>
@@ -321,7 +356,12 @@ export function WalletSection() {
             <div className="divide-y divide-[var(--border)]">
               {deposits.map((d) => (
                 <div key={d.id} className="flex items-center gap-3 px-5 py-3.5">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full surface text-[11px]">↓</span>
+                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] ${
+                    IN_FLIGHT.has(d.status) ? "bg-[#b45309]/10 text-[#b45309]" : "surface"}`}>
+                    {IN_FLIGHT.has(d.status)
+                      ? <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      : "↓"}
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium">Deposit</span>
                     <span className="block truncate text-[11px] text-[var(--muted)]">

@@ -135,11 +135,20 @@ export async function getUser(id: string) {
  * suits an omnibus model anyway, since CAPX attributes deposits in its own
  * ledger rather than upstream.
  */
-export async function createDeposit(input: { userId?: string; amountTzs: number; phoneNumber: string }) {
+export type PaymentMethod = "mobile_money" | "bank_transfer" | "card" | "lipa_namba";
+
+export async function createDeposit(input: {
+  userId?: string;
+  amountTzs: number;
+  phoneNumber: string;
+  paymentMethod?: PaymentMethod;
+}) {
+  const amount = Math.round(input.amountTzs);
   const body: Record<string, unknown> = {
-    amountTzs: Math.round(input.amountTzs),
+    amountTzs: amount,
+    tzsAmount: amount,
     phoneNumber: input.phoneNumber,
-    paymentMethod: "mobile_money",
+    paymentMethod: input.paymentMethod ?? "mobile_money",
   };
   if (input.userId) body.userId = input.userId;
   return call<{ id: string; status: string; [k: string]: unknown }>("/api/v1/deposits", {
@@ -346,6 +355,13 @@ export async function rampOnramp(input: { quoteId: string; phoneNumber: string }
 export async function rampStatus(id: string) {
   return call<{ id?: string; status?: string; [k: string]: unknown }>(
     `/api/v1/ramp/${encodeURIComponent(id)}`,
+  );
+}
+
+/** Recent ramp settlements, for matching a deposit we cannot look up by id. */
+export async function rampSettlements() {
+  return call<{ settlements?: unknown[]; data?: unknown[]; [k: string]: unknown }>(
+    "/api/v1/ramp/settlements",
   );
 }
 

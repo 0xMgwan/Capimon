@@ -5,6 +5,7 @@ import { getMarkets } from "@/lib/markets";
 import { requireDb, boom } from "@/lib/apiHelpers";
 import { ntzsConfigured, getSwapRate, MIN_TZS_BY_ROUTE } from "@/lib/ntzs";
 import { collectionRoute } from "@/lib/omnibus";
+import { settlePending } from "@/app/api/ntzs/settle/route";
 import { treasuryConfigured } from "@/lib/treasury";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,10 @@ export async function GET() {
   try {
     const user = await currentUser();
     if (!user) return NextResponse.json({ ok: false, code: "unauthenticated" }, { status: 401 });
+
+    // Opportunistic: credits anything that landed since the last look, so a
+    // balance is never stale just because no cron happened to have run.
+    await settlePending().catch(() => null);
 
     const [bal, markets, entries] = await Promise.all([
       balances(user.id),

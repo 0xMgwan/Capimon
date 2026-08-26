@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server";
-import { getDeposit, rampStatus, swap, transferUsdc, ntzsConfigured } from "@/lib/ntzs";
+import { getDeposit, rampStatus, rampSettlements, swap, transferUsdc, ntzsConfigured } from "@/lib/ntzs";
 import { db, migrate } from "@/lib/db";
 import { record } from "@/lib/ledger";
 import { omnibusUserId, omnibusBalances } from "@/lib/omnibus";
-import { treasuryAddress, treasuryConfigured } from "@/lib/treasury";
-import { requireDb, notConfigured } from "@/lib/apiHelpers";
+import { treasuryAddress } from "@/lib/treasury";
+import { requireDb } from "@/lib/apiHelpers";
+import { dbConfigured } from "@/lib/db";
 
 /** postgres.js types json narrowly; upstream payloads are opaque by nature. */
 const asJson = (v: unknown) => JSON.parse(JSON.stringify(v ?? {}));
 
 export const dynamic = "force-dynamic";
+
 
 const TERMINAL_OK = new Set(["settled", "completed", "success", "successful", "filled", "confirmed"]);
 const TERMINAL_BAD = new Set(["failed", "cancelled", "canceled", "expired", "rejected"]);
@@ -24,15 +26,14 @@ const TERMINAL_BAD = new Set(["failed", "cancelled", "canceled", "expired", "rej
  *
  * Safe to call from a cron, a webhook, or the user polling their own deposit.
  */
-export async function POST() {
-  const gate = requireDb();
-  if (gate) return gate;
-  if (!ntzsConfigured) return notConfigured("nTZS");
-  if (!treasuryConfigured) return notConfigured("The CAPX treasury");
+export async function settlePending(): Promise<{ checked: number; results: Record<string, string>[] }> {
+  // Settlement only needs the database and nTZS; the treasury is required for
+  // the wallet route's transfer leg, not for a ramp credit.
+  if (!dbConfigured || !ntzsConfigured) return { checked: 0, results: [] };
 
   await migrate();
   const sql = db();
-  const treasury = treasuryAddress()!;
+  const treasury = treasuryAddress();
 
   const pending = await sql<{ id: string; user_id: string; ntzs_deposit_id: string;
                              amount_tzs: number; metadata: { route?: string; quotedUsdc?: number } }[]>`
@@ -47,7 +48,30 @@ export async function POST() {
   for (const d of pending) {
     try {
       const viaRamp = d.metadata?.route === "ramp";
-      const remote = viaRamp ? await rampStatus(d.ntzs_deposit_id) : await getDeposit(d.ntzs_deposit_id);
+
+      /*
+       * The onramp response does not always carry an id we can look up later —
+       * where it did not, the quote id was stored instead, and reading that
+       * back fails. Falling back to the settlements list and matching on any
+       * identifier we hold recovers those, which matters because the money has
+       * already moved by then.
+       */
+      let remote: Record<string, unknown>;
+      if (viaRamp) {
+        remote = await rampStatus(d.ntzs_deposit_id).catch(() => ({}) as Record<string, unknown>);
+        if (!remote.status) {
+          const list = await rampSettlements().catch(() => null);
+          const rows = (list?.settlements ?? list?.data ?? []) as Record<string, unknown>[];
+          const match = rows.find((r) =>
+            [r.id, r.reference, r.quoteId, r.settlementId]
+              .some((v) => v && String(v) === d.ntzs_deposit_id)
+            // Last resort: the same shilling amount, still unsettled locally.
+            || Number(r.tzsAmount ?? r.amountTzs ?? r.tzs ?? 0) === d.amount_tzs);
+          if (match) remote = match;
+        }
+      } else {
+        remote = await getDeposit(d.ntzs_deposit_id) as Record<string, unknown>;
+      }
       const status = String(remote.status ?? "").toLowerCase();
 
       // Keep the upstream view on the row either way — a stuck deposit is
@@ -113,6 +137,10 @@ export async function POST() {
           results.push({ id: d.id, outcome: "swapped but no USDC visible yet" });
           continue;
         }
+        if (!treasury) {
+          results.push({ id: d.id, outcome: "no treasury configured for the transfer leg" });
+          continue;
+        }
         transfer = await transferUsdc({ fromUserId: await omnibusUserId(), toAddress: treasury, amount: usdc });
       }
 
@@ -145,6 +173,16 @@ export async function POST() {
     }
   }
 
-  return NextResponse.json({ ok: true, checked: pending.length, results },
-    { headers: { "cache-control": "no-store" } });
+  return { checked: pending.length, results };
+}
+
+/** Callable by a cron, the admin desk, or a client that just paid. */
+export async function POST() {
+  const gate = requireDb();
+  if (gate) return gate;
+  return NextResponse.json({ ok: true, ...(await settlePending()) }, { headers: { "cache-control": "no-store" } });
+}
+
+export async function GET() {
+  return POST();
 }

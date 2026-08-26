@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createDeposit, rampQuote, rampOnramp, MIN_TZS_BY_ROUTE, NtzsError, ntzsConfigured } from "@/lib/ntzs";
+import { createDeposit, rampQuote, rampOnramp, MIN_TZS_BY_ROUTE, NtzsError, ntzsConfigured,
+         type PaymentMethod } from "@/lib/ntzs";
 import { currentUser } from "@/lib/auth";
 import { db, migrate } from "@/lib/db";
 import { omnibusUserId, collectionRoute, capabilities } from "@/lib/omnibus";
@@ -29,14 +30,20 @@ export async function POST(req: Request) {
     const body = await req.json();
     const phoneNumber = String(body.phoneNumber ?? user.phone ?? "").replace(/[^\d]/g, "");
     const amountTzs = Math.round(Number(body.amountTzs));
+    const method: PaymentMethod = body.paymentMethod === "bank_transfer" ? "bank_transfer" : "mobile_money";
     if (!phoneNumber) return bad("A mobile money number is required.");
     if (!Number.isFinite(amountTzs) || amountTzs < ABSOLUTE_MIN_TZS) {
       return bad(`The minimum deposit is ${ABSOLUTE_MIN_TZS.toLocaleString()} TZS.`);
     }
 
-    // The floor depends on which rail the deposit will travel; check it before
-    // writing a row and asking the user's phone for money.
-    const plannedRoute = await collectionRoute();
+    /*
+     * Ramp is a mobile-money rail: its quote takes a phone number and nothing
+     * else. A bank transfer therefore has to go through /deposits, which this
+     * deployment will only accept with a userId — so it needs the `wallets`
+     * grant, and saying so beats letting the user fill in a form that cannot
+     * succeed.
+     */
+    const plannedRoute = method === "bank_transfer" ? "treasury" : await collectionRoute();
     const routeMin = MIN_TZS_BY_ROUTE[plannedRoute] ?? ABSOLUTE_MIN_TZS;
     if (amountTzs < routeMin) {
       return bad(`The minimum deposit is ${routeMin.toLocaleString()} TZS.`, "below_minimum");
@@ -45,8 +52,8 @@ export async function POST(req: Request) {
     await migrate();
     const sql = db();
     const rows = await sql<{ id: string }[]>`
-      insert into capx.deposits (user_id, amount_tzs, phone)
-      values (${user.id}, ${amountTzs}, ${phoneNumber})
+      insert into capx.deposits (user_id, amount_tzs, phone, metadata)
+      values (${user.id}, ${amountTzs}, ${phoneNumber}, ${sql.json({ paymentMethod: method })})
       returning id`;
     const localId = rows[0].id;
 
@@ -67,6 +74,19 @@ export async function POST(req: Request) {
       }
 
       if (route === "treasury") {
+        if (method === "bank_transfer") {
+          const caps = await capabilities();
+          if (!caps.wallets.available) {
+            await sql`update capx.deposits set status = 'failed',
+                      error = 'bank transfer needs the wallets capability' where id = ${localId}`;
+            return NextResponse.json(
+              { ok: false, code: "bank_unavailable",
+                error: "Bank transfers are not available yet. They run over the deposits rail, which this nTZS key can only use with the 'wallets' capability. Mobile money works now." },
+              { status: 503 },
+            );
+          }
+        }
+
         /*
          * The published spec makes userId optional and documents omitting it as
          * the way to collect into the partner treasury. The deployed API
@@ -77,7 +97,7 @@ export async function POST(req: Request) {
         let deposit: { id: string; status: string } | null = null;
         let usedRoute = "treasury";
         try {
-          deposit = await createDeposit({ amountTzs, phoneNumber });
+          deposit = await createDeposit({ amountTzs, phoneNumber, paymentMethod: method });
         } catch (e) {
           const err = e as NtzsError;
           const wantsUser = /userId/i.test(err?.message ?? "");
@@ -93,7 +113,7 @@ export async function POST(req: Request) {
               { status: 503 },
             );
           }
-          deposit = await createDeposit({ userId: await omnibusUserId(), amountTzs, phoneNumber });
+          deposit = await createDeposit({ userId: await omnibusUserId(), amountTzs, phoneNumber, paymentMethod: method });
           usedRoute = "omnibus-wallet";
         }
 
@@ -132,7 +152,7 @@ export async function POST(req: Request) {
         });
       }
 
-      const deposit = await createDeposit({ userId: await omnibusUserId(), amountTzs, phoneNumber });
+      const deposit = await createDeposit({ userId: await omnibusUserId(), amountTzs, phoneNumber, paymentMethod: method });
       await sql`update capx.deposits
                    set ntzs_deposit_id = ${String(deposit.id)},
                        metadata = metadata || ${sql.json({ route: "omnibus-wallet" })}

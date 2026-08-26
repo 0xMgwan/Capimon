@@ -39,7 +39,7 @@ export function CustodialPortfolio() {
 
       {positions.length > 0 && (
         <Reveal delay={0.06} className="mt-10">
-          <div className="grid gap-2">
+          <div id="holdings" className="grid gap-2 scroll-mt-24">
             {positions.map((p) => (
               <Link
                 key={p.symbol}

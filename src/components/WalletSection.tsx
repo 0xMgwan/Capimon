@@ -189,17 +189,33 @@ export function WalletSection() {
             >
               {panel === "deposit" ? "Cancel" : "Add money"}
             </button>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <Link
                 href="/markets"
-                className="rounded-full border hairline py-3 text-center text-sm font-medium transition-colors hover:surface"
+                className="whitespace-nowrap rounded-full border hairline py-3 text-center text-[13px] font-medium transition-colors hover:surface"
               >
                 Buy shares
               </Link>
+              {account.positions.length > 0 ? (
+                <Link
+                  href="#holdings"
+                  className="whitespace-nowrap rounded-full border hairline py-3 text-center text-[13px] font-medium transition-colors hover:surface"
+                >
+                  Sell shares
+                </Link>
+              ) : (
+                <button
+                  disabled
+                  title="You have no shares to sell yet"
+                  className="whitespace-nowrap rounded-full border hairline py-3 text-[13px] font-medium opacity-40"
+                >
+                  Sell shares
+                </button>
+              )}
               <button
                 onClick={() => { setPanel((p) => (p === "withdraw" ? "none" : "withdraw")); setQuote(null); }}
                 disabled={account.tzs + (account.cashTzs ?? 0) < MIN_WITHDRAW}
-                className="rounded-full border hairline py-3 text-sm font-medium transition-colors hover:surface disabled:opacity-40"
+                className="whitespace-nowrap rounded-full border hairline py-3 text-[13px] font-medium transition-colors hover:surface disabled:opacity-40"
               >
                 {panel === "withdraw" ? "Cancel" : "Withdraw"}
               </button>

@@ -5,12 +5,13 @@ import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Reveal, RevealWords } from "@/components/Reveal";
 import { UsdcIcon } from "@/components/icons/Usdc";
+import { AccountForm, type AccountMode } from "@/components/AccountForm";
 import { usd } from "@/lib/format";
 
 const TZS = (n: number) => `${Math.round(n).toLocaleString()} TZS`;
 
 type Account = {
-  user: { id: string; email: string; name: string | null; ntzsUserId: string | null; kycStatus: string };
+  user: { id: string; email: string; name: string | null; phone: string | null; ntzsUserId: string | null; kycStatus: string };
   cash: number;
   equity: number;
   total: number;
@@ -39,7 +40,7 @@ async function api<T>(url: string, body?: unknown): Promise<T> {
  */
 export function JoinFlow() {
   const [account, setAccount] = useState<Account | null>(null);
-  const [mode, setMode] = useState<"register" | "login">("register");
+  const [mode, setMode] = useState<AccountMode>("signup");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -92,43 +93,10 @@ export function JoinFlow() {
             {signedIn ? (
               <p className="text-sm text-[var(--muted)]">Signed in as {account.user.email}.</p>
             ) : (
-              <>
-                <div className="mb-3 flex rounded-full surface p-1">
-                  {(["register", "login"] as const).map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => { setMode(m); setError(null); }}
-                      className={`flex-1 rounded-full py-2 text-sm font-medium capitalize transition-colors ${
-                        mode === m ? "bg-[var(--bg)] shadow-sm" : "text-[var(--muted)]"
-                      }`}
-                    >
-                      {m === "register" ? "New account" : "Sign in"}
-                    </button>
-                  ))}
-                </div>
-                <div className="grid gap-2.5">
-                  <Field label="Email" type="email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="you@example.com" />
-                  <Field label="Password" type="password" value={form.password} onChange={(v) => setForm({ ...form, password: v })} hint={mode === "register" ? "10+ characters, letters and numbers" : undefined} />
-                  {mode === "register" && (
-                    <>
-                      <Field label="Full name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} placeholder="As on your NIDA" />
-                      <Field label="Mobile money number" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} inputMode="numeric" placeholder="255712345678" />
-                      <Field label="NIDA number" value={form.nidaNumber} onChange={(v) => setForm({ ...form, nidaNumber: v })} inputMode="numeric" placeholder="20 digits" hint={`${form.nidaNumber.replace(/\D/g, "").length}/20`} />
-                    </>
-                  )}
-                </div>
-                <button
-                  onClick={() => run(async () => {
-                    await api(mode === "register" ? "/api/account/register" : "/api/account/login", form);
-                    await load();
-                    setNotice(mode === "register" ? "Account open. Fund it with mobile money below." : null);
-                  })}
-                  disabled={busy}
-                  className="mt-4 w-full rounded-full bg-[var(--fg)] py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
-                >
-                  {busy ? "Working…" : mode === "register" ? "Create account" : "Sign in"}
-                </button>
-              </>
+              <AccountForm mode={mode} onModeChange={setMode} onDone={async () => {
+                await load();
+                setNotice(mode === "signup" ? "Account open. Fund it with mobile money below." : null);
+              }} />
             )}
           </Step>
 
@@ -140,11 +108,18 @@ export function JoinFlow() {
             </p>
             <div className="mt-4 grid gap-2.5">
               <Field label="Amount (TZS)" value={String(amountTzs)} onChange={(v) => setAmountTzs(Number(v.replace(/\D/g, "")) || 0)} inputMode="numeric" hint="min 500" />
-              <Field label="Mobile money number" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} inputMode="numeric" placeholder="255712345678" />
+              <Field
+                label="Mobile money number"
+                value={form.phone || account?.user.phone || ""}
+                onChange={(v) => setForm({ ...form, phone: v })}
+                inputMode="numeric" placeholder="255712345678"
+              />
             </div>
             <button
               onClick={() => run(async () => {
-                const r = await api<{ note: string }>("/api/ntzs/deposit", { amountTzs, phoneNumber: form.phone });
+                const r = await api<{ note: string }>("/api/ntzs/deposit", {
+                  amountTzs, phoneNumber: form.phone || account?.user.phone || "",
+                });
                 setNotice(r.note);
                 // Settlement is backend work; poll until the balance appears.
                 for (let i = 0; i < 12; i++) {
@@ -153,7 +128,7 @@ export function JoinFlow() {
                   await load();
                 }
               })}
-              disabled={busy || !signedIn || amountTzs < 500}
+              disabled={busy || !signedIn || amountTzs < 500 || !(form.phone || account?.user.phone)}
               className="mt-4 w-full rounded-full bg-[var(--fg)] py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
             >
               {busy ? "Sending prompt…" : `Deposit ${TZS(amountTzs)}`}

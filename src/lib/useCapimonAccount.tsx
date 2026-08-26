@@ -8,7 +8,7 @@ export type CustodialPosition = {
 };
 
 export type CustodialAccount = {
-  user: { id: string; email: string; name: string | null; ntzsUserId: string | null; kycStatus: string };
+  user: { id: string; email: string; name: string | null; phone: string | null; ntzsUserId: string | null; kycStatus: string };
   cash: number;
   positions: CustodialPosition[];
   equity: number;

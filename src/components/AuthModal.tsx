@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { useConnect } from "wagmi";
@@ -10,6 +9,7 @@ import { WALLETS } from "@/lib/wallets";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { CoinbaseIcon, MetaMaskIcon, PhantomIcon } from "./icons/Wallets";
 import { Logo } from "./Logo";
+import { AccountForm, type AccountMode } from "./AccountForm";
 
 const ICONS: Record<string, (p: { className?: string }) => React.ReactElement> = {
   coinbaseWalletSDK: CoinbaseIcon,
@@ -29,44 +29,19 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
   const { enabled: custodialEnabled, refresh } = useCapimonAccount();
   const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
 
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [form, setForm] = useState({ email: "", password: "", name: "", phone: "", nidaNumber: "" });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const emailRef = useRef<HTMLInputElement>(null);
+  const [mode, setMode] = useState<AccountMode>("signup");
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
-    const raf = requestAnimationFrame(() => emailRef.current?.focus());
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      cancelAnimationFrame(raf);
       document.body.style.overflow = prev;
     };
   }, [open, onClose]);
-
-  const submit = async () => {
-    setBusy(true); setError(null);
-    try {
-      const r = await fetch(`/api/account/${mode === "signup" ? "register" : "login"}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const j = await r.json();
-      if (!j.ok) throw new Error(j.error ?? "Could not sign you in");
-      await refresh();
-      onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
-    } finally {
-      setBusy(false);
-    }
-  };
 
   if (!mounted) return null;
 
@@ -85,7 +60,11 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
             transition={{ type: "spring", stiffness: 380, damping: 34 }}
-            className="safe-b fixed inset-x-0 bottom-0 z-[90] max-h-[92dvh] overflow-y-auto rounded-t-3xl border-t hairline bg-[var(--bg)] p-6 shadow-2xl sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:w-[420px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:border"
+            // vh is the fallback; dvh only applies where the browser supports
+            // it, so the sheet is constrained either way and never runs off the
+            // bottom of the screen.
+            style={{ maxHeight: "min(92dvh, 92vh)" }}
+            className="safe-b fixed inset-x-0 bottom-0 z-[90] max-h-[92vh] overflow-y-auto overscroll-contain rounded-t-3xl border-t hairline bg-[var(--bg)] p-6 shadow-2xl sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:w-[420px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:border"
           >
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-[var(--border)] sm:hidden" />
 
@@ -106,73 +85,9 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
 
             {custodialEnabled && (
               <>
-                <div className="mt-5 flex rounded-full surface p-1">
-                  {(["signin", "signup"] as const).map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => { setMode(m); setError(null); }}
-                      className={`flex-1 rounded-full py-2 text-sm font-medium transition-colors ${
-                        mode === m ? "bg-[var(--bg)] shadow-sm" : "text-[var(--muted)]"
-                      }`}
-                    >
-                      {m === "signin" ? "Sign in" : "Create account"}
-                    </button>
-                  ))}
+                <div className="mt-5">
+                  <AccountForm mode={mode} onModeChange={setMode} compact onDone={async () => { await refresh(); onClose(); }} />
                 </div>
-
-                <div className="mt-4 grid gap-2.5">
-                  <input
-                    ref={emailRef}
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    type="email" placeholder="Email address" autoComplete="email"
-                    className="w-full rounded-xl border hairline bg-transparent px-4 py-3 text-sm outline-none transition-colors placeholder:text-[var(--muted)] focus:border-[var(--color-accent)]"
-                  />
-                  <input
-                    value={form.password}
-                    onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    type="password" placeholder="Password"
-                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                    onKeyDown={(e) => { if (e.key === "Enter") void submit(); }}
-                    className="w-full rounded-xl border hairline bg-transparent px-4 py-3 text-sm outline-none transition-colors placeholder:text-[var(--muted)] focus:border-[var(--color-accent)]"
-                  />
-                  {mode === "signup" && (
-                    <>
-                      <input
-                        value={form.name}
-                        onChange={(e) => setForm({ ...form, name: e.target.value })}
-                        placeholder="Full name, as on your ID" autoComplete="name"
-                        className="w-full rounded-xl border hairline bg-transparent px-4 py-3 text-sm outline-none transition-colors placeholder:text-[var(--muted)] focus:border-[var(--color-accent)]"
-                      />
-                      <input
-                        value={form.phone}
-                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                        inputMode="numeric" placeholder="Mobile money number" autoComplete="tel"
-                        className="w-full rounded-xl border hairline bg-transparent px-4 py-3 text-sm outline-none transition-colors placeholder:text-[var(--muted)] focus:border-[var(--color-accent)]"
-                      />
-                      <input
-                        value={form.nidaNumber}
-                        onChange={(e) => setForm({ ...form, nidaNumber: e.target.value })}
-                        inputMode="numeric" placeholder="National ID number"
-                        className="w-full rounded-xl border hairline bg-transparent px-4 py-3 text-sm outline-none transition-colors placeholder:text-[var(--muted)] focus:border-[var(--color-accent)]"
-                      />
-                    </>
-                  )}
-                </div>
-
-                <button
-                  onClick={submit}
-                  disabled={busy || !form.email || !form.password}
-                  className="mt-3 w-full rounded-full bg-[var(--fg)] py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
-                >
-                  {busy ? "Working…" : mode === "signup" ? "Create account" : "Continue"}
-                </button>
-
-                <p className="mt-2.5 text-[11px] leading-relaxed text-[var(--muted)]">
-                  An email account is <span className="text-[var(--fg)]">custodial</span> — CAPX
-                  holds your assets and records what you are owed. Fund it with mobile money in
-                  shillings.{mode === "signup" && " Your name and ID are held for identity checks."}
-                </p>
 
                 <div className="my-5 flex items-center gap-3">
                   <span className="h-px flex-1 bg-[var(--border)]" />
@@ -207,14 +122,6 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
             <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
               A wallet keeps you in <span className="text-[var(--fg)]">self-custody</span> — CAPX
               holds nothing and you sign every transaction.
-            </p>
-
-            {error && <p className="mt-3 text-xs text-[var(--color-down)]">{error}</p>}
-
-            <p className="mt-5 border-t hairline pt-4 text-center text-[11px] text-[var(--muted)]">
-              <Link href="/how-it-works" className="hover:text-[var(--fg)]">How it works</Link>
-              {" · "}
-              <Link href="/join" className="hover:text-[var(--fg)]">Fund with shillings</Link>
             </p>
           </motion.div>
         </>

@@ -159,22 +159,24 @@ export async function createDeposit(input: {
 /* --------------------------------------------------------- disbursements -- */
 
 /** Price a payout before executing it. `amountTzs` is what the recipient gets. */
-export async function withdrawalQuote(input: { amountTzs: number; phoneNumber: string }) {
+export async function withdrawalQuote(input: { userId: string; amountTzs: number; phoneNumber: string }) {
   const amount = Math.round(input.amountTzs);
   return call<{ quoteId?: string | null; recipientName?: string | null; totalFeeTzs?: number;
                 [k: string]: unknown }>("/api/v1/withdrawals/quote", {
     // Both spellings, for the same reason as the ramp quote: the deployment has
     // asked for `tzsAmount` where the spec says otherwise, and the values are
     // identical so whichever it reads is correct.
-    method: "POST", body: { amountTzs: amount, tzsAmount: amount, phoneNumber: input.phoneNumber },
+    method: "POST",
+    body: { userId: input.userId, amountTzs: amount, tzsAmount: amount, phoneNumber: input.phoneNumber },
   });
 }
 
 /** Execute against a quote. Terms must match it exactly or it is rejected. */
-export async function createWithdrawal(input: { quoteId: string; amountTzs: number; phoneNumber: string }) {
+export async function createWithdrawal(input: { userId: string; quoteId: string; amountTzs: number; phoneNumber: string }) {
   return call<{ id?: string; status?: string; [k: string]: unknown }>("/api/v1/withdrawals", {
     method: "POST",
     body: {
+      userId: input.userId,
       quoteId: input.quoteId,
       amountTzs: Math.round(input.amountTzs),
       tzsAmount: Math.round(input.amountTzs),

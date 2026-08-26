@@ -42,6 +42,9 @@ export function treasuryDiagnosis() {
 /** Refuse to route an order more than this far from the oracle mark. */
 const UNUSABLE_IMPACT = 15;
 
+/** Sweep a little more than the order needs, so small buys stop sweeping every time. */
+const SWEEP_HEADROOM = 1.25;
+
 function signer() {
   if (!treasuryConfigured) throw new Error("TREASURY_PRIVATE_KEY is not configured");
   const account = privateKeyToAccount(NORMALISED as `0x${string}`);
@@ -92,17 +95,9 @@ export async function executeBuy(symbol: string, usdcAmount: number): Promise<Ex
   if (!asset) throw new Error(`unknown asset ${symbol}`);
   const { account, wallet } = signer();
 
-  // Backing can sit in the nTZS float, but only the treasury can sign a trade.
-  const usdcOnHand = Number(formatUnits(
-    (await publicClient.readContract({
-      address: USDC_BASE, abi: b20Abi, functionName: "balanceOf", args: [account.address],
-    })) as bigint, 6));
-  if (usdcOnHand < usdcAmount) {
-    throw new Error(
-      `The treasury holds ${usdcOnHand.toFixed(2)} USDC and this order needs ${usdcAmount.toFixed(2)}. ` +
-      `Move USDC from the nTZS settlement float to ${account.address} before trading.`,
-    );
-  }
+  // Backing can sit in the nTZS float, but only the treasury can sign a trade,
+  // so top it up first rather than failing.
+  await ensureTreasuryFunded(usdcAmount, account.address);
 
   const markets = await getMarkets({ depth: 2 });
   const market = markets.find((m) => m.symbol === asset.symbol)!;
@@ -207,4 +202,57 @@ export async function treasuryHoldings() {
   }).filter((h) => h.qty > 0);
 
   return { address, usdc: Number(formatUnits(usdc as bigint, 6)), holdings };
+}
+
+/* --------------------------------------------------------------- funding -- */
+
+/**
+ * Makes sure the treasury holds enough USDC to place an order, pulling from the
+ * nTZS side when it does not.
+ *
+ * The treasury key can sign transactions from the treasury; it cannot move
+ * funds out of an address nTZS controls, which is where an on-ramp delivers.
+ * The only way across that boundary is the nTZS transfers endpoint, so the
+ * sweep goes through the API rather than through the key.
+ */
+export async function ensureTreasuryFunded(needUsdc: number, address?: `0x${string}`) {
+  const to = address ?? treasuryAddress();
+  if (!to) throw new Error("No treasury is configured.");
+
+  const read = async () =>
+    Number(formatUnits(
+      (await publicClient.readContract({
+        address: USDC_BASE, abi: b20Abi, functionName: "balanceOf", args: [to],
+      })) as bigint, 6));
+
+  let onHand = await read();
+  if (onHand >= needUsdc) return { swept: 0, onHand };
+
+  const { ntzsAvailableUsdc, sweepToTreasury } = await import("./ntzsFunding");
+  const available = await ntzsAvailableUsdc();
+  const shortfall = needUsdc - onHand;
+
+  if (available < shortfall) {
+    throw new Error(
+      `This order needs ${needUsdc.toFixed(2)} USDC. The treasury holds ${onHand.toFixed(2)} ` +
+      `and only ${available.toFixed(2)} is available on the nTZS side.`,
+    );
+  }
+
+  // Pull a little extra so a run of small orders does not sweep every time.
+  const amount = Math.min(available, Math.max(shortfall * SWEEP_HEADROOM, shortfall));
+  await sweepToTreasury(amount, to);
+
+  // Confirm it actually landed before trading on the assumption that it did.
+  for (let i = 0; i < 10 && onHand < needUsdc; i++) {
+    await new Promise((r) => setTimeout(r, 1500));
+    onHand = await read();
+  }
+  if (onHand < needUsdc) {
+    throw new Error(
+      `Swept ${amount.toFixed(2)} USDC from nTZS but the treasury still shows ${onHand.toFixed(2)}. ` +
+      `Nothing was traded — check the transfer before retrying.`,
+    );
+  }
+  return { swept: amount, onHand };
 }

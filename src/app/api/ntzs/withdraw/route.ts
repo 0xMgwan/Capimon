@@ -3,6 +3,7 @@ import { withdrawalQuote, createWithdrawal, lookupRecipient, NtzsError, ntzsConf
 import { currentUser } from "@/lib/auth";
 import { balanceOf, record } from "@/lib/ledger";
 import { requireDb, bad, boom, notConfigured } from "@/lib/apiHelpers";
+import { omnibusUserId, capabilities } from "@/lib/omnibus";
 
 export const dynamic = "force-dynamic";
 
@@ -39,8 +40,20 @@ export async function GET(req: Request) {
       return bad(`Your balance is ${Math.floor(balance).toLocaleString()} TZS.`, "insufficient_balance");
     }
 
+    // Payouts leave the CAPX account, so they carry the omnibus user id —
+    // which the deployment requires and which needs the `wallets` grant.
+    const caps = await capabilities();
+    if (!caps.wallets.available) {
+      return NextResponse.json(
+        { ok: false, code: "withdrawals_unavailable",
+          error: "Withdrawals are not available yet. The payout endpoint needs a user id, which requires the 'wallets' capability on the nTZS key." },
+        { status: 503 },
+      );
+    }
+    const payoutUser = await omnibusUserId();
+
     const [quote, recipient] = await Promise.all([
-      withdrawalQuote({ amountTzs, phoneNumber }),
+      withdrawalQuote({ userId: payoutUser, amountTzs, phoneNumber }),
       lookupRecipient(phoneNumber),
     ]);
 
@@ -92,7 +105,9 @@ export async function POST(req: Request) {
       return bad(`Your balance is ${Math.floor(balance).toLocaleString()} TZS.`, "insufficient_balance");
     }
 
-    const result = await createWithdrawal({ quoteId, amountTzs, phoneNumber });
+    const result = await createWithdrawal({
+      userId: await omnibusUserId(), quoteId, amountTzs, phoneNumber,
+    });
     const ref = String(result.id ?? quoteId);
 
     // Debited once the payout is accepted, keyed to the payout so a retry after

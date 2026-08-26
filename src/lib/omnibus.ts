@@ -138,15 +138,13 @@ export type CollectionRoute = "treasury" | "ramp" | "omnibus-wallet" | "none";
  */
 export async function collectionRoute(): Promise<CollectionRoute> {
   const caps = await capabilities();
-  // Hold the deposit as shillings and swap only at buy time, so owed and held
-  // are both in TZS and the on-ramp spread can never book a phantom USDC
-  // shortfall. This must land in the omnibus WALLET — the one the buy-time swap
-  // draws from. The partner-treasury ("treasury") route holds shillings
-  // somewhere the swap cannot reach, so it is not usable for swap-at-buy; it is
-  // only a fallback when wallets is absent. Ramp settles straight to USDC and
-  // is the last resort.
+  // Settlement model: the ramp. On-ramps settle straight to USDC, delivered to
+  // the nTZS settlement float and pre-funded/swept into the treasury EOA — the
+  // only path that works without a readable, swap-capable omnibus User wallet,
+  // which this deployment does not currently expose. The wallet-holds-TZS
+  // routes are kept as fallbacks for a deployment that does expose one.
+  if (caps.ramp.available) return "ramp";
   if (caps.wallets.available) return "omnibus-wallet";
   if (caps.collections.available) return "treasury";
-  if (caps.ramp.available) return "ramp";
   return "none";
 }

@@ -6,6 +6,7 @@ import { usd } from "@/lib/format";
 type Admin = {
   totals: { users: number; pendingDeposits: number; settledTzs: number; creditedUsdc: number };
   solvency: { ok: boolean; totals: { owedUsd: number; heldUsd: number; shortfallUsd: number };
+              usdc?: { treasury: number; rampFloat: number };
               assets: { asset: string; owed: number; held: number; covered: boolean }[];
               unavailable?: string } | null;
   totalsExtra: { settledOrders: number; failedOrders: number };
@@ -132,6 +133,21 @@ export function AdminPanel() {
         </div>
         {s && !s.unavailable && (
           <>
+            {s.usdc && (
+              <div className="tnum mt-3 flex flex-wrap gap-2 text-[11px]">
+                <span className="rounded-full surface px-2.5 py-1">
+                  treasury {usd(s.usdc.treasury)}
+                </span>
+                <span className="rounded-full surface px-2.5 py-1">
+                  nTZS float {usd(s.usdc.rampFloat)}
+                </span>
+                {s.usdc.treasury < s.totals.owedUsd && (
+                  <span className="rounded-full bg-[#b45309]/15 px-2.5 py-1 text-[#b45309]">
+                    backing is in the float — move it to the treasury before trading
+                  </span>
+                )}
+              </div>
+            )}
             <div className="tnum mt-4 grid grid-cols-3 gap-4 text-sm">
               <div><div className="eyebrow">Owed to clients</div><div className="mt-1">{usd(s.totals.owedUsd)}</div></div>
               <div><div className="eyebrow">Held in treasury</div><div className="mt-1">{usd(s.totals.heldUsd)}</div></div>

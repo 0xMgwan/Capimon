@@ -92,6 +92,18 @@ export async function executeBuy(symbol: string, usdcAmount: number): Promise<Ex
   if (!asset) throw new Error(`unknown asset ${symbol}`);
   const { account, wallet } = signer();
 
+  // Backing can sit in the nTZS float, but only the treasury can sign a trade.
+  const usdcOnHand = Number(formatUnits(
+    (await publicClient.readContract({
+      address: USDC_BASE, abi: b20Abi, functionName: "balanceOf", args: [account.address],
+    })) as bigint, 6));
+  if (usdcOnHand < usdcAmount) {
+    throw new Error(
+      `The treasury holds ${usdcOnHand.toFixed(2)} USDC and this order needs ${usdcAmount.toFixed(2)}. ` +
+      `Move USDC from the nTZS settlement float to ${account.address} before trading.`,
+    );
+  }
+
   const markets = await getMarkets({ depth: 2 });
   const market = markets.find((m) => m.symbol === asset.symbol)!;
   const amountIn = parseUnits(usdcAmount.toFixed(6), 6);

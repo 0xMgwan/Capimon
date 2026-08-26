@@ -2,6 +2,7 @@ import "server-only";
 import { totalLiabilities } from "./ledger";
 import { treasuryHoldings, treasuryConfigured } from "./treasury";
 import { getMarkets } from "./markets";
+import { rampBalance, ntzsConfigured } from "./ntzs";
 
 /**
  * Solvency: does the treasury actually hold what the ledger says clients are
@@ -31,6 +32,8 @@ export type Solvency = {
   checkedAt: number;
   assets: AssetSolvency[];
   totals: { owedUsd: number; heldUsd: number; shortfallUsd: number };
+  /** Where the USDC actually sits, since it backs balances from two places. */
+  usdc: { treasury: number; rampFloat: number };
   /** Present when solvency could not be established, which is not the same as insolvent. */
   unavailable?: string;
 };
@@ -39,24 +42,28 @@ export async function checkSolvency(): Promise<Solvency> {
   const checkedAt = Math.floor(Date.now() / 1000);
   if (!treasuryConfigured) {
     return { ok: false, checkedAt, assets: [], totals: { owedUsd: 0, heldUsd: 0, shortfallUsd: 0 },
-      unavailable: "No treasury is configured." };
+      usdc: { treasury: 0, rampFloat: 0 }, unavailable: "No treasury is configured." };
   }
 
-  const [liabilities, holdings, markets] = await Promise.all([
+  const [liabilities, holdings, markets, float] = await Promise.all([
     totalLiabilities(),
     treasuryHoldings(),
     getMarkets({ depth: 2 }),
+    // On-ramped USDC is delivered to the nTZS settlement float, not to the
+    // Base treasury. It is still CAPX's money and still backs client balances,
+    // so leaving it out reported a shortfall that did not exist.
+    ntzsConfigured ? rampBalance().then((b) => Number(b.balance ?? b.usdc ?? 0)).catch(() => 0) : 0,
   ]);
   if (!holdings) {
     return { ok: false, checkedAt, assets: [], totals: { owedUsd: 0, heldUsd: 0, shortfallUsd: 0 },
-      unavailable: "Treasury holdings could not be read." };
+      usdc: { treasury: 0, rampFloat: 0 }, unavailable: "Treasury holdings could not be read." };
   }
 
   const priceOf = (asset: string) =>
     asset === "USDC" ? 1 : markets.find((m) => m.symbol === asset)?.price ?? 0;
 
   const heldOf = (asset: string) =>
-    asset === "USDC" ? holdings.usdc : holdings.holdings.find((h) => h.asset === asset)?.qty ?? 0;
+    asset === "USDC" ? holdings.usdc + float : holdings.holdings.find((h) => h.asset === asset)?.qty ?? 0;
 
   // Every asset either side knows about, so a holding with no liability shows
   // up too — that is a surplus, and worth seeing.
@@ -80,6 +87,7 @@ export async function checkSolvency(): Promise<Solvency> {
     ok: assets.every((a) => a.covered),
     checkedAt, assets,
     totals: { owedUsd, heldUsd, shortfallUsd },
+    usdc: { treasury: holdings.usdc, rampFloat: float },
   };
 }
 

@@ -81,3 +81,49 @@ export function CapimonAccountProvider({ children }: { children: React.ReactNode
 }
 
 export const useCapimonAccount = () => useContext(AccountCtx);
+
+const CURRENCY_KEY = "capx-currency";
+
+/**
+ * Which currency figures are shown in.
+ *
+ * Defaults to shillings for an account funded in shillings — a Tanzanian user
+ * should not have to convert in their head to read their own balance — and the
+ * choice is remembered once made.
+ */
+export function useCurrency() {
+  const { account } = useCapimonAccount();
+
+  // Read once, lazily, so the saved choice applies on the first paint without
+  // a state write during an effect.
+  const [override, setOverride] = useState<"TZS" | "USDC" | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const saved = window.localStorage.getItem(CURRENCY_KEY);
+      return saved === "TZS" || saved === "USDC" ? saved : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const rate = account?.usdcPerTzs ?? null;
+  const canShowTzs = !!rate && rate > 0;
+  const currency: "TZS" | "USDC" = !canShowTzs ? "USDC" : override ?? "TZS";
+
+  const set = (c: "TZS" | "USDC") => {
+    setOverride(c);
+    try { localStorage.setItem(CURRENCY_KEY, c); } catch { /* session only */ }
+  };
+
+  /** Formats a USD/USDC figure in the chosen currency. */
+  const format = (usdc: number) =>
+    currency === "TZS" && rate
+      ? `${Math.round(usdc / rate).toLocaleString()} TZS`
+      : usdc.toLocaleString("en-US", { style: "currency", currency: "USD",
+          minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const toUsdc = (amount: number) => (currency === "TZS" && rate ? amount * rate : amount);
+  const fromUsdc = (usdc: number) => (currency === "TZS" && rate ? usdc / rate : usdc);
+
+  return { currency, setCurrency: set, canShowTzs, rate, format, toUsdc, fromUsdc };
+}

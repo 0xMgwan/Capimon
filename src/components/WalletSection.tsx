@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { UsdcIcon } from "./icons/Usdc";
+import { NtzsIcon } from "./icons/Ntzs";
 import { usd } from "@/lib/format";
 
 type Deposit = {
@@ -164,14 +165,15 @@ export function WalletSection() {
             const showTzs = account.tzs > 0 || account.cashTzs !== null;
             return (
               <>
-                <div className="tnum mt-2 text-3xl font-medium tracking-tight">
-                  {showTzs ? TZS(shillings) : usd(account.cash)}
+                <div className="tnum mt-2 flex items-center gap-2 text-3xl font-medium tracking-tight">
+                  {showTzs && <NtzsIcon className="h-6 w-6" />}
+                  {showTzs ? `≈ ${TZS(shillings)}` : usd(account.cash)}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--muted)]">
                   {account.cash > 0 && (
                     <span className="inline-flex items-center gap-1">
                       <UsdcIcon className="h-3 w-3" />{usd(account.cash)}
-                      {showTzs && " at today's rate"}
+                      {showTzs && " held — shown in shillings at today's rate"}
                     </span>
                   )}
                   {account.equity > 0 && <span>· {usd(account.equity)} in shares</span>}

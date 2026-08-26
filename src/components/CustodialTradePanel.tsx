@@ -5,10 +5,10 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { AssetMeta } from "@/lib/assets";
 import type { Market } from "@/lib/useMarkets";
-import { useCapimonAccount } from "@/lib/useCapimonAccount";
+import { useCapimonAccount, useCurrency } from "@/lib/useCapimonAccount";
 import { AssetLogo } from "./AssetLogo";
 import { UsdcIcon } from "./icons/Usdc";
-import { usd } from "@/lib/format";
+import { NtzsIcon } from "./icons/Ntzs";
 
 type Quote = {
   ok: boolean; executable?: boolean; amountOut?: number; oracleOut: number; oraclePrice: number;
@@ -16,7 +16,8 @@ type Quote = {
   venues?: string[]; fee?: { percent: number; amountUsd: number } | null; note?: string;
 };
 
-const PRESETS = [10, 50, 100, 500];
+const PRESETS_USDC = [10, 50, 100, 500];
+const PRESETS_TZS = [25_000, 100_000, 250_000, 500_000];
 
 /**
  * Buying and selling for a signed-in custodial account.
@@ -28,6 +29,7 @@ const PRESETS = [10, 50, 100, 500];
  */
 export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; market?: Market }) {
   const { account, refresh } = useCapimonAccount();
+  const { currency, setCurrency, canShowTzs, format, toUsdc, fromUsdc } = useCurrency();
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("100");
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -39,16 +41,19 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
   const held = account?.positions.find((p) => p.symbol === asset.symbol)?.qty ?? 0;
   const cash = account?.cash ?? 0;
   const amountNum = Number(amount) || 0;
-  const insufficient = side === "buy" ? amountNum > cash : amountNum > held;
+  // What the user typed, expressed in USDC — the ledger and the router both
+  // work in USDC whatever the screen says.
+  const spendUsdc = side === "buy" ? toUsdc(amountNum) : amountNum;
+  const insufficient = side === "buy" ? spendUsdc > cash : amountNum > held;
 
   useEffect(() => {
-    if (!(amountNum > 0)) return;
+    if (!(spendUsdc > 0)) return;
     let alive = true;
     const t = setTimeout(async () => {
       if (!alive) return;
       setQuoting(true);
       try {
-        const r = await fetch(`/api/quote?symbol=${asset.symbol}&side=${side}&amount=${amountNum}`, { cache: "no-store" });
+        const r = await fetch(`/api/quote?symbol=${asset.symbol}&side=${side}&amount=${spendUsdc}`, { cache: "no-store" });
         const j: Quote = await r.json();
         if (alive) setQuote(j);
       } catch {
@@ -58,7 +63,7 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
       }
     }, 350);
     return () => { alive = false; clearTimeout(t); };
-  }, [amountNum, side, asset.symbol, market?.price]);
+  }, [spendUsdc, side, asset.symbol, market?.price]);
 
   const place = async () => {
     setBusy(true); setError(null); setResult(null);
@@ -66,7 +71,7 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
       const r = await fetch("/api/account/order", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ symbol: asset.symbol, side, amount: amountNum }),
+        body: JSON.stringify({ symbol: asset.symbol, side, amount: spendUsdc }),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.note ? `${j.error} ${j.note}` : j.error);
@@ -100,13 +105,30 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
       </div>
 
       <div className="mt-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <label className="eyebrow">{side === "buy" ? "You spend" : "You sell"}</label>
+          {side === "buy" && canShowTzs && (
+            <div className="flex rounded-full surface p-0.5">
+              {(["TZS", "USDC"] as const).map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setCurrency(c)}
+                  className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
+                    currency === c ? "bg-[var(--bg)] shadow-sm" : "text-[var(--muted)]"
+                  }`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="mt-1 flex justify-end">
           <button
-            onClick={() => setAmount(String(side === "buy" ? cash : held))}
+            onClick={() => setAmount(String(side === "buy" ? Math.floor(fromUsdc(cash)) : held))}
             className="tnum text-[11px] text-[var(--muted)] hover:text-[var(--fg)]"
           >
-            {side === "buy" ? `${usd(cash)} available` : `${held.toFixed(6)} held`}
+            {side === "buy" ? `${format(cash)} available` : `${held.toFixed(6)} held`}
           </button>
         </div>
         <div className="mt-2 flex items-center gap-3 rounded-2xl border hairline px-4 py-3 focus-within:border-[var(--color-accent)]">
@@ -118,13 +140,15 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
             placeholder="0"
           />
           <span className="flex shrink-0 items-center gap-1.5 rounded-full surface px-3 py-1.5 text-xs font-medium">
-            {side === "buy" ? <UsdcIcon className="h-4 w-4" /> : <AssetLogo logo={market?.logo} ticker={asset.ticker} color={asset.color} size={16} />}
-            {side === "buy" ? "USDC" : asset.symbol}
+            {side === "buy"
+              ? (currency === "TZS" ? <NtzsIcon className="h-4 w-4" /> : <UsdcIcon className="h-4 w-4" />)
+              : <AssetLogo logo={market?.logo} ticker={asset.ticker} color={asset.color} size={16} />}
+            {side === "buy" ? currency : asset.symbol}
           </span>
         </div>
         {side === "buy" && (
           <div className="mt-2.5 grid grid-cols-4 gap-2">
-            {PRESETS.map((p) => (
+            {(currency === "TZS" ? PRESETS_TZS : PRESETS_USDC).map((p) => (
               <button
                 key={p}
                 onClick={() => setAmount(String(p))}
@@ -132,7 +156,7 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
                   amountNum === p ? "border-transparent bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"
                 }`}
               >
-                ${p}
+                {currency === "TZS" ? `${p / 1000}k` : `$${p}`}
               </button>
             ))}
           </div>
@@ -154,10 +178,10 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
       </div>
 
       <dl className="mt-4 space-y-2 text-xs">
-        <Row k="Oracle mark" v={market ? usd(market.price) : "—"} />
-        {quote?.executionPrice ? <Row k="Execution price" v={usd(quote.executionPrice)} /> : null}
+        <Row k="Oracle mark" v={market ? format(market.price) : "—"} />
+        {quote?.executionPrice ? <Row k="Execution price" v={format(quote.executionPrice)} /> : null}
         {quote?.venues?.length ? <Row k="Route" v={quote.venues.join(" + ")} /> : null}
-        {quote?.fee ? <Row k={`CAPX fee (${quote.fee.percent.toFixed(2)}%)`} v={`${usd(quote.fee.amountUsd)} USDC`} /> : null}
+        {quote?.fee ? <Row k={`CAPX fee (${quote.fee.percent.toFixed(2)}%)`} v={format(quote.fee.amountUsd)} /> : null}
       </dl>
 
       <div className="mt-5">
@@ -196,7 +220,7 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
             className="mt-3 rounded-2xl border border-[var(--color-up)]/40 bg-[var(--color-up)]/[0.06] p-4"
           >
             <div className="text-sm font-medium text-[var(--color-up)]">
-              {side === "buy" ? `Bought ${result.qty.toFixed(6)} ${asset.symbol}` : `Sold for ${usd(result.usdc)}`}
+              {side === "buy" ? `Bought ${result.qty.toFixed(6)} ${asset.symbol}` : `Sold for ${format(result.usdc)}`}
             </div>
             <a href={`https://basescan.org/tx/${result.txHash}`} target="_blank" rel="noreferrer"
               className="mt-1 block text-[11px] text-[var(--muted)] underline underline-offset-2">

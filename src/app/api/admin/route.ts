@@ -138,15 +138,27 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const userId = String(body.userId ?? "");
-    const asset = String(body.asset ?? "").toUpperCase();
+    const rawAsset = String(body.asset ?? "").trim();
     const amount = Number(body.amount);
     const reason = String(body.reason ?? "").trim();
+
+    // Resolve to the ledger's exact symbol. Share symbols are mixed-case
+    // ("NVDAc"), so uppercasing would create a second, phantom asset the
+    // solvency check and the portfolio would never reconcile against.
+    const { BY_SYMBOL } = await import("@/lib/assets");
+    const upper = rawAsset.toUpperCase();
+    const asset =
+      upper === "USDC" || upper === "TZS" ? upper
+      : BY_SYMBOL[rawAsset.toLowerCase()]?.symbol ?? "";
+
     const ref = String(body.ref ?? "").trim() || `adjust:${userId}:${asset}:${reason}`;
 
     if (!userId || !asset || !Number.isFinite(amount) || amount === 0 || !reason) {
       return NextResponse.json(
         { ok: false, code: "bad_request",
-          error: "userId, asset, a non-zero amount and a reason are all required." },
+          error: rawAsset && !asset
+            ? `Unknown asset "${rawAsset}". Use USDC, TZS, or a listed share symbol.`
+            : "userId, asset, a non-zero amount and a reason are all required." },
         { status: 400 });
     }
 

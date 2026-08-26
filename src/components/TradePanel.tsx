@@ -373,8 +373,9 @@ export function TradePanel({ asset, market }: { asset: AssetMeta; market?: Marke
       )}
 
       <p className="mt-4 text-[11px] leading-relaxed text-[var(--muted)]">
-        CAPIMON never takes custody. Every transaction is built in your browser and signed by your own
-        wallet. Not available to US persons. Nothing here is investment advice.
+        This is your own wallet — the transaction is built in your browser and signed by you, and
+        CAPIMON holds nothing.
+        Not available to US persons. Nothing here is investment advice.
       </p>
     </div>
   );

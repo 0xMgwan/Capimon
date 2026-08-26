@@ -328,7 +328,7 @@ const PILLARS = [
   { t: "Verifiable marks", b: "Chainlink total-return feeds publish price × multiplier onchain. CAPIMON reads updatedAt and flags anything stale rather than showing a confident lie." },
   { t: "Policy-aware transfers", b: "Onchain policy registries gate transfers against sanctions lists. Holding and secondary transfer are permissionless; mint and redeem run under issuer KYC." },
   { t: "Corporate actions, onchain", b: "Splits and dividends move the WAD multiplier instead of rewriting balances. CAPIMON applies the current multiplier everywhere a share count is shown." },
-  { t: "No custody", b: "CAPIMON never holds your assets or your keys. Positions are read from Base and every transaction is signed in your own wallet." },
+  { t: "Custody is a choice", b: "Connect your own wallet and CAPIMON never holds your assets or your keys — positions are read from the chain and you sign every transaction. Accounts funded with shillings are custodial: CAPIMON holds those assets for you and records what you are owed." },
 ];
 
 export function PillarsSection() {
@@ -395,7 +395,7 @@ export function ClosingCTA() {
             </span>
           </h2>
           <p className="mx-auto mt-7 max-w-xl font-[family-name:var(--font-serif)] text-lg text-[var(--muted)]">
-            Connect a wallet and read your positions straight off the chain. No account, no onboarding queue, no custody.
+            Connect a wallet and read your positions straight off the chain — or open an account and fund it with shillings.
           </p>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
             <Link href="/markets" className="rounded-full bg-[var(--fg)] px-7 py-4 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95">

@@ -34,6 +34,14 @@ export const WALLETS = [
 
 export type WalletId = (typeof WALLETS)[number]["id"];
 
+/**
+ * Onboarding connector for people with no wallet: Coinbase Smart Wallet creates
+ * one from an email and a passkey, with no seed phrase and no extension, while
+ * the keys stay with the user. That is what makes an email-first signup possible
+ * without CAPIMON taking custody.
+ */
+export const SMART_WALLET_ID = "coinbaseWalletSDK" as const;
+
 export const wagmiConfig = createConfig({
   chains: [base],
   connectors: [

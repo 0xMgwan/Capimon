@@ -57,7 +57,7 @@ export default function OpengraphImage() {
 
         <div style={{ display: "flex", alignItems: "center", gap: 14, fontSize: 24, color: "#6b6b6b" }}>
           <div style={{ width: 10, height: 10, borderRadius: 999, background: "#12a150", display: "flex" }} />
-          <div style={{ display: "flex" }}>Live on Base · 24/5 markets · no custody</div>
+          <div style={{ display: "flex" }}>Live on Base · 24/5 markets · shillings or self-custody</div>
         </div>
       </div>
     ),

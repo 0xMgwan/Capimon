@@ -136,8 +136,18 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
               </a>
             );
           })}
+          <a
+            href="/join"
+            className="mt-1 flex items-center gap-3 rounded-xl border border-dashed hairline px-3 py-2.5 text-left transition-colors hover:surface"
+          >
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg surface text-base">🇹🇿</span>
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">No wallet? Start with shillings</span>
+              <span className="block truncate text-[11px] text-[var(--muted)]">Email signup · mobile money · nTZS</span>
+            </span>
+          </a>
           <p className="px-3 pb-1 pt-2 text-[11px] leading-snug text-[var(--muted)]">
-            CAPIMON never takes custody. Every transaction is signed in your own wallet.
+            Connect a wallet and CAPIMON holds nothing — every transaction is signed by you.
           </p>
         </div>
       )}

@@ -7,6 +7,7 @@ const COLS = [
     title: "Invest",
     links: [
       { label: "All markets", href: "/markets" },
+      { label: "Open an account", href: "/join" },
       { label: "Portfolio", href: "/portfolio" },
       { label: "Apple · AAPLc", href: "/markets/aapl" },
       { label: "NVIDIA · NVDAc", href: "/markets/nvda" },
@@ -69,7 +70,9 @@ export function Footer() {
 
         <div className="mt-14 border-t hairline pt-6">
           <p className="max-w-3xl text-[11px] leading-relaxed text-[var(--muted)]">
-            CAPIMON is a non-custodial interface to B20 tokenized equities issued on Base. It is not a
+            CAPIMON is an interface to B20 tokenized equities issued on Base. Connected wallets are
+            self-custodied; accounts funded in Tanzanian shillings are held by CAPIMON on the
+            holder&rsquo;s behalf. It is not a
             broker-dealer, exchange, or investment adviser, and nothing here is investment advice.
             Tokenized equities are not available to US persons. One B20 token is not permanently one
             share — redemption applies the current onchain multiplier. Mint and redeem are performed

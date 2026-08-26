@@ -59,7 +59,7 @@ const FAQ = [
   },
   {
     q: "Who can use this?",
-    a: "Tokenized equities are not available to US persons. CAPIMON is a non-custodial interface, not a broker-dealer, exchange, or investment adviser, and nothing here is investment advice.",
+    a: "Tokenized equities are not available to US persons. Connect your own wallet and CAPIMON holds nothing. Fund an account with Tanzanian shillings and CAPIMON holds those assets for you, recording your entitlement in its own ledger — that is custody, and it is the trade-off for not needing a wallet. Nothing here is investment advice.",
   },
 ];
 

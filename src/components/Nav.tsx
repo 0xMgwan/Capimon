@@ -14,6 +14,7 @@ const LINKS = [
   { href: "/markets", label: "Markets" },
   { href: "/portfolio", label: "Portfolio" },
   { href: "/how-it-works", label: "How it works" },
+  { href: "/join", label: "Open account" },
 ];
 
 export function Nav() {

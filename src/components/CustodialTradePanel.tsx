@@ -29,7 +29,7 @@ const PRESETS_TZS = [25_000, 100_000, 250_000, 500_000];
  */
 export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; market?: Market }) {
   const { account, refresh } = useCapimonAccount();
-  const { currency, setCurrency, canShowTzs, format, toUsdc, fromUsdc } = useCurrency();
+  const { currency, setCurrency, canShowTzs, rate, format, toUsdc, fromUsdc } = useCurrency();
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("100");
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -40,11 +40,18 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
 
   const held = account?.positions.find((p) => p.symbol === asset.symbol)?.qty ?? 0;
   const cash = account?.cash ?? 0;
+  const tzsCash = account?.tzs ?? 0;
   const amountNum = Number(amount) || 0;
-  // What the user typed, expressed in USDC — the ledger and the router both
-  // work in USDC whatever the screen says.
+  // What the user typed, expressed in USDC — the router and the quote both work
+  // in USDC whatever the screen says.
   const spendUsdc = side === "buy" ? toUsdc(amountNum) : amountNum;
-  const insufficient = side === "buy" ? spendUsdc > cash : amountNum > held;
+  // A shilling account spends TZS: the swap to USDC happens server-side, at buy
+  // time. The shillings to spend are that USDC intent back at today's rate.
+  const payTzs = side === "buy" && tzsCash > 0 && !!rate && rate > 0;
+  const tzsToSpend = payTzs && rate ? spendUsdc / rate : 0;
+  const insufficient = side === "buy"
+    ? (payTzs ? tzsToSpend > tzsCash : spendUsdc > cash)
+    : amountNum > held;
 
   useEffect(() => {
     if (!(spendUsdc > 0)) return;
@@ -71,7 +78,11 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
       const r = await fetch("/api/account/order", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ symbol: asset.symbol, side, amount: spendUsdc }),
+        body: JSON.stringify(
+          payTzs
+            ? { symbol: asset.symbol, side, amount: tzsToSpend, currency: "TZS" }
+            : { symbol: asset.symbol, side, amount: spendUsdc },
+        ),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.note ? `${j.error} ${j.note}` : j.error);
@@ -200,7 +211,7 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
           </p>
         ) : insufficient ? (
           <button disabled className="w-full rounded-full surface py-3.5 text-sm text-[var(--muted)]">
-            {side === "buy" ? "Not enough USDC" : `You hold ${held.toFixed(6)}`}
+            {side === "buy" ? `Not enough ${payTzs ? "TZS" : "USDC"}` : `You hold ${held.toFixed(6)}`}
           </button>
         ) : (
           <button

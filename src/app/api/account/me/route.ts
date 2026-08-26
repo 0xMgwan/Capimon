@@ -59,8 +59,12 @@ export async function GET() {
       }
     }
 
+    // A rate is needed whenever the account touches shillings — a TZS balance
+    // to display, or a USDC balance to show in shillings. A shilling account
+    // has cash === 0, so gating on cash alone would hide TZS from exactly the
+    // users who hold it.
     let usdcPerTzs: number | null = null;
-    if (ntzsConfigured && cash > 0) {
+    if (ntzsConfigured && (cash > 0 || tzs > 0 || depositRoute === "treasury" || depositRoute === "omnibus-wallet")) {
       try {
         const probe = 100_000;
         const r = await getSwapRate("NTZS", "USDC", probe);

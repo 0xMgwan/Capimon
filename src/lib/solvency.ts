@@ -2,7 +2,7 @@ import "server-only";
 import { totalLiabilities } from "./ledger";
 import { treasuryHoldings, treasuryConfigured } from "./treasury";
 import { getMarkets } from "./markets";
-import { rampBalance, ntzsConfigured } from "./ntzs";
+import { rampBalance, ntzsConfigured, getSwapRate } from "./ntzs";
 
 /**
  * Solvency: does the treasury actually hold what the ledger says clients are
@@ -45,7 +45,7 @@ export async function checkSolvency(): Promise<Solvency> {
       usdc: { treasury: 0, rampFloat: 0 }, unavailable: "No treasury is configured." };
   }
 
-  const [liabilities, holdings, markets, float] = await Promise.all([
+  const [liabilities, holdings, markets, float, ntzsTzs] = await Promise.all([
     totalLiabilities(),
     treasuryHoldings(),
     getMarkets({ depth: 2 }),
@@ -53,17 +53,37 @@ export async function checkSolvency(): Promise<Solvency> {
     // Base treasury. It is still CAPX's money and still backs client balances,
     // so leaving it out reported a shortfall that did not exist.
     ntzsConfigured ? rampBalance().then((b) => Number(b.balance ?? b.usdc ?? 0)).catch(() => 0) : 0,
+    // Shilling accounts hold TZS until they buy, so client TZS balances are
+    // backed by the shillings sitting in the nTZS omnibus, not by anything
+    // onchain. Read it so a TZS liability is checked against a real holding.
+    ntzsConfigured
+      ? import("./omnibus").then((m) => m.omnibusBalances()).then((b) => b.tzs).catch(() => 0)
+      : 0,
   ]);
   if (!holdings) {
     return { ok: false, checkedAt, assets: [], totals: { owedUsd: 0, heldUsd: 0, shortfallUsd: 0 },
       usdc: { treasury: 0, rampFloat: 0 }, unavailable: "Treasury holdings could not be read." };
   }
 
+  // Coverage per asset is checked in the asset's own units (owed TZS vs held
+  // TZS), so the trading gate never depends on a rate. This USD value is only
+  // for the reported totals — a stale or missing rate cannot mask a shortfall.
+  let tzsUsd = 0;
+  if (ntzsConfigured && (liabilities.some((l) => l.asset === "TZS") || ntzsTzs > 0)) {
+    try {
+      const r = await getSwapRate("NTZS", "USDC", 100_000);
+      const out = Number(r.expectedOutput ?? 0);
+      if (out > 0) tzsUsd = out / 100_000;
+    } catch { /* TZS shown at 0 USD in totals; coverage unaffected */ }
+  }
+
   const priceOf = (asset: string) =>
-    asset === "USDC" ? 1 : markets.find((m) => m.symbol === asset)?.price ?? 0;
+    asset === "USDC" ? 1 : asset === "TZS" ? tzsUsd : markets.find((m) => m.symbol === asset)?.price ?? 0;
 
   const heldOf = (asset: string) =>
-    asset === "USDC" ? holdings.usdc + float : holdings.holdings.find((h) => h.asset === asset)?.qty ?? 0;
+    asset === "USDC" ? holdings.usdc + float
+    : asset === "TZS" ? ntzsTzs
+    : holdings.holdings.find((h) => h.asset === asset)?.qty ?? 0;
 
   // Every asset either side knows about, so a holding with no liability shows
   // up too — that is a surplus, and worth seeing.

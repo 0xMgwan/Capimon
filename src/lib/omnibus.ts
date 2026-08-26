@@ -102,8 +102,11 @@ export type CollectionRoute = "treasury" | "ramp" | "omnibus-wallet" | "none";
  */
 export async function collectionRoute(): Promise<CollectionRoute> {
   const caps = await capabilities();
-  if (caps.ramp.available) return "ramp";
-  if (caps.wallets.available) return "omnibus-wallet";
+  // Prefer the route that holds the deposit as shillings and swaps only at buy
+  // time: owed and held are both in TZS, so the on-ramp spread can never book a
+  // phantom USDC shortfall. Ramp (settles straight to USDC) is the last resort.
   if (caps.collections.available) return "treasury";
+  if (caps.wallets.available) return "omnibus-wallet";
+  if (caps.ramp.available) return "ramp";
   return "none";
 }

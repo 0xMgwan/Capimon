@@ -122,3 +122,48 @@ export async function GET(req: Request) {
     );
   }
 }
+
+/**
+ * Records a ledger adjustment: a manual correction, always with a reason.
+ *
+ * The one case that needs it is reconciliation — an earlier credit that does
+ * not match what actually arrived. The ledger is append-only, so a correction
+ * is another entry, not an edit, and it carries a unique ref so re-running the
+ * same fix is a no-op rather than a double correction.
+ */
+export async function POST(req: Request) {
+  if (!dbConfigured) return NextResponse.json({ ok: false, code: "not_configured" }, { status: 503 });
+  if (!authorised(req)) return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const userId = String(body.userId ?? "");
+    const asset = String(body.asset ?? "").toUpperCase();
+    const amount = Number(body.amount);
+    const reason = String(body.reason ?? "").trim();
+    const ref = String(body.ref ?? "").trim() || `adjust:${userId}:${asset}:${reason}`;
+
+    if (!userId || !asset || !Number.isFinite(amount) || amount === 0 || !reason) {
+      return NextResponse.json(
+        { ok: false, code: "bad_request",
+          error: "userId, asset, a non-zero amount and a reason are all required." },
+        { status: 400 });
+    }
+
+    const { record } = await import("@/lib/ledger");
+    const result = await record([
+      { userId, kind: "adjustment", asset, amount: amount.toString(), ref,
+        metadata: { reason, by: "admin" } },
+    ]);
+
+    const { balanceOf } = await import("@/lib/ledger");
+    const balance = await balanceOf(userId, asset);
+    return NextResponse.json(
+      { ok: true, applied: !result.duplicate, duplicate: result.duplicate, ref, balance },
+      { headers: { "cache-control": "no-store" } });
+  } catch (e) {
+    return NextResponse.json(
+      { ok: false, error: e instanceof Error ? e.message : "adjustment failed" },
+      { status: 500 });
+  }
+}

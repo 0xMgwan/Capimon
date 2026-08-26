@@ -93,3 +93,40 @@ export async function ensureNtzsHasTzs(amountTzs: number) {
   }
   return { moved: needUsdc, swapped: swapUsdc, tzs: after.tzs };
 }
+
+/**
+ * Swaps a shilling balance into USDC, for a buy.
+ *
+ * A shilling account holds TZS until the moment it invests; this is that
+ * moment. The omnibus swaps the shillings to USDC and leaves it in the nTZS
+ * float, where the treasury's own pre-trade top-up sweeps it on-chain and waits
+ * for it to land. So the rate the user gets is the rate at the instant they
+ * buy, and the on-chain arrival is confirmed by the same tested path a USDC
+ * buy uses. Returns the USDC actually delivered, which is what the buy is sized
+ * to.
+ */
+export async function swapTzsToUsdc(amountTzs: number) {
+  const caps = await capabilities();
+  if (!caps.wallets.available) {
+    throw new NtzsError("wallets_required",
+      "Spending a shilling balance needs the 'wallets' capability to swap USDC.", 503);
+  }
+  const { swap } = await import("./ntzs");
+  const userId = await omnibusUserId();
+
+  const before = await omnibusBalances();
+  if (before.tzs < amountTzs) {
+    throw new NtzsError("insufficient_omnibus_tzs",
+      `The omnibus holds ${Math.floor(before.tzs).toLocaleString()} TZS against ` +
+      `${amountTzs.toLocaleString()} to convert.`, 409);
+  }
+
+  await swap({ userId, from: "NTZS", to: "USDC", amount: amountTzs });
+
+  const after = await omnibusBalances();
+  const usdc = Math.max(0, after.usdc - before.usdc);
+  if (!(usdc > 0)) {
+    throw new NtzsError("swap_incomplete", "Swapped shillings but no USDC is visible yet.", 409);
+  }
+  return { usdc, tzsSpent: amountTzs };
+}

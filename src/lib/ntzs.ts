@@ -120,6 +120,42 @@ export async function upsertUser(input: {
   return call<NtzsUser>("/api/v1/users", { method: "POST", body: input, idempotent: true });
 }
 
+/**
+ * Attests a user's identity under a KYC reliance agreement.
+ *
+ * CAPX verifies its own customers, so this records that decision upstream. It
+ * is the one call that issues a wallet synchronously — the response carries the
+ * walletAddress — where create-user only issues one for partners with
+ * platform-run instant NIDA verification enabled.
+ *
+ * A 403 `kyc_reliance_not_granted` means the agreement is not on the account
+ * yet; that is a commercial step, not something to retry.
+ */
+export async function attestKyc(userId: string, input: {
+  decision: "approved" | "rejected";
+  country: string;
+  idType: "NATIONAL_ID" | "PASSPORT" | "DRIVERS_LICENSE" | "RESIDENCE_PERMIT" | "VOTER_ID";
+  idNumber: string;
+  fullName: string;
+  reference: string;
+  verifiedBy: string;
+  verifiedAt?: string;
+  notes?: string;
+}) {
+  return call<NtzsUser>(`/api/v1/users/${encodeURIComponent(userId)}/kyc/attestation`, {
+    method: "POST",
+    body: { ...input, verifiedAt: input.verifiedAt ?? new Date().toISOString() },
+    idempotent: true,
+  });
+}
+
+/** Attaches identity to a legacy account still showing kycStatus "none". */
+export async function retroKyc(userId: string, input: { nidaNumber: string; phone: string }) {
+  return call<NtzsUser>(`/api/v1/users/${encodeURIComponent(userId)}/kyc`, {
+    method: "POST", body: input, idempotent: true,
+  });
+}
+
 export async function getUser(id: string) {
   return call<NtzsUser>(`/api/v1/users/${encodeURIComponent(id)}`);
 }

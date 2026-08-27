@@ -90,15 +90,17 @@ export async function GET() {
     // The omnibus needs an actual wallet for deposits to land and for buys to
     // swap — a user record alone is rejected. Report readiness (a boolean, not
     // the address) so a setup gap is visible before someone tries to deposit.
-    if (c.collectionRoute === "omnibus-wallet") {
-      try {
-        const { omnibusBalances } = await import("@/lib/omnibus");
-        const b = await omnibusBalances();
-        c.omnibusWalletReady = !!b.walletAddress;
-      } catch (e) {
-        c.omnibusWalletReady = false;
-        c.omnibusWalletError = e instanceof Error ? e.message : "omnibus wallet unavailable";
-      }
+    // Attempted on every route, not just the wallet one: this is the call that
+    // provisions and attests the account, so gating it behind the route it
+    // enables would mean it never runs.
+    try {
+      const { omnibusUserId, omnibusBalances } = await import("@/lib/omnibus");
+      await omnibusUserId();
+      const b = await omnibusBalances();
+      c.omnibusWalletReady = !!b.walletAddress;
+    } catch (e) {
+      c.omnibusWalletReady = false;
+      c.omnibusWalletError = e instanceof Error ? e.message : "omnibus wallet unavailable";
     }
   }
 

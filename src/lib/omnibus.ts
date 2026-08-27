@@ -1,5 +1,6 @@
 import "server-only";
-import { upsertUser, getUser, rampBalance, probeCapabilities, NtzsError, type Capability } from "./ntzs";
+import { upsertUser, getUser, rampBalance, probeCapabilities, attestKyc, retroKyc,
+         NtzsError, type Capability } from "./ntzs";
 
 /**
  * The single nTZS account CAPX collects into.
@@ -22,6 +23,8 @@ const CONFIGURED_ID = process.env.NTZS_OMNIBUS_USER_ID ?? "";
 const OMNIBUS_NAME = process.env.NTZS_OMNIBUS_NAME ?? "CAPX Treasury";
 const OMNIBUS_NIDA = process.env.NTZS_OMNIBUS_NIDA ?? "";
 const OMNIBUS_PHONE = process.env.NTZS_OMNIBUS_PHONE ?? "";
+// Who signed off the verification, recorded upstream with the attestation.
+const KYC_VERIFIED_BY = process.env.NTZS_KYC_VERIFIED_BY ?? OMNIBUS_EMAIL;
 
 let cached: string | null = CONFIGURED_ID || null;
 let inflight: Promise<string> | null = null;
@@ -42,15 +45,6 @@ export async function omnibusUserId(): Promise<string> {
   return inflight;
 }
 
-/**
- * Ensures the omnibus exists AND has a wallet.
- *
- * A wallet is only issued when KYC auto-approves: `POST /users` answers 201
- * with a `walletAddress`, or 202 `pending_review` with none. Creating the
- * omnibus from an email and name alone lands in pending_review forever, which
- * surfaces much later as an opaque "User has no wallet" on a deposit. So send
- * the identity documents up front, and if it is still pending, say exactly that.
- */
 /** The identity nTZS is asked to KYC. One definition, used everywhere. */
 export function omnibusIdentity() {
   return {
@@ -70,18 +64,56 @@ export const omnibusIdentityConfigured = {
   phone: OMNIBUS_PHONE.length > 0,
 };
 
+/**
+ * Ensures the omnibus exists AND has a wallet, which is what deposits, swaps
+ * and transfers all actually require.
+ */
 async function provisionOmnibus(): Promise<string> {
+  let attestError: string | null = null;
   const user = await upsertUser(omnibusIdentity());
 
   // The create response can lag the wallet; confirm against a read.
-  const wallet = user.walletAddress ?? (await getUser(user.id).catch(() => null))?.walletAddress;
+  let wallet = user.walletAddress ?? (await getUser(user.id).catch(() => null))?.walletAddress;
+
+  /*
+   * No wallet yet. Create-user only issues one for partners with platform-run
+   * instant NIDA verification enabled, which this account does not have — so
+   * take the documented alternative and attest the identity ourselves. CAPX
+   * verifies its own customers, and under a KYC reliance agreement that
+   * attestation issues the wallet on the call itself.
+   *
+   * Retro-KYC first, since an account already sitting at "none" is exactly what
+   * it is for; attestation second. Both are skipped without an identity to
+   * attest, and a missing reliance agreement is reported rather than retried.
+   */
+  if (!wallet && OMNIBUS_NIDA) {
+    if ((user.kycStatus ?? "none") === "none" && OMNIBUS_PHONE) {
+      const done = await retroKyc(user.id, { nidaNumber: OMNIBUS_NIDA, phone: OMNIBUS_PHONE })
+        .catch(() => null);
+      wallet = done?.walletAddress ?? wallet;
+    }
+    if (!wallet) {
+      const attested = await attestKyc(user.id, {
+        decision: "approved",
+        country: "TZ",
+        idType: "NATIONAL_ID",
+        idNumber: OMNIBUS_NIDA,
+        fullName: OMNIBUS_NAME,
+        reference: OMNIBUS_EXTERNAL_ID,
+        verifiedBy: KYC_VERIFIED_BY,
+      }).catch((e) => { attestError = e instanceof Error ? e.message : String(e); return null; });
+      wallet = attested?.walletAddress ?? wallet;
+    }
+    if (!wallet) wallet = (await getUser(user.id).catch(() => null))?.walletAddress ?? null;
+  }
+
   if (!wallet) {
     // nTZS holds the wallet until compliance clears the account, and says so in
     // the create response. Pass its own words through rather than guessing at a
     // cause — identity fields do not shortcut this, and suggesting they might
     // sent us chasing the wrong fix for a while.
     const status = String(user.kycStatus ?? "unknown");
-    const upstream = [user.message, user.nextStep && `Next step: ${user.nextStep}.`]
+    const upstream = [user.message, user.nextStep && `Next step: ${user.nextStep}.`, attestError]
       .filter(Boolean).join(" ");
     throw new NtzsError(
       "omnibus_no_wallet",

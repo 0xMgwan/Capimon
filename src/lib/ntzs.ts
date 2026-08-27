@@ -299,14 +299,27 @@ export async function swap(input: {
  * Sends the user's own USDC out to their own wallet. `amountTzs` carries the
  * amount for both tokens in this API — for USDC it is read as a plain amount.
  */
-export async function transferUsdc(input: { fromUserId: string; toAddress: string; amount: number }) {
+export async function transferUsdc(input: {
+  fromUserId?: string;
+  fromAddress?: string;
+  toAddress: string;
+  amount: number;
+}) {
+  const amount = Number(input.amount.toFixed(6));
   return call<{ id?: string; txHash?: string; [k: string]: unknown }>("/api/v1/transfers", {
     method: "POST",
     body: {
-      fromUserId: input.fromUserId,
+      // Source is either a custodial user or, for the ramp settlement float, the
+      // wallet address itself — these are ordinary ERC-20 wallets.
+      ...(input.fromUserId ? { fromUserId: input.fromUserId } : {}),
+      ...(input.fromAddress ? { fromAddress: input.fromAddress } : {}),
       toAddress: input.toAddress,
       token: "USDC",
-      amountTzs: input.amount,
+      // This moves USDC, not shillings; send the amount under the names the API
+      // is likely to read so a field-name mismatch cannot silently zero it.
+      amount,
+      usdcAmount: amount,
+      amountUsdc: amount,
       metadata: { source: "capx", purpose: "fund_trading_wallet" },
     },
     idempotent: true,
@@ -389,7 +402,8 @@ export async function rampSettlements() {
 
 /** The partner's USDC settlement float. Read-only, so it doubles as a probe. */
 export async function rampBalance() {
-  return call<{ balance?: number; usdc?: number; [k: string]: unknown }>("/api/v1/ramp/balance");
+  return call<{ balance?: number; usdc?: number; usdcBalance?: string | number;
+                settlementAddress?: string; [k: string]: unknown }>("/api/v1/ramp/balance");
 }
 
 /* ---------------------------------------------------------- capabilities -- */

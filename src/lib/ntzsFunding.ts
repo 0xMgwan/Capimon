@@ -23,16 +23,27 @@ export async function ntzsAvailableUsdc() {
 
 export async function sweepToTreasury(usdc: number, toAddress: `0x${string}`) {
   const caps = await capabilities();
-  if (!caps.wallets.available) {
-    throw new NtzsError(
-      "sweep_unavailable",
-      "USDC is held on the nTZS side and cannot be moved automatically: the transfers endpoint " +
-      "needs a user id, which requires the 'wallets' capability. Grant it, or send USDC to the " +
-      `treasury at ${toAddress} manually.`,
-      503,
-    );
+
+  // The ramp float is where on-ramp USDC lands. It is an ordinary ERC-20 wallet
+  // nTZS holds, so the transfers endpoint moves USDC out of it to the treasury
+  // by its settlement address — this is the leg that funds a buy.
+  if (caps.ramp.available) {
+    const b = await rampBalance();
+    const from = b.settlementAddress;
+    if (from) return transferUsdc({ fromAddress: from, toAddress, amount: usdc });
   }
-  return transferUsdc({ fromUserId: await omnibusUserId(), toAddress, amount: usdc });
+
+  // A custodial omnibus user, where one is provisioned.
+  if (caps.wallets.available) {
+    return transferUsdc({ fromUserId: await omnibusUserId(), toAddress, amount: usdc });
+  }
+
+  throw new NtzsError(
+    "sweep_unavailable",
+    `USDC is held on the nTZS side and no transfer route is available to move it. Send USDC to the ` +
+    `treasury at ${toAddress} manually, or enable the ramp/wallets transfer path.`,
+    503,
+  );
 }
 
 /**

@@ -273,6 +273,7 @@ export async function swap(input: {
   from: "NTZS" | "USDC";
   to: "NTZS" | "USDC";
   amount: number;
+  slippageBps?: number;
 }) {
   if (!ntzsConfigured) throw new NtzsError("not_configured", "nTZS is not configured", 503);
 
@@ -284,7 +285,19 @@ export async function swap(input: {
       accept: "text/event-stream",
       "idempotency-key": randomUUID(),
     },
-    body: JSON.stringify(input),
+    // The API names these fromToken/toToken. Sending from/to alone is a
+    // missing_required_fields 400 — which went unnoticed because nothing
+    // reached this call until an account first held real shillings. Both
+    // spellings go out; the unused pair is ignored.
+    body: JSON.stringify({
+      userId: input.userId,
+      fromToken: input.from,
+      toToken: input.to,
+      from: input.from,
+      to: input.to,
+      amount: input.amount,
+      slippageBps: input.slippageBps ?? 100,
+    }),
     cache: "no-store",
   });
 

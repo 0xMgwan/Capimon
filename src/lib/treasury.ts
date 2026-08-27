@@ -14,6 +14,17 @@ import type { Log } from "viem";
 const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 
 /**
+ * Slippage tolerance for a trade, in basis points.
+ *
+ * Small orders need more room, not less: a few cents of pool movement is a
+ * large fraction of a $2 trade, and "Return amount is not enough" is the
+ * router refusing over exactly that. Widening it is safe here because the
+ * oracle-deviation guard already refuses anything far from the mark — that
+ * check, not slippage, is what protects the price.
+ */
+const slippageFor = (usd: number) => (usd < 10 ? 300 : usd < 50 ? 200 : 100);
+
+/**
  * Sums ERC-20 `Transfer` value credited to `to` for `token`, read straight from
  * a transaction's own logs.
  *
@@ -150,7 +161,7 @@ export async function executeBuy(symbol: string, usdcAmount: number): Promise<Ex
   const market = markets.find((m) => m.symbol === asset.symbol)!;
   const amountIn = parseUnits(usdcAmount.toFixed(6), 6);
 
-  const route = await getRoute(USDC_BASE, asset.token, amountIn, feeParams("buy"));
+  let route = await getRoute(USDC_BASE, asset.token, amountIn, feeParams("buy"));
   if (!route) throw new Error("no route available for this asset");
 
   const expectedQty = usdcAmount / market.price;
@@ -160,9 +171,13 @@ export async function executeBuy(symbol: string, usdcAmount: number): Promise<Ex
     throw new Error(`route is ${impact.toFixed(1)}% from the oracle mark — refusing to trade`);
   }
 
-  await ensureAllowance(USDC_BASE, route.routerAddress, amountIn);
+  // Approving waits for the allowance to be visible, which can take seconds —
+  // long enough for the quote to go stale and the swap to revert on slippage.
+  // Re-quote after an approval so the route we send is the one we just priced.
+  const approved = await ensureAllowance(USDC_BASE, route.routerAddress, amountIn);
+  if (approved) route = (await getRoute(USDC_BASE, asset.token, amountIn, feeParams("buy"))) ?? route;
 
-  const built = await buildRoute(route, account.address, 100);
+  const built = await buildRoute(route, account.address, slippageFor(usdcAmount));
   const txHash = await wallet.sendTransaction({
     to: built.routerAddress,
     data: built.data,
@@ -196,7 +211,7 @@ export async function executeSell(symbol: string, qty: number): Promise<Executio
   const market = markets.find((m) => m.symbol === asset.symbol)!;
   const amountIn = parseUnits((qty / market.multiplier).toFixed(market.decimals), market.decimals);
 
-  const route = await getRoute(asset.token, USDC_BASE, amountIn, feeParams("sell"));
+  let route = await getRoute(asset.token, USDC_BASE, amountIn, feeParams("sell"));
   if (!route) throw new Error("no route available for this asset");
 
   const expectedUsdc = qty * market.price;
@@ -206,9 +221,11 @@ export async function executeSell(symbol: string, qty: number): Promise<Executio
     throw new Error(`route is ${impact.toFixed(1)}% from the oracle mark — refusing to trade`);
   }
 
-  await ensureAllowance(asset.token, route.routerAddress, amountIn);
+  // Re-quote after an approval wait, for the same reason as the buy path.
+  const approved = await ensureAllowance(asset.token, route.routerAddress, amountIn);
+  if (approved) route = (await getRoute(asset.token, USDC_BASE, amountIn, feeParams("sell"))) ?? route;
 
-  const built = await buildRoute(route, account.address, 100);
+  const built = await buildRoute(route, account.address, slippageFor(expectedUsdc));
   const txHash = await wallet.sendTransaction({
     to: built.routerAddress,
     data: built.data,
@@ -307,8 +324,11 @@ export async function ensureTreasuryFunded(needUsdc: number, address?: `0x${stri
   let onHand = await read();
   if (onHand >= needUsdc) return { swept: 0, onHand };
 
-  const { ntzsAvailableUsdc, sweepToTreasury } = await import("./ntzsFunding");
-  const available = await ntzsAvailableUsdc();
+  // Only what can actually be moved — the ramp float backs balances but cannot
+  // be transferred to the treasury, so counting it here would promise funding
+  // that no API call can deliver.
+  const { sweepableUsdc, sweepToTreasury } = await import("./ntzsFunding");
+  const available = await sweepableUsdc();
   const shortfall = needUsdc - onHand;
 
   if (available < shortfall) {

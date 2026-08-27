@@ -299,27 +299,26 @@ export async function swap(input: {
  * Sends the user's own USDC out to their own wallet. `amountTzs` carries the
  * amount for both tokens in this API — for USDC it is read as a plain amount.
  */
+/**
+ * Sends USDC from a platform user's wallet to a Base address.
+ *
+ * Per the transfers spec the source is always `fromUserId` — a provisioned user
+ * wallet. There is no address-sourced transfer, which is why the ramp
+ * settlement float cannot be moved this way: it is platform float, not a user.
+ * USDC amounts go in `amount` (decimal); `amountTzs` is the shilling field.
+ */
 export async function transferUsdc(input: {
-  fromUserId?: string;
-  fromAddress?: string;
+  fromUserId: string;
   toAddress: string;
   amount: number;
 }) {
-  const amount = Number(input.amount.toFixed(6));
   return call<{ id?: string; txHash?: string; [k: string]: unknown }>("/api/v1/transfers", {
     method: "POST",
     body: {
-      // Source is either a custodial user or, for the ramp settlement float, the
-      // wallet address itself — these are ordinary ERC-20 wallets.
-      ...(input.fromUserId ? { fromUserId: input.fromUserId } : {}),
-      ...(input.fromAddress ? { fromAddress: input.fromAddress } : {}),
+      fromUserId: input.fromUserId,
       toAddress: input.toAddress,
       token: "USDC",
-      // This moves USDC, not shillings; send the amount under the names the API
-      // is likely to read so a field-name mismatch cannot silently zero it.
-      amount,
-      usdcAmount: amount,
-      amountUsdc: amount,
+      amount: Number(input.amount.toFixed(6)),
       metadata: { source: "capx", purpose: "fund_trading_wallet" },
     },
     idempotent: true,

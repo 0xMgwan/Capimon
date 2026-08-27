@@ -21,27 +21,39 @@ export async function ntzsAvailableUsdc() {
   return parts.reduce((a, b) => a + b, 0);
 }
 
+/**
+ * USDC that can actually be moved to the treasury.
+ *
+ * Deliberately excludes the ramp settlement float. The float backs client
+ * balances and counts toward solvency, but transfers are sourced by
+ * `fromUserId` only — there is no address-sourced transfer — so float USDC
+ * cannot be sent to the treasury by API. Treating it as sweepable made a buy
+ * attempt an impossible move and fail confusingly.
+ */
+export async function sweepableUsdc() {
+  const caps = await capabilities();
+  if (!caps.wallets.available) return 0;
+  return omnibusBalances().then((b) => b.usdc).catch(() => 0);
+}
+
 export async function sweepToTreasury(usdc: number, toAddress: `0x${string}`) {
   const caps = await capabilities();
 
-  // The ramp float is where on-ramp USDC lands. It is an ordinary ERC-20 wallet
-  // nTZS holds, so the transfers endpoint moves USDC out of it to the treasury
-  // by its settlement address — this is the leg that funds a buy.
-  if (caps.ramp.available) {
-    const b = await rampBalance();
-    const from = b.settlementAddress;
-    if (from) return transferUsdc({ fromAddress: from, toAddress, amount: usdc });
-  }
-
-  // A custodial omnibus user, where one is provisioned.
+  // Only a provisioned user wallet can source a transfer.
   if (caps.wallets.available) {
     return transferUsdc({ fromUserId: await omnibusUserId(), toAddress, amount: usdc });
   }
 
+  const float = await rampBalance()
+    .then((b) => Number(b.usdcBalance ?? b.balance ?? b.usdc ?? 0))
+    .catch(() => 0);
+
   throw new NtzsError(
     "sweep_unavailable",
-    `USDC is held on the nTZS side and no transfer route is available to move it. Send USDC to the ` +
-    `treasury at ${toAddress} manually, or enable the ramp/wallets transfer path.`,
+    `USDC cannot be moved to the treasury automatically. ${float.toFixed(2)} USDC is sitting in the ` +
+    `ramp settlement float, which the transfers API cannot source from — transfers require a ` +
+    `provisioned user wallet (fromUserId). Give the CAPX omnibus user a wallet, or fund the ` +
+    `treasury at ${toAddress} directly.`,
     503,
   );
 }

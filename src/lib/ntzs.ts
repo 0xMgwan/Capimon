@@ -439,8 +439,16 @@ export async function probeCapabilities(omnibusExternalId: string, omnibusEmail:
     rampBalance()
       .then(() => { result.ramp = { available: true }; })
       .catch((e) => { result.ramp = { available: false, detail: e instanceof Error ? e.message : "unavailable" }; }),
+    // A user record is not a wallet: nTZS only issues one once KYC is approved,
+    // and a walletless user is rejected by deposits, swaps and transfers alike.
+    // Reporting "available" on creation alone routed money at a wallet that did
+    // not exist, so the wallet address itself is the test.
     upsertUser({ externalId: omnibusExternalId, email: omnibusEmail, name: "CAPX Treasury" })
-      .then((u) => { result.wallets = { available: true, detail: u.id }; })
+      .then((u) => {
+        result.wallets = u.walletAddress
+          ? { available: true, detail: u.id }
+          : { available: false, detail: `user ${u.id} has no wallet (kyc: ${u.kycStatus ?? "unknown"})` };
+      })
       .catch((e) => { result.wallets = { available: false, detail: e instanceof Error ? e.message : "unavailable" }; }),
   ]);
 

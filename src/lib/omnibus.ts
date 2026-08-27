@@ -1,5 +1,5 @@
 import "server-only";
-import { upsertUser, createPartnerUser, getUser, rampBalance, probeCapabilities, NtzsError, type Capability } from "./ntzs";
+import { upsertUser, getUser, rampBalance, probeCapabilities, NtzsError, type Capability } from "./ntzs";
 
 /**
  * The single nTZS account CAPX collects into.
@@ -14,6 +14,11 @@ import { upsertUser, createPartnerUser, getUser, rampBalance, probeCapabilities,
 export const OMNIBUS_EXTERNAL_ID = "capx-omnibus";
 export const OMNIBUS_EMAIL = process.env.NTZS_OMNIBUS_EMAIL ?? "treasury@capx.finance";
 const CONFIGURED_ID = process.env.NTZS_OMNIBUS_USER_ID ?? "";
+// Identity for the omnibus account. Without these, KYC stays pending_review
+// and nTZS never issues the wallet that deposits and transfers require.
+const OMNIBUS_NAME = process.env.NTZS_OMNIBUS_NAME ?? "CAPX Treasury";
+const OMNIBUS_NIDA = process.env.NTZS_OMNIBUS_NIDA ?? "";
+const OMNIBUS_PHONE = process.env.NTZS_OMNIBUS_PHONE ?? "";
 
 let cached: string | null = CONFIGURED_ID || null;
 let inflight: Promise<string> | null = null;
@@ -35,37 +40,37 @@ export async function omnibusUserId(): Promise<string> {
 }
 
 /**
- * Ensures the omnibus exists AND has a wallet — the deposit rail rejects a
- * walletless user. Provisions through the partners endpoint (which gives a
- * wallet) and falls back to the plain users endpoint only if that route is not
- * present. A missing wallet after both is a setup problem worth naming clearly
- * rather than surfacing later as an opaque "User has no wallet" on a deposit.
+ * Ensures the omnibus exists AND has a wallet.
+ *
+ * A wallet is only issued when KYC auto-approves: `POST /users` answers 201
+ * with a `walletAddress`, or 202 `pending_review` with none. Creating the
+ * omnibus from an email and name alone lands in pending_review forever, which
+ * surfaces much later as an opaque "User has no wallet" on a deposit. So send
+ * the identity documents up front, and if it is still pending, say exactly that.
  */
 async function provisionOmnibus(): Promise<string> {
-  const input = { externalId: OMNIBUS_EXTERNAL_ID, email: OMNIBUS_EMAIL, name: "CAPX Treasury" };
+  const user = await upsertUser({
+    externalId: OMNIBUS_EXTERNAL_ID,
+    email: OMNIBUS_EMAIL,
+    name: OMNIBUS_NAME,
+    country: "TZ",
+    ...(OMNIBUS_NIDA ? { nidaNumber: OMNIBUS_NIDA } : {}),
+    ...(OMNIBUS_PHONE ? { phone: OMNIBUS_PHONE } : {}),
+  });
 
-  let user;
-  try {
-    user = await createPartnerUser(input);
-  } catch (e) {
-    // 404/405 → the partners endpoint is not on this deployment; fall back.
-    const status = (e as NtzsError)?.status;
-    if (status === 404 || status === 405) user = await upsertUser(input);
-    else throw e;
-  }
-
-  // A freshly created wallet may not report its address on the create response;
-  // confirm against a read before trusting it.
-  if (!user.walletAddress) {
-    const fresh = await getUser(user.id).catch(() => null);
-    if (fresh && !fresh.walletAddress) {
-      throw new NtzsError(
-        "omnibus_no_wallet",
-        "The CAPX omnibus nTZS account has no wallet. Create it once in the nTZS dashboard (or via " +
-        "POST /api/v1/partners/users) and set NTZS_OMNIBUS_USER_ID to its id, then redeploy.",
-        503,
-      );
-    }
+  // The create response can lag the wallet; confirm against a read.
+  const wallet = user.walletAddress ?? (await getUser(user.id).catch(() => null))?.walletAddress;
+  if (!wallet) {
+    const status = user.kycStatus ?? "unknown";
+    throw new NtzsError(
+      "omnibus_no_wallet",
+      `The CAPX omnibus nTZS account (${user.id}) has no wallet — KYC is "${status}". A wallet is ` +
+      `only issued once KYC is approved. ` +
+      (OMNIBUS_NIDA
+        ? "Approve this account in the nTZS dashboard, then redeploy."
+        : "Set NTZS_OMNIBUS_NIDA and NTZS_OMNIBUS_PHONE so it can auto-approve, or approve it in the nTZS dashboard."),
+      503,
+    );
   }
   return user.id;
 }

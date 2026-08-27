@@ -189,7 +189,8 @@ export async function GET() {
 
   await migrate();
   const deposits = await db()`
-    select id::text, ntzs_deposit_id, amount_tzs, status, usdc_credited::text, created_at, settled_at
+    select id::text, ntzs_deposit_id, amount_tzs, status, usdc_credited::text, created_at, settled_at,
+           ntzs_status, error
       from capx.deposits where user_id = ${user.id}
      order by created_at desc limit 25`;
   return NextResponse.json({ ok: true, deposits }, { headers: { "cache-control": "no-store" } });

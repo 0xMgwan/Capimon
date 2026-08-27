@@ -11,8 +11,18 @@ const asJson = (v: unknown) => JSON.parse(JSON.stringify(v ?? {}));
 export const dynamic = "force-dynamic";
 
 
-const TERMINAL_OK = new Set(["settled", "completed", "success", "successful", "filled", "confirmed"]);
-const TERMINAL_BAD = new Set(["failed", "cancelled", "canceled", "expired", "rejected"]);
+/*
+ * Terminal states, matched by pattern rather than an exact list.
+ *
+ * An exact set has to enumerate every spelling upstream might use — paid,
+ * complete, credited, minted, processed — and any it misses leaves a settled
+ * collection stuck as "pending" forever, with the customer's money taken and
+ * nothing credited. Matching the stem fails safe in the direction that matters:
+ * an unrecognised status still waits rather than crediting.
+ */
+const TERMINAL_OK =
+  /(settl|complet|success|confirm|credit|mint|paid|processed|fill|done|approved)/i;
+const TERMINAL_BAD = /(fail|cancel|expir|reject|declin|revers|abandon|timed?_?out)/i;
 
 /**
  * Settles pending deposits: confirm the collection landed and credit the
@@ -81,12 +91,12 @@ export async function settlePending(): Promise<{ checked: number; results: Recor
                        metadata = metadata || ${sql.json(asJson({ deposit: remote }))}
                  where id = ${d.id}`;
 
-      if (TERMINAL_BAD.has(status)) {
+      if (TERMINAL_BAD.test(status)) {
         await sql`update capx.deposits set status = 'failed', error = ${status}, settled_at = now() where id = ${d.id}`;
         results.push({ id: d.id, outcome: "failed" });
         continue;
       }
-      if (!TERMINAL_OK.has(status)) {
+      if (!TERMINAL_OK.test(status)) {
         results.push({ id: d.id, outcome: `still ${status || "pending"}` });
         continue;
       }

@@ -69,6 +69,15 @@ export async function GET() {
       c.capabilities = { error: e instanceof Error ? e.message : "probe failed" };
     }
 
+    // Which identity fields are configured for the omnibus — booleans and the
+    // externalId only, never the NIDA itself. Distinguishes "the env var is
+    // missing" from "nTZS was given it and still withheld the wallet", which
+    // otherwise look identical from outside.
+    try {
+      const { omnibusIdentityConfigured } = await import("@/lib/omnibus");
+      c.omnibusIdentity = omnibusIdentityConfigured;
+    } catch { /* not fatal */ }
+
     // Raw ramp balance, so the float's real field names are visible — solvency
     // must count this USDC as backing and had been reading it as zero.
     try {

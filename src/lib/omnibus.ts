@@ -51,15 +51,27 @@ export async function omnibusUserId(): Promise<string> {
  * surfaces much later as an opaque "User has no wallet" on a deposit. So send
  * the identity documents up front, and if it is still pending, say exactly that.
  */
-async function provisionOmnibus(): Promise<string> {
-  const user = await upsertUser({
+/** The identity nTZS is asked to KYC. One definition, used everywhere. */
+export function omnibusIdentity() {
+  return {
     externalId: OMNIBUS_EXTERNAL_ID,
     email: OMNIBUS_EMAIL,
     name: OMNIBUS_NAME,
     country: "TZ",
     ...(OMNIBUS_NIDA ? { nidaNumber: OMNIBUS_NIDA } : {}),
     ...(OMNIBUS_PHONE ? { phone: OMNIBUS_PHONE } : {}),
-  });
+  };
+}
+
+/** Which identity fields are configured — booleans only; NIDA is personal data. */
+export const omnibusIdentityConfigured = {
+  externalId: OMNIBUS_EXTERNAL_ID,
+  nida: OMNIBUS_NIDA.length > 0,
+  phone: OMNIBUS_PHONE.length > 0,
+};
+
+async function provisionOmnibus(): Promise<string> {
+  const user = await upsertUser(omnibusIdentity());
 
   // The create response can lag the wallet; confirm against a read.
   const wallet = user.walletAddress ?? (await getUser(user.id).catch(() => null))?.walletAddress;
@@ -127,7 +139,7 @@ const CAPS_TTL_MS = 300_000;
 
 export async function capabilities(force = false) {
   if (!force && capsCache && Date.now() - capsCache.at < CAPS_TTL_MS) return capsCache.caps;
-  const caps = await probeCapabilities(OMNIBUS_EXTERNAL_ID, OMNIBUS_EMAIL);
+  const caps = await probeCapabilities(omnibusIdentity());
   capsCache = { at: Date.now(), caps };
   return caps;
 }

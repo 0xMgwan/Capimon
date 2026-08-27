@@ -77,6 +77,10 @@ export async function POST(req: Request) {
       returning id`;
     const orderId = orders[0].id;
 
+    // Set once the shillings have actually been converted, so a failure after
+    // that point can still account for money that really moved.
+    let swapped: { usdc: number; tzsSpent: number } | null = null;
+
     try {
       // A shilling buy converts exactly the spent TZS into USDC first, then
       // sizes the trade to what actually arrived — so the debit is the TZS the
@@ -87,6 +91,7 @@ export async function POST(req: Request) {
         const { swapTzsToUsdc } = await import("@/lib/ntzsFunding");
         const converted = await swapTzsToUsdc(amount);
         tzsSpent = converted.tzsSpent;
+        swapped = converted;
         exec = await executeBuy(asset.symbol, converted.usdc);
       } else {
         exec = side === "buy" ? await executeBuy(asset.symbol, amount)
@@ -134,9 +139,30 @@ export async function POST(req: Request) {
         .trim()
         .slice(0, 300);
       await sql`update capx.orders set status = 'failed', error = ${raw.slice(0, 2000)} where id = ${orderId}`;
+
+      /*
+       * The swap is irreversible. If the shillings were converted and only the
+       * trade failed, the customer's money is now USDC — so record that, rather
+       * than leaving their balance claiming shillings the omnibus no longer
+       * holds. Saying "nothing was debited" while the TZS is gone is how a
+       * failed order turns into an unbacked liability.
+       */
+      if (swapped) {
+        await record([
+          { userId: user.id, kind: "adjustment", asset: "TZS", amount: (-swapped.tzsSpent).toString(),
+            ref: `${orderId}:unwind-tzs`,
+            metadata: { orderId, reason: "order failed after the shilling swap" } },
+          { userId: user.id, kind: "adjustment", asset: "USDC", amount: swapped.usdc.toString(),
+            ref: `${orderId}:unwind-usdc`,
+            metadata: { orderId, reason: "shillings already converted; held as USDC" } },
+        ]);
+      }
       return NextResponse.json(
         { ok: false, code: "execution_failed", orderId, error: message,
-          note: "Nothing was debited from your balance." },
+          note: swapped
+            ? `Your ${swapped.tzsSpent.toLocaleString()} TZS had already been converted, so it is held as ` +
+              `${swapped.usdc.toFixed(2)} USDC in your balance. No shares were bought.`
+            : "Nothing was debited from your balance." },
         { status: 502 },
       );
     }

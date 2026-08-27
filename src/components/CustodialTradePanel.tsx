@@ -9,6 +9,7 @@ import { useCapimonAccount, useCurrency } from "@/lib/useCapimonAccount";
 import { AssetLogo } from "./AssetLogo";
 import { UsdcIcon } from "./icons/Usdc";
 import { NtzsIcon } from "./icons/Ntzs";
+import { usd } from "@/lib/format";
 
 type Quote = {
   ok: boolean; executable?: boolean; amountOut?: number; oracleOut: number; oraclePrice: number;
@@ -29,7 +30,7 @@ const PRESETS_TZS = [25_000, 100_000, 250_000, 500_000];
  */
 export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; market?: Market }) {
   const { account, refresh } = useCapimonAccount();
-  const { currency, setCurrency, canShowTzs, rate, format, toUsdc, fromUsdc } = useCurrency();
+  const { currency, setCurrency, canShowTzs, rate, format, toUsdc } = useCurrency();
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("100");
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -45,13 +46,18 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
   // What the user typed, expressed in USDC — the router and the quote both work
   // in USDC whatever the screen says.
   const spendUsdc = side === "buy" ? toUsdc(amountNum) : amountNum;
-  // A shilling account spends TZS: the swap to USDC happens server-side, at buy
-  // time. The shillings to spend are that USDC intent back at today's rate.
-  const payTzs = side === "buy" && tzsCash > 0 && !!rate && rate > 0;
-  const tzsToSpend = payTzs && rate ? spendUsdc / rate : 0;
-  const insufficient = side === "buy"
-    ? (payTzs ? tzsToSpend > tzsCash : spendUsdc > cash)
-    : amountNum > held;
+  /*
+   * The toggle decides which balance is spent, not merely how figures are
+   * shown. An account can hold both, and treating any TZS balance as "pay in
+   * shillings" checked a USDC purchase against the shilling balance — a $1 buy
+   * with $1.94 available refused as "Not enough TZS".
+   */
+  const payTzs = side === "buy" && currency === "TZS" && !!rate && rate > 0;
+  const tzsToSpend = payTzs ? amountNum : 0;
+  // What is actually spendable in the currency on screen.
+  const available = side !== "buy" ? held : payTzs ? tzsCash : cash;
+  const wanted = side !== "buy" ? amountNum : payTzs ? tzsToSpend : spendUsdc;
+  const insufficient = wanted > available;
 
   useEffect(() => {
     if (!(spendUsdc > 0)) return;
@@ -136,10 +142,12 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
         </div>
         <div className="mt-1 flex justify-end">
           <button
-            onClick={() => setAmount(String(side === "buy" ? Math.floor(fromUsdc(cash)) : held))}
+            onClick={() => setAmount(String(side === "buy" ? (payTzs ? Math.floor(tzsCash) : cash) : held))}
             className="tnum text-[11px] text-[var(--muted)] hover:text-[var(--fg)]"
           >
-            {side === "buy" ? `${format(cash)} available` : `${held.toFixed(6)} held`}
+            {side === "buy"
+              ? `${payTzs ? `${Math.floor(tzsCash).toLocaleString()} TZS` : usd(cash)} available`
+              : `${held.toFixed(6)} held`}
           </button>
         </div>
         <div className="mt-2 flex items-center gap-3 rounded-2xl border hairline px-4 py-3 focus-within:border-[var(--color-accent)]">

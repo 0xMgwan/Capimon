@@ -26,7 +26,7 @@ const slippageFor = (usd: number) => (usd < 10 ? 300 : usd < 50 ? 200 : 100);
 
 /** The router's way of saying the quote went stale between pricing and mining. */
 const isStaleQuote = (e: unknown) =>
-  /return amount is not enough|INSUFFICIENT_OUTPUT|slippage/i.test(
+  /return amount is not enough|INSUFFICIENT_OUTPUT|slippage|reverted on-chain/i.test(
     e instanceof Error ? e.message : String(e),
   );
 
@@ -91,6 +91,17 @@ async function sendSwap(
     nonce,
   }));
   const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+  /*
+   * A raw sendTransaction is only gas-estimated, not simulated at mine time, so
+   * a swap can pass estimation and still revert when the pool moves before it
+   * lands. That arrives as a confirmed receipt with status "reverted" and no
+   * transfer logs — which surfaced as "trade confirmed but no transfer found",
+   * blaming the log reader for a trade that never happened. Say what it was,
+   * and let the stale-quote retry treat it as the race it is.
+   */
+  if (receipt.status !== "success") {
+    throw new Error(`Swap ${txHash} reverted on-chain — the quote went stale before it mined.`);
+  }
   return { txHash, receipt };
 }
 

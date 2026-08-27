@@ -31,7 +31,7 @@ export function MarketsView() {
   }, [markets]);
 
   return (
-    <div className="mx-auto max-w-[1400px] px-5 pb-24 pt-12 sm:px-8">
+    <div className="mx-auto max-w-[1400px] px-5 pb-16 pt-6 sm:px-8 sm:pb-24 sm:pt-12">
       <Reveal>
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
@@ -109,7 +109,7 @@ export function MarketsView() {
 function Cell({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="bg-[var(--bg)] px-3 py-3 sm:px-5 sm:py-4">
-      <div className="eyebrow truncate">{label}</div>
+      <div className="eyebrow leading-tight">{label}</div>
       <div className="tnum mt-1.5 text-base font-medium sm:text-lg">{value}</div>
     </div>
   );

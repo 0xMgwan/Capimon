@@ -62,8 +62,6 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
   // What the user typed, expressed in USDC — the router and the quote both work
   // in USDC whatever the screen says.
   const spendUsdc = side === "buy" ? toUsdc(amountNum) : amountNum;
-  // The quote endpoint takes USDC for a buy and a share quantity for a sell.
-  const quoteAmount = side === "buy" ? spendUsdc : sellByValueAmount();
   /*
    * The toggle decides which balance is spent, not merely how figures are
    * shown. An account can hold both, and treating any TZS balance as "pay in
@@ -81,7 +79,6 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
    * unreadable and easy to mistype. So the sell side takes an amount in the
    * chosen currency and converts to a quantity here, at the live mark.
    */
-  function sellByValueAmount() { return sellQty; }
   const markUsd = market?.price ?? 0;
   const sellByValue = side === "sell" && markUsd > 0;
   const sellValueUsd = sellByValue ? (currency === "TZS" && rate ? amountNum * rate : amountNum) : 0;
@@ -89,6 +86,14 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
   // reverts the whole trade for the sake of a fraction of a cent.
   const sellQty = sellByValue ? Math.min(held, sellValueUsd / markUsd) : amountNum;
   const heldValue = currency === "TZS" && rate ? (held * markUsd) / rate : held * markUsd;
+  /*
+   * The quote endpoint prices a buy in USDC and a sell in share quantity, so
+   * it gets whichever the side needs. Declared after sellQty rather than beside
+   * spendUsdc: a `const` cannot be read before its initialiser runs, and a
+   * hoisted helper reaching back for it threw "Cannot access before
+   * initialization" on every render of the panel.
+   */
+  const quoteAmount = side === "buy" ? spendUsdc : sellQty;
 
   // What is actually spendable in the currency on screen.
   const available = side !== "buy" ? (sellByValue ? heldValue : held) : payTzs ? tzsCash : cash;

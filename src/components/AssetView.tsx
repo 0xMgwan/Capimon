@@ -7,6 +7,7 @@ import { useMarket, useMarkets } from "@/lib/useMarkets";
 import { PriceChart } from "./PriceChart";
 import { TradePanel } from "./TradePanel";
 import { CustodialTradePanel } from "./CustodialTradePanel";
+import { PanelBoundary } from "./PanelBoundary";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { useAccount } from "wagmi";
 import { Sparkline } from "./Sparkline";
@@ -120,9 +121,11 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
 
         <div className="lg:sticky lg:top-32 lg:self-start">
           <Reveal delay={0.08}>
-            {custodial
-              ? <CustodialTradePanel asset={asset} market={market} />
-              : <TradePanel asset={asset} market={market} />}
+            <PanelBoundary label="Order ticket">
+              {custodial
+                ? <CustodialTradePanel asset={asset} market={market} />
+                : <TradePanel asset={asset} market={market} />}
+            </PanelBoundary>
           </Reveal>
 
           {peers.length > 0 && (

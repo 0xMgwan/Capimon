@@ -159,10 +159,18 @@ export function WalletSection() {
         <div className="rounded-3xl border hairline p-5">
           <div className="eyebrow">Available to invest</div>
           {(() => {
-            // Shillings held directly, plus any cash the ramp route settled in
-            // USDC, shown at the live rate.
+            /*
+             * An account can hold shillings and USDC at once, and each is spent
+             * on its own. Merging them into one "≈ N TZS" figure disagreed with
+             * the trade panel, which shows the balance actually being spent —
+             * so name both parts rather than only their sum.
+             */
             const shillings = account.tzs + (account.cashTzs ?? 0);
             const showTzs = account.tzs > 0 || account.cashTzs !== null;
+            const parts = [
+              account.tzs > 0 ? TZS(account.tzs) : null,
+              account.cash > 0 ? usd(account.cash) : null,
+            ].filter(Boolean) as string[];
             return (
               <>
                 <div className="tnum mt-2 flex items-center gap-2 text-3xl font-medium tracking-tight">
@@ -170,12 +178,13 @@ export function WalletSection() {
                   {showTzs ? `≈ ${TZS(shillings)}` : usd(account.cash)}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--muted)]">
-                  {account.cash > 0 && (
+                  {parts.length > 1 ? (
+                    <span>{parts.join(" + ")} — each spent in its own currency</span>
+                  ) : account.cash > 0 && showTzs ? (
                     <span className="inline-flex items-center gap-1">
-                      <UsdcIcon className="h-3 w-3" />{usd(account.cash)}
-                      {showTzs && " held — shown in shillings at today's rate"}
+                      <UsdcIcon className="h-3 w-3" />{usd(account.cash)} held — shown in shillings at today&apos;s rate
                     </span>
-                  )}
+                  ) : null}
                   {account.equity > 0 && <span>· {usd(account.equity)} in shares</span>}
                 </div>
               </>

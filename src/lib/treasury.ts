@@ -422,9 +422,25 @@ export async function ensureTreasuryFunded(needUsdc: number, address?: `0x${stri
   const shortfall = needUsdc - onHand;
 
   if (available < shortfall) {
+    /*
+     * Name the stranded float explicitly. On-ramped USDC is delivered to the
+     * nTZS settlement float, which backs balances but has no API that can move
+     * it out — so an account can be fully backed and still unable to buy. A
+     * message that only compares two numbers leaves that looking like a bug.
+     */
+    const { rampBalance } = await import("./ntzs");
+    const stranded = await rampBalance()
+      .then((b) => Number(b.usdcBalance ?? b.balance ?? b.usdc ?? 0))
+      .catch(() => 0);
+
     throw new Error(
-      `This order needs ${needUsdc.toFixed(2)} USDC. The treasury holds ${onHand.toFixed(2)} ` +
-      `and only ${available.toFixed(2)} is available on the nTZS side.`,
+      `This order needs ${needUsdc.toFixed(2)} USDC but only ${(onHand + available).toFixed(2)} can reach ` +
+      `the treasury (${onHand.toFixed(2)} on-chain, ${available.toFixed(2)} in the omnibus).` +
+      (stranded > 0.01
+        ? ` A further ${stranded.toFixed(2)} USDC sits in the nTZS settlement float, which backs balances ` +
+          `but cannot be transferred out — it can be withdrawn to mobile money, or moved by nTZS. ` +
+          `Deposits made now land in the omnibus and are spendable straight away.`
+        : ""),
     );
   }
 

@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "motion/react";
 import type { AssetMeta } from "@/lib/assets";
 import type { Market } from "@/lib/useMarkets";
 import { useCapimonAccount, useCurrency } from "@/lib/useCapimonAccount";
+import { AssetLogo } from "./AssetLogo";
 import { UsdcIcon } from "./icons/Usdc";
 import { NtzsIcon } from "./icons/Ntzs";
 import { AssetPicker } from "./AssetPicker";
@@ -48,6 +49,12 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
   const pickerSelected = pickerMarkets.find((m) => m.symbol === asset.symbol);
   const { currency, setCurrency, canShowTzs, rate, format, toUsdc } = useCurrency();
   const [side, setSide] = useState<"buy" | "sell">("buy");
+  /*
+   * What a sell amount means. People think either way — "cash out 50,000
+   * shillings" or "sell half my shares" — and forcing one costs the other a
+   * mental conversion at eight decimals.
+   */
+  const [sellIn, setSellIn] = useState<"money" | "shares">("money");
   const [amount, setAmount] = useState("100");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoting, setQuoting] = useState(false);
@@ -80,11 +87,13 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
    * chosen currency and converts to a quantity here, at the live mark.
    */
   const markUsd = market?.price ?? 0;
-  const sellByValue = side === "sell" && markUsd > 0;
+  const sellByValue = side === "sell" && markUsd > 0 && sellIn === "money";
   const sellValueUsd = sellByValue ? (currency === "TZS" && rate ? amountNum * rate : amountNum) : 0;
   // Never ask to sell more than is held: a rounding error at eight decimals
   // reverts the whole trade for the sake of a fraction of a cent.
-  const sellQty = sellByValue ? Math.min(held, sellValueUsd / markUsd) : amountNum;
+  // Clamped to the holding: at eight decimals a rounding error in the last
+  // digit reverts the whole trade.
+  const sellQty = sellByValue ? Math.min(held, sellValueUsd / markUsd) : Math.min(held, amountNum);
   const heldValue = currency === "TZS" && rate ? (held * markUsd) / rate : held * markUsd;
   /*
    * The quote endpoint prices a buy in USDC and a sell in share quantity, so
@@ -186,32 +195,53 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
       <div className="mt-4">
         <div className="flex items-center justify-between gap-2">
           <label className="eyebrow">{side === "buy" ? "You spend" : "You sell"}</label>
-          {side === "buy" && canShowTzs && (
-            <div className="flex rounded-full surface p-0.5">
-              {(["TZS", "USDC"] as const).map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setCurrency(c)}
-                  className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
-                    currency === c ? "bg-[var(--bg)] shadow-sm" : "text-[var(--muted)]"
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="flex rounded-full surface p-0.5">
+            {canShowTzs && (["TZS", "USDC"] as const).map((c) => (
+              <button
+                key={c}
+                onClick={() => {
+                  setCurrency(c);
+                  if (side === "sell") {
+                    setSellIn("money");
+                    setAmount(String(c === "TZS"
+                      ? Math.floor(held * markUsd / (rate || 1))
+                      : Number((held * markUsd).toFixed(2))));
+                  }
+                }}
+                className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
+                  (side === "sell" ? sellIn === "money" && currency === c : currency === c)
+                    ? "bg-[var(--bg)] shadow-sm" : "text-[var(--muted)]"
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+            {/* Selling by quantity, for people who think in shares. */}
+            {side === "sell" && (
+              <button
+                onClick={() => { setSellIn("shares"); setAmount(String(held || 0)); }}
+                className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
+                  sellIn === "shares" ? "bg-[var(--bg)] shadow-sm" : "text-[var(--muted)]"
+                }`}
+              >
+                Shares
+              </button>
+            )}
+          </div>
         </div>
         <div className="mt-1 flex justify-end">
           <button
             onClick={() => setAmount(String(side === "buy"
               ? (payTzs ? Math.floor(tzsCash) : cash)
+              : sellIn === "shares" ? held
               : currency === "TZS" ? Math.floor(heldValue) : Number(heldValue.toFixed(2))))}
             className="tnum text-[11px] text-[var(--muted)] hover:text-[var(--fg)]"
           >
             {side === "buy"
               ? `${payTzs ? `${Math.floor(tzsCash).toLocaleString()} TZS` : usd(cash)} available`
-              : `${currency === "TZS" ? `${Math.floor(heldValue).toLocaleString()} TZS` : usd(heldValue)} held`}
+              : sellIn === "shares"
+                ? `${held.toFixed(6)} held`
+                : `${currency === "TZS" ? `${Math.floor(heldValue).toLocaleString()} TZS` : usd(heldValue)} held`}
           </button>
         </div>
         <div className="mt-2 flex items-center gap-3 rounded-2xl border hairline px-4 py-3 focus-within:border-[var(--color-accent)]">
@@ -223,8 +253,10 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
             placeholder="0"
           />
           <span className="flex shrink-0 items-center gap-1.5 rounded-full surface px-3 py-1.5 text-xs font-medium">
-            {currency === "TZS" ? <NtzsIcon className="h-4 w-4" /> : <UsdcIcon className="h-4 w-4" />}
-            {currency}
+            {side === "sell" && sellIn === "shares"
+              ? <AssetLogo logo={market?.logo} ticker={asset.ticker} color={asset.color} size={16} />
+              : currency === "TZS" ? <NtzsIcon className="h-4 w-4" /> : <UsdcIcon className="h-4 w-4" />}
+            {side === "sell" && sellIn === "shares" ? asset.symbol : currency}
           </span>
         </div>
         {(side === "buy" || sellByValue) && (
@@ -261,8 +293,14 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
       <dl className="mt-4 space-y-2 text-xs">
         {/* The value is what people choose; the quantity is what actually
             trades, so it stays visible rather than being hidden behind it. */}
-        {sellByValue && sellQty > 0 && (
-          <Row k="Shares sold" v={`${sellQty.toFixed(6)} ${asset.symbol}`} />
+        {side === "sell" && sellQty > 0 && (
+          <Row
+            k="Shares sold"
+            v={`${sellQty.toFixed(6)} ${asset.symbol}${
+              // The quote below prices what will actually trade, so an amount
+              // beyond the holding would otherwise be quoted without comment.
+              wanted > available * 1.0001 ? " (all you hold)" : ""}`}
+          />
         )}
         <Row k="Oracle mark" v={market ? format(market.price) : "—"} />
         {quote?.executionPrice ? <Row k="Execution price" v={format(quote.executionPrice)} /> : null}

@@ -69,7 +69,10 @@ export function AdminPanel() {
 
   const settle = async () => {
     setBusy(true);
-    await fetch("/api/ntzs/settle", { method: "POST" }).catch(() => {});
+    await fetch("/api/ntzs/settle", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    }).catch(() => {});
     await load(token);
   };
 

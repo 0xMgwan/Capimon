@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { getDeposit, rampStatus, rampSettlements, ntzsConfigured } from "@/lib/ntzs";
 import { db, migrate } from "@/lib/db";
 import { record } from "@/lib/ledger";
@@ -179,10 +180,39 @@ export async function settlePending(): Promise<{ checked: number; results: Recor
   return { checked: pending.length, results };
 }
 
-/** Callable by a cron, the admin desk, or a client that just paid. */
-export async function POST() {
+/**
+ * Who may trigger settlement.
+ *
+ * Settling only credits confirmed collections to the accounts that made them,
+ * so an unauthorised call cannot move money anywhere it was not already going —
+ * but it does enumerate deposit ids in the response, and letting anyone drive
+ * upstream calls on our key is not something to leave open.
+ *
+ * Vercel's cron sends CRON_SECRET; the admin desk sends ADMIN_TOKEN; and a
+ * signed-in customer may nudge their own deposit rather than waiting up to five
+ * minutes for the next pass.
+ */
+async function permitted(req: Request): Promise<boolean> {
+  const given = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+  if (given) {
+    for (const secret of [process.env.CRON_SECRET, process.env.ADMIN_TOKEN]) {
+      if (!secret) continue;
+      const a = Buffer.from(given);
+      const b = Buffer.from(secret);
+      if (a.length === b.length && timingSafeEqual(a, b)) return true;
+    }
+  }
+  const { currentUser } = await import("@/lib/auth");
+  return !!(await currentUser().catch(() => null));
+}
+
+/** Callable by a cron, the admin desk, or a signed-in client that just paid. */
+export async function POST(req: Request) {
   const gate = requireDb();
   if (gate) return gate;
+  if (!(await permitted(req))) {
+    return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
+  }
   const settled = await settlePending();
   /*
    * Also finish any order that failed after its shillings were converted. That
@@ -197,6 +227,6 @@ export async function POST() {
     { headers: { "cache-control": "no-store" } });
 }
 
-export async function GET() {
-  return POST();
+export async function GET(req: Request) {
+  return POST(req);
 }

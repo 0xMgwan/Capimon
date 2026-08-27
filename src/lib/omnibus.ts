@@ -175,6 +175,13 @@ const CAPS_TTL_MS = 300_000;
 export async function capabilities(force = false) {
   if (!force && capsCache && Date.now() - capsCache.at < CAPS_TTL_MS) return capsCache.caps;
   const caps = await probeCapabilities(omnibusIdentity());
+  // The probe creates the account but does not attest it, so it can report no
+  // wallet for an omnibus that provisioning would give one to. Ask the
+  // provisioning path before recording the answer.
+  if (!caps.wallets.available) {
+    const id = await omnibusUserId().catch(() => null);
+    if (id) caps.wallets = { available: true, detail: id };
+  }
   capsCache = { at: Date.now(), caps };
   return caps;
 }
@@ -191,15 +198,30 @@ export type CollectionRoute = "treasury" | "ramp" | "omnibus-wallet" | "none";
  * USDC in one step. It is the route that works, which beats the route that
  * ought to.
  */
+/** Negative cache, so a wallet-less deployment does not re-probe on every call. */
+let noWalletUntil = 0;
+const NO_WALLET_TTL_MS = 60_000;
+
 export async function collectionRoute(): Promise<CollectionRoute> {
+  /*
+   * Prefer the omnibus wallet whenever one actually exists: deposits rest as
+   * shillings and convert only at buy time, which keeps owed and held in the
+   * same unit and lets the treasury be funded by transfer.
+   *
+   * Asked of the wallet itself rather than the capability probe. The probe is
+   * cached for five minutes and reports what was true when it ran, so right
+   * after provisioning it still says "no wallet" — routing money on that would
+   * mean ignoring a wallet we just created.
+   */
+  if (Date.now() >= noWalletUntil) {
+    const hasWallet = await omnibusUserId().then(() => true).catch(() => false);
+    if (hasWallet) return "omnibus-wallet";
+    noWalletUntil = Date.now() + NO_WALLET_TTL_MS;
+  }
+
+  // No wallet: the ramp collects mobile money straight to USDC without one.
   const caps = await capabilities();
-  // Settlement model: the ramp. On-ramps settle straight to USDC, delivered to
-  // the nTZS settlement float and pre-funded/swept into the treasury EOA — the
-  // only path that works without a readable, swap-capable omnibus User wallet,
-  // which this deployment does not currently expose. The wallet-holds-TZS
-  // routes are kept as fallbacks for a deployment that does expose one.
   if (caps.ramp.available) return "ramp";
-  if (caps.wallets.available) return "omnibus-wallet";
   if (caps.collections.available) return "treasury";
   return "none";
 }

@@ -98,6 +98,9 @@ export async function GET() {
       await omnibusUserId();
       const b = await omnibusBalances();
       c.omnibusWalletReady = !!b.walletAddress;
+      // CAPX's own float, not customer data. Distinguishes "the omnibus is
+      // short" from "the swap was refused", which read identically from a 400.
+      c.omnibusBalances = { tzs: b.tzs, usdc: b.usdc };
     } catch (e) {
       c.omnibusWalletReady = false;
       c.omnibusWalletError = e instanceof Error ? e.message : "omnibus wallet unavailable";

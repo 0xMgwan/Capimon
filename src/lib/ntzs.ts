@@ -39,9 +39,29 @@ export class NtzsError extends Error {
  * Reading `error` alone mis-handles about a third of it, so branch on both.
  */
 function toError(status: number, body: unknown): NtzsError {
-  const b = (body ?? {}) as { error?: string; code?: string; message?: string };
+  const b = (body ?? {}) as {
+    error?: string; code?: string; message?: string; detail?: string; reason?: string;
+    errors?: unknown; details?: unknown;
+  };
   const code = b.code ?? (b.message ? b.error : undefined) ?? `http_${status}`;
-  const message = b.message ?? b.error ?? `nTZS request failed (${status})`;
+
+  /*
+   * Take the first human-readable field, and fall back to the body itself
+   * rather than a bare status. A 400 whose reason we cannot name is
+   * undebuggable from the outside — "nTZS request failed (400)" cost a round
+   * trip that the response had already answered.
+   */
+  const listed = [b.errors, b.details]
+    .flatMap((v) => (Array.isArray(v) ? v : v ? [v] : []))
+    .map((v) => (typeof v === "string" ? v : (v as { message?: string })?.message))
+    .filter(Boolean)
+    .join("; ");
+
+  const message =
+    b.message ?? b.detail ?? b.reason ?? b.error ?? listed ||
+    (body && typeof body === "object" ? JSON.stringify(body).slice(0, 300) : "") ||
+    `nTZS request failed (${status})`;
+
   const retry = status >= 500 ? "verify" : status === 429 ? "backoff" : "no";
   return new NtzsError(code, message, status, retry);
 }

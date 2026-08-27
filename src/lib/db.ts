@@ -152,6 +152,10 @@ export async function migrate() {
           "nida_number text",
           "is_admin boolean not null default false",
           "username text",
+          // Small, resized data URL rather than a blob store: an avatar is a
+          // few kilobytes and adding object storage for it would be a whole
+          // dependency for one field.
+          "avatar text",
         ],
         deposits: [
           "ntzs_status text", "ntzs_reference text", "swap_ref text", "transfer_tx text",

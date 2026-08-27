@@ -8,7 +8,7 @@ export type CustodialPosition = {
 };
 
 export type CustodialAccount = {
-  user: { id: string; email: string; username: string | null; name: string | null; phone: string | null; ntzsUserId: string | null; kycStatus: string };
+  user: { id: string; email: string; username: string | null; name: string | null; phone: string | null; avatar: string | null; ntzsUserId: string | null; kycStatus: string };
   cash: number;
   /** Shillings held directly, when the treasury route is in use. */
   tzs: number;

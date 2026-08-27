@@ -1,4 +1,5 @@
 "use client";
+import { Avatar } from "./Avatar";
 
 import { useAccount, useDisconnect, useBalance, useChainId, useSwitchChain } from "wagmi";
 import { base } from "wagmi/chains";
@@ -81,10 +82,12 @@ export function WalletButton() {
       <div className="relative" ref={ref}>
         <button
           onClick={() => setOpen((o) => !o)}
-          className="flex items-center gap-2 rounded-full border hairline surface px-4 py-2 text-sm font-medium transition-colors hover:border-[var(--color-accent)]"
+          className="flex items-center gap-2 rounded-full border hairline surface px-2 py-1.5 text-sm font-medium transition-colors hover:border-[var(--color-accent)] sm:px-4 sm:py-2"
         >
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-up)]" />
-          <span className="max-w-[7rem] truncate sm:max-w-[10rem]">
+          <Avatar src={account.user.avatar} name={account.user.name} email={account.user.email} size={22} />
+          {/* The name is the first thing to go when space is tight; the face
+              stays, which is what people navigate by. */}
+          <span className="hidden max-w-[7rem] truncate sm:inline sm:max-w-[10rem]">
             {account.user.username ? `@${account.user.username}` : account.user.name ?? account.user.email}
           </span>
         </button>
@@ -97,6 +100,7 @@ export function WalletButton() {
               <div className="mt-0.5 text-[11px] text-[var(--muted)]">held by CAPX for you</div>
             </div>
             <a href="/portfolio" className="mt-1 block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">Portfolio</a>
+            <a href="/settings" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">Settings</a>
             <a href="/join" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">Fund with shillings</a>
             <button
               onClick={() => { void signOut(); setOpen(false); }}

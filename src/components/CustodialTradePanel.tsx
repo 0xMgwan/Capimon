@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { AssetMeta } from "@/lib/assets";
 import type { Market } from "@/lib/useMarkets";
@@ -9,6 +10,9 @@ import { useCapimonAccount, useCurrency } from "@/lib/useCapimonAccount";
 import { AssetLogo } from "./AssetLogo";
 import { UsdcIcon } from "./icons/Usdc";
 import { NtzsIcon } from "./icons/Ntzs";
+import { AssetPicker } from "./AssetPicker";
+import { useMarkets } from "@/lib/useMarkets";
+import { useVenues } from "@/lib/useVenues";
 import { usd } from "@/lib/format";
 
 type Quote = {
@@ -30,6 +34,19 @@ const PRESETS_TZS = [25_000, 100_000, 250_000, 500_000];
  */
 export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; market?: Market }) {
   const { account, refresh } = useCapimonAccount();
+  const router = useRouter();
+  // The same searchable list the landing page uses, so switching company from
+  // inside the ticket does not mean going back to the markets index first —
+  // which on a phone is a page load and a lost amount.
+  const { data: marketData } = useMarkets();
+  const { venues } = useVenues();
+  const pickerMarkets = useMemo(() => {
+    const rank = (sym: string) => (venues[sym]?.tradeable ? 0 : 1);
+    return [...(marketData?.markets ?? [])].sort(
+      (a, b) => rank(a.symbol) - rank(b.symbol) || a.ticker.localeCompare(b.ticker),
+    );
+  }, [marketData, venues]);
+  const pickerSelected = pickerMarkets.find((m) => m.symbol === asset.symbol);
   const { currency, setCurrency, canShowTzs, rate, format, toUsdc } = useCurrency();
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("100");
@@ -107,6 +124,18 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
 
   return (
     <div className="rounded-3xl border hairline p-5">
+      {pickerMarkets.length > 0 && (
+        <div className="mb-4">
+          <div className="eyebrow mb-2">Company</div>
+          <AssetPicker
+            markets={pickerMarkets}
+            venues={venues}
+            selected={pickerSelected}
+            onSelect={(ticker) => router.push(`/markets/${ticker.toLowerCase()}`)}
+          />
+        </div>
+      )}
+
       <div className="flex rounded-full surface p-1">
         {(["buy", "sell"] as const).map((s) => (
           <button

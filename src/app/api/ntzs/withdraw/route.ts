@@ -4,7 +4,7 @@ import { withdrawalQuote, createWithdrawal, lookupRecipient, NtzsError, ntzsConf
 import { currentUser } from "@/lib/auth";
 import { balanceOf, record } from "@/lib/ledger";
 import { requireDb, bad, boom, notConfigured } from "@/lib/apiHelpers";
-import { omnibusUserId, capabilities, collectionRoute } from "@/lib/omnibus";
+import { omnibusUserId, capabilities } from "@/lib/omnibus";
 
 export const dynamic = "force-dynamic";
 
@@ -68,36 +68,55 @@ export async function GET(req: Request) {
       return bad(`Your balance is ${Math.floor(funds.totalTzs).toLocaleString()} TZS.`, "insufficient_balance");
     }
 
-    // Two payout rails. The ramp settles from the USDC float, which the treasury
-    // can fund directly, so it works without a user wallet. The disbursement
-    // rail pays from the omnibus account and needs one.
-    const route = await collectionRoute();
+    /*
+     * Two payout rails, and the ramp is preferred for both.
+     *
+     * The ramp debits the USDC settlement float, which the treasury can top up
+     * by signing a transfer — so it can pay any amount the customer is owed.
+     * The disbursement rail pays from the omnibus wallet's shillings, and that
+     * holds only what has not yet been swapped, so it refuses to quote a payout
+     * larger than the balance sitting there. Deposits routing through the
+     * omnibus is unrelated to which rail can fund a payout, and tying them
+     * together declined withdrawals the account could comfortably afford.
+     */
     const caps = await capabilities();
-    const viaRamp = route === "ramp" || !caps.wallets.available;
+    const viaRamp = caps.ramp.available;
 
     let quoteId: string | null = null;
     let feeTzs = 0;
     let quotedName: string | null = null;
 
+    let quoteShape = "";
     if (viaRamp) {
       const q = await rampQuote({ direction: "offramp", amount: amountTzs, phoneNumber });
-      quoteId = String(q.quoteId ?? q.id ?? "") || null;
-      feeTzs = Number(q.totalFeeTzs ?? q.feeTzs ?? 0);
+      // Accept whichever name the deployment uses, and remember the shape so a
+      // miss can be diagnosed from the response instead of guessed at.
+      quoteId = String(q.quoteId ?? q.id ?? q.quote_id ?? q.reference ?? "") || null;
+      feeTzs = Number(q.totalFeeTzs ?? q.feeTzs ?? q.feeAmountTzs ?? 0);
+      if (!quoteId) quoteShape = Object.keys(q ?? {}).join(", ").slice(0, 200);
     } else {
       const q = await withdrawalQuote({ userId: await omnibusUserId(), amountTzs, phoneNumber });
       quoteId = q.quoteId ?? null;
       feeTzs = Number(q.totalFeeTzs ?? 0);
       quotedName = q.recipientName ?? null;
+      if (!quoteId) quoteShape = Object.keys(q ?? {}).join(", ").slice(0, 200);
     }
 
     const recipient = await lookupRecipient(phoneNumber).catch(() => ({ name: null }));
     const quote = { quoteId, totalFeeTzs: feeTzs, recipientName: quotedName };
 
-    // A null quoteId upstream means the float cannot cover it — not a user error.
+    /*
+     * No quote id came back. That is either a refusal upstream or a field we do
+     * not recognise, and those need opposite responses — so name the fields the
+     * response actually carried rather than telling the customer to try again
+     * at something that will never succeed on its own.
+     */
     if (!quote.quoteId) {
       return NextResponse.json(
         { ok: false, code: "quote_unavailable",
-          error: "Withdrawals are temporarily unavailable. Try again shortly." },
+          error: quoteShape
+            ? `nTZS returned no quote id for this payout. Response fields: ${quoteShape}.`
+            : "Withdrawals are temporarily unavailable. Try again shortly." },
         { status: 503 },
       );
     }
@@ -141,9 +160,9 @@ export async function POST(req: Request) {
       return bad(`Your balance is ${Math.floor(funds.totalTzs).toLocaleString()} TZS.`, "insufficient_balance");
     }
 
-    const route = await collectionRoute();
+    // Same rail choice as the quote, for the same reasons.
     const caps = await capabilities();
-    const viaRamp = route === "ramp" || !caps.wallets.available;
+    const viaRamp = caps.ramp.available;
 
     let result: { id?: string; status?: string };
     if (viaRamp) {

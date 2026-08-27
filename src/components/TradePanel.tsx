@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useAccount, useReadContract, useWriteContract, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
 import { base } from "wagmi/chains";
 import { formatUnits, parseUnits, maxUint256 } from "viem";
@@ -11,6 +11,9 @@ import type { Market } from "@/lib/useMarkets";
 import { usd } from "@/lib/format";
 import { WalletButton } from "./WalletButton";
 import { UsdcIcon } from "./icons/Usdc";
+import { AssetPicker } from "./AssetPicker";
+import { useMarkets } from "@/lib/useMarkets";
+import { useVenues } from "@/lib/useVenues";
 
 type Severity = "ok" | "elevated" | "severe" | "unusable" | "none";
 
@@ -31,6 +34,18 @@ type Quote = {
 const SLIPPAGE_BPS = 100; // 1%
 
 export function TradePanel({ asset, market }: { asset: AssetMeta; market?: Market }) {
+  const nav = useRouter();
+  // Same picker as the custodial ticket and the landing page: someone browsing
+  // before they sign up should not have to leave the ticket to change company.
+  const { data: marketData } = useMarkets();
+  const { venues } = useVenues();
+  const pickerMarkets = useMemo(() => {
+    const rank = (sym: string) => (venues[sym]?.tradeable ? 0 : 1);
+    return [...(marketData?.markets ?? [])].sort(
+      (a, b) => rank(a.symbol) - rank(b.symbol) || a.ticker.localeCompare(b.ticker),
+    );
+  }, [marketData, venues]);
+  const pickerSelected = pickerMarkets.find((m) => m.symbol === asset.symbol);
   const { address, isConnected, chainId } = useAccount();
   const params = useSearchParams();
   // Quick buy on the landing page hands its intent over as ?side=&amount=.
@@ -144,6 +159,18 @@ export function TradePanel({ asset, market }: { asset: AssetMeta; market?: Marke
 
   return (
     <div className="rounded-3xl border hairline p-5">
+      {pickerMarkets.length > 0 && (
+        <div className="mb-4">
+          <div className="eyebrow mb-2">Company</div>
+          <AssetPicker
+            markets={pickerMarkets}
+            venues={venues}
+            selected={pickerSelected}
+            onSelect={(ticker) => nav.push(`/markets/${ticker.toLowerCase()}`)}
+          />
+        </div>
+      )}
+
       <div className="flex rounded-full surface p-1">
         {(["buy", "sell"] as const).map((s) => (
           <button

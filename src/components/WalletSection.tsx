@@ -1,12 +1,16 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { UsdcIcon } from "./icons/Usdc";
 import { NtzsIcon } from "./icons/Ntzs";
 import { usd } from "@/lib/format";
+import { useRouter } from "next/navigation";
+import { useMemo } from "react";
+import { AssetPicker } from "./AssetPicker";
+import { useMarkets } from "@/lib/useMarkets";
+import { useVenues } from "@/lib/useVenues";
 
 type Deposit = {
   id: string; amount_tzs: number; status: string; usdc_credited: string | null;
@@ -40,6 +44,22 @@ const IN_FLIGHT = new Set(["pending", "uncertain"]);
  */
 export function WalletSection() {
   const { account, refresh } = useCapimonAccount();
+  const router = useRouter();
+  // Buying and selling start from the same searchable list the ticket uses, so
+  // choosing a company never means a trip to the markets index and back.
+  const { data: marketData } = useMarkets();
+  const { venues } = useVenues();
+  const buyable = useMemo(() => {
+    const rank = (sym: string) => (venues[sym]?.tradeable ? 0 : 1);
+    return [...(marketData?.markets ?? [])].sort(
+      (a, b) => rank(a.symbol) - rank(b.symbol) || a.ticker.localeCompare(b.ticker),
+    );
+  }, [marketData, venues]);
+  // Selling is only meaningful for what is actually held.
+  const sellable = useMemo(() => {
+    const held = new Set((account?.positions ?? []).map((p) => p.symbol));
+    return buyable.filter((m) => held.has(m.symbol));
+  }, [buyable, account?.positions]);
   const [deposits, setDeposits] = useState<Deposit[]>([]);
   const [amountTzs, setAmountTzs] = useState(0);
   const [phone, setPhone] = useState("");
@@ -202,23 +222,34 @@ export function WalletSection() {
               {panel === "deposit" ? "Cancel" : "Add money"}
             </button>
             <div className="grid grid-cols-3 gap-2">
-              <Link
-                href="/markets"
-                className="whitespace-nowrap rounded-full border hairline py-3 text-center text-[13px] font-medium transition-colors hover:surface"
-              >
-                Buy shares
-              </Link>
-              {account.positions.length > 0 ? (
-                <Link
-                  href={
-                    account.positions.length === 1
-                      ? `/markets/${account.positions[0].ticker.toLowerCase()}`
-                      : "#holdings"
-                  }
-                  className="whitespace-nowrap rounded-full border hairline py-3 text-center text-[13px] font-medium transition-colors hover:surface"
-                >
-                  Sell shares
-                </Link>
+              <AssetPicker
+                markets={buyable}
+                venues={venues}
+                onSelect={(ticker) => router.push(`/markets/${ticker.toLowerCase()}`)}
+                trigger={(open) => (
+                  <button
+                    onClick={open}
+                    disabled={buyable.length === 0}
+                    className="w-full whitespace-nowrap rounded-full border hairline py-3 text-center text-[13px] font-medium transition-colors hover:surface disabled:opacity-40"
+                  >
+                    Buy shares
+                  </button>
+                )}
+              />
+              {sellable.length > 0 ? (
+                <AssetPicker
+                  markets={sellable}
+                  venues={venues}
+                  onSelect={(ticker) => router.push(`/markets/${ticker.toLowerCase()}`)}
+                  trigger={(open) => (
+                    <button
+                      onClick={open}
+                      className="w-full whitespace-nowrap rounded-full border hairline py-3 text-center text-[13px] font-medium transition-colors hover:surface"
+                    >
+                      Sell shares
+                    </button>
+                  )}
+                />
               ) : (
                 <button
                   disabled

@@ -16,12 +16,19 @@ import { useBodyLock } from "@/lib/useBodyLock";
  * takes the user away from the amount they just chose.
  */
 export function AssetPicker({
-  markets, venues, selected, onSelect,
+  markets, venues, selected, onSelect, trigger,
 }: {
   markets: Market[];
   venues: Record<string, Venue>;
   selected?: Market;
   onSelect: (ticker: string) => void;
+  /**
+   * Custom opener. Without it the picker draws its own select-style button,
+   * which suits a ticket; a caller that already has a button of its own — "Buy
+   * shares" on the portfolio — supplies one so the same list can open from it
+   * rather than sending the user off to the markets index.
+   */
+  trigger?: (open: () => void) => React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -120,6 +127,7 @@ export function AssetPicker({
 
   return (
     <div className="relative" ref={ref}>
+      {trigger ? trigger(() => { setQ(""); setOpen(true); }) : (
       <button
         onClick={() => { setQ(""); setOpen((o) => !o); }}
         aria-expanded={open}
@@ -150,6 +158,7 @@ export function AssetPicker({
           <path d="m6 9 6 6 6-6" />
         </motion.svg>
       </button>
+      )}
 
       <AnimatePresence>
         {open && (

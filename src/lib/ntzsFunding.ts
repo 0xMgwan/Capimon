@@ -69,6 +69,11 @@ export async function fundRampFloat(amountTzs: number, phoneNumber: string) {
 
   const { sendUsdcToNtzs } = await import("./treasury");
   const topUp = needUsdc - have;
+  // The treasury signs the top-up, so it has to hold the USDC first — and on a
+  // shilling account the money is TZS in the omnibus until something converts
+  // it. Without this a customer could be fully funded and still unable to
+  // withdraw, because their balance was in the one form the float cannot take.
+  await ensureTreasuryUsdc(topUp);
   await sendUsdcToNtzs(topUp, settlement);
 
   for (let i = 0; i < 12 && have < needUsdc; i++) {
@@ -217,4 +222,48 @@ export async function swapTzsToUsdc(amountTzs: number) {
     throw new NtzsError("swap_incomplete", "Swapped shillings but no USDC is visible yet.", 409);
   }
   return { usdc, tzsSpent: amountTzs };
+}
+
+/**
+ * Puts USDC in the treasury, converting omnibus shillings if that is where the
+ * money is.
+ *
+ * The buy path already walks TZS to the treasury; a payout needs the same walk,
+ * because the settlement float only accepts USDC and only the treasury can send
+ * it. Each step is skipped when it is not needed, so a treasury that already
+ * holds enough costs nothing.
+ */
+export async function ensureTreasuryUsdc(need: number) {
+  const { treasuryHoldings, treasuryAddress, ensureTreasuryFunded } = await import("./treasury");
+  const to = treasuryAddress();
+  if (!to) throw new NtzsError("no_treasury", "No treasury is configured.", 503);
+
+  const holdings = await treasuryHoldings();
+  const onHand = holdings?.usdc ?? 0;
+  if (onHand >= need) return { converted: 0, swept: 0 };
+
+  const short = need - onHand;
+  const before = await omnibusBalances();
+
+  // Convert only the shortfall the omnibus USDC cannot already cover.
+  let converted = 0;
+  if (before.usdc < short && before.tzs > 0) {
+    const { getSwapRate } = await import("./ntzs");
+    const probe = 100_000;
+    const r = await getSwapRate("NTZS", "USDC", probe);
+    const usdcPerTzs = Number(r.expectedOutput ?? 0) / probe;
+    if (usdcPerTzs > 0) {
+      // A little over, so the swap's own spread cannot leave the payout short.
+      const wantTzs = Math.ceil(((short - before.usdc) / usdcPerTzs) * 1.02);
+      const tzsToSwap = Math.min(Math.floor(before.tzs), wantTzs);
+      if (tzsToSwap > 0) {
+        await swapTzsToUsdc(tzsToSwap);
+        converted = tzsToSwap;
+      }
+    }
+  }
+
+  // Sweep whatever is now in the omnibus across to the treasury.
+  const { swept } = await ensureTreasuryFunded(need, to);
+  return { converted, swept };
 }

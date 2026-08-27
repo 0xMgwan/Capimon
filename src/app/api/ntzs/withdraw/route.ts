@@ -3,7 +3,7 @@ import { withdrawalQuote, createWithdrawal, lookupRecipient, NtzsError, ntzsConf
          rampQuote, rampOfframp, getSwapRate } from "@/lib/ntzs";
 import { currentUser } from "@/lib/auth";
 import { balanceOf, record } from "@/lib/ledger";
-import { requireDb, bad, boom, notConfigured } from "@/lib/apiHelpers";
+import { requireDb, bad, notConfigured } from "@/lib/apiHelpers";
 import { omnibusUserId, capabilities } from "@/lib/omnibus";
 
 export const dynamic = "force-dynamic";
@@ -219,6 +219,23 @@ export async function POST(req: Request) {
         { status: err.status },
       );
     }
-    return boom(e, "Could not send that withdrawal.");
+    /*
+     * A payout that fails needs to say why. boom() alone gives the customer a
+     * reference and puts the reason in a log nobody reading this screen can
+     * open, which turned a one-line diagnosis into a round trip. Keep the
+     * reference for correlation, but carry the reason with it.
+     */
+    const raw = e instanceof Error ? e.message : String(e);
+    const reason = raw
+      .split(/\n\s*\n/)[0]
+      .replace(/0x[0-9a-fA-F]{40,}/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 220);
+    console.error("[capx:withdraw]", raw);
+    return NextResponse.json(
+      { ok: false, code: "withdrawal_failed", error: `Could not send that withdrawal. ${reason}` },
+      { status: 502 },
+    );
   }
 }

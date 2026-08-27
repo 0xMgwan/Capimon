@@ -24,6 +24,29 @@ const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a
  */
 const slippageFor = (usd: number) => (usd < 10 ? 300 : usd < 50 ? 200 : 100);
 
+/** The router's way of saying the quote went stale between pricing and mining. */
+const isStaleQuote = (e: unknown) =>
+  /return amount is not enough|INSUFFICIENT_OUTPUT|slippage/i.test(
+    e instanceof Error ? e.message : String(e),
+  );
+
+/** Builds and sends one swap, waiting for it to mine. */
+async function sendSwap(
+  route: Awaited<ReturnType<typeof getRoute>>,
+  sender: `0x${string}`,
+  slippageBps: number,
+) {
+  const { wallet } = signer();
+  const built = await buildRoute(route!, sender, slippageBps);
+  const txHash = await wallet.sendTransaction({
+    to: built.routerAddress,
+    data: built.data,
+    value: BigInt(built.transactionValue || 0),
+  });
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+  return { txHash, receipt };
+}
+
 /**
  * Sums ERC-20 `Transfer` value credited to `to` for `token`, read straight from
  * a transaction's own logs.
@@ -151,7 +174,7 @@ export type Execution = {
 export async function executeBuy(symbol: string, usdcAmount: number): Promise<Execution> {
   const asset = BY_SYMBOL[symbol.toLowerCase()];
   if (!asset) throw new Error(`unknown asset ${symbol}`);
-  const { account, wallet } = signer();
+  const { account } = signer();
 
   // Backing can sit in the nTZS float, but only the treasury can sign a trade,
   // so top it up first rather than failing.
@@ -177,13 +200,19 @@ export async function executeBuy(symbol: string, usdcAmount: number): Promise<Ex
   const approved = await ensureAllowance(USDC_BASE, route.routerAddress, amountIn);
   if (approved) route = (await getRoute(USDC_BASE, asset.token, amountIn, feeParams("buy"))) ?? route;
 
-  const built = await buildRoute(route, account.address, slippageFor(usdcAmount));
-  const txHash = await wallet.sendTransaction({
-    to: built.routerAddress,
-    data: built.data,
-    value: BigInt(built.transactionValue || 0),
-  });
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+  // These pools are thin, so a quote can go stale between pricing and mining.
+  // One retry on a fresh quote turns a dead end into a filled order; anything
+  // else is rethrown untouched, and the oracle guard above still bounds price.
+  let txHash: `0x${string}`;
+  let receipt;
+  try {
+    ({ txHash, receipt } = await sendSwap(route, account.address, slippageFor(usdcAmount)));
+  } catch (e) {
+    if (!isStaleQuote(e)) throw e;
+    const fresh = await getRoute(USDC_BASE, asset.token, amountIn, feeParams("buy"));
+    if (!fresh) throw e;
+    ({ txHash, receipt } = await sendSwap(fresh, account.address, slippageFor(usdcAmount) + 100));
+  }
 
   // Credit what actually arrived, read from the trade's own Transfer logs. A
   // post-trade balanceOf can hit a lagging fallback RPC and read the pre-trade
@@ -205,7 +234,7 @@ export async function executeBuy(symbol: string, usdcAmount: number): Promise<Ex
 export async function executeSell(symbol: string, qty: number): Promise<Execution> {
   const asset = BY_SYMBOL[symbol.toLowerCase()];
   if (!asset) throw new Error(`unknown asset ${symbol}`);
-  const { account, wallet } = signer();
+  const { account } = signer();
 
   const markets = await getMarkets({ depth: 2 });
   const market = markets.find((m) => m.symbol === asset.symbol)!;
@@ -225,13 +254,16 @@ export async function executeSell(symbol: string, qty: number): Promise<Executio
   const approved = await ensureAllowance(asset.token, route.routerAddress, amountIn);
   if (approved) route = (await getRoute(asset.token, USDC_BASE, amountIn, feeParams("sell"))) ?? route;
 
-  const built = await buildRoute(route, account.address, slippageFor(expectedUsdc));
-  const txHash = await wallet.sendTransaction({
-    to: built.routerAddress,
-    data: built.data,
-    value: BigInt(built.transactionValue || 0),
-  });
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+  let txHash: `0x${string}`;
+  let receipt;
+  try {
+    ({ txHash, receipt } = await sendSwap(route, account.address, slippageFor(expectedUsdc)));
+  } catch (e) {
+    if (!isStaleQuote(e)) throw e;
+    const fresh = await getRoute(asset.token, USDC_BASE, amountIn, feeParams("sell"));
+    if (!fresh) throw e;
+    ({ txHash, receipt } = await sendSwap(fresh, account.address, slippageFor(expectedUsdc) + 100));
+  }
 
   // Proceeds read from the trade's own Transfer logs, not a post-trade
   // balanceOf — the same RPC-lag hazard would otherwise credit zero USDC.

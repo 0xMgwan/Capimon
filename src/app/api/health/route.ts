@@ -110,7 +110,15 @@ export async function GET() {
 
   const ready = dbConfigured && ntzsConfigured && treasuryConfigured;
   return NextResponse.json(
-    { ok: true, custodialReady: ready, checks },
+    {
+      ok: true,
+      custodialReady: ready,
+      // Which commit is actually serving. Without this, "is the fix live yet?"
+      // can only be guessed at, and a stale deploy looks exactly like a bug
+      // that was never fixed.
+      build: (process.env.VERCEL_GIT_COMMIT_SHA ?? "local").slice(0, 7),
+      checks,
+    },
     { headers: { "cache-control": "no-store" } },
   );
 }

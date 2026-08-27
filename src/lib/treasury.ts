@@ -22,13 +22,43 @@ const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a
  * oracle-deviation guard already refuses anything far from the mark — that
  * check, not slippage, is what protects the price.
  */
-const slippageFor = (usd: number) => (usd < 10 ? 300 : usd < 50 ? 200 : 100);
+const slippageFor = (usd: number) =>
+  usd < 5 ? 500 : usd < 10 ? 300 : usd < 50 ? 200 : 100;
 
-/** The router's way of saying the quote went stale between pricing and mining. */
+/** A swap that failed on price rather than on state — worth another quote. */
 const isStaleQuote = (e: unknown) =>
   /return amount is not enough|INSUFFICIENT_OUTPUT|slippage|reverted on-chain/i.test(
     e instanceof Error ? e.message : String(e),
   );
+
+/**
+ * Sends a swap, re-quoting and widening on a price failure.
+ *
+ * These pools are thin enough that a few dollars can move them several percent
+ * between building a route and mining it, so one attempt at a fixed tolerance
+ * loses trades that are perfectly executable a second later. Each attempt gets
+ * a fresh quote and more room; the oracle-deviation guard, not the slippage
+ * setting, is what keeps the price honest.
+ */
+async function swapWithRetry(
+  quote: () => Promise<Awaited<ReturnType<typeof getRoute>>>,
+  sender: `0x${string}`,
+  baseSlippage: number,
+) {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const route = attempt === 0 ? await quote() : await quote().catch(() => null);
+    if (!route) break;
+    try {
+      return await sendSwap(route, sender, Math.min(baseSlippage + attempt * 200, 900));
+    } catch (e) {
+      lastError = e;
+      // Anything that is not a price failure will not improve on a retry.
+      if (!isStaleQuote(e)) throw e;
+    }
+  }
+  throw lastError ?? new Error("no route available for this asset");
+}
 
 /*
  * Nonce discipline for the treasury EOA.
@@ -100,7 +130,9 @@ async function sendSwap(
    * and let the stale-quote retry treat it as the race it is.
    */
   if (receipt.status !== "success") {
-    throw new Error(`Swap ${txHash} reverted on-chain — the quote went stale before it mined.`);
+    throw new Error(
+      `Swap ${txHash} reverted on-chain — usually the pool moving between pricing and mining.`,
+    );
   }
   return { txHash, receipt };
 }
@@ -242,7 +274,7 @@ export async function executeBuy(symbol: string, usdcAmount: number): Promise<Ex
   const market = markets.find((m) => m.symbol === asset.symbol)!;
   const amountIn = parseUnits(usdcAmount.toFixed(6), 6);
 
-  let route = await getRoute(USDC_BASE, asset.token, amountIn, feeParams("buy"));
+  const route = await getRoute(USDC_BASE, asset.token, amountIn, feeParams("buy"));
   if (!route) throw new Error("no route available for this asset");
 
   const expectedQty = usdcAmount / market.price;
@@ -252,25 +284,15 @@ export async function executeBuy(symbol: string, usdcAmount: number): Promise<Ex
     throw new Error(`route is ${impact.toFixed(1)}% from the oracle mark — refusing to trade`);
   }
 
-  // Approving waits for the allowance to be visible, which can take seconds —
-  // long enough for the quote to go stale and the swap to revert on slippage.
-  // Re-quote after an approval so the route we send is the one we just priced.
-  const approved = await ensureAllowance(USDC_BASE, route.routerAddress, amountIn);
-  if (approved) route = (await getRoute(USDC_BASE, asset.token, amountIn, feeParams("buy"))) ?? route;
+  // The route above priced the trade and bounded it against the oracle; the
+  // send re-quotes for itself, so an approval wait cannot leave it stale.
+  await ensureAllowance(USDC_BASE, route.routerAddress, amountIn);
 
-  // These pools are thin, so a quote can go stale between pricing and mining.
-  // One retry on a fresh quote turns a dead end into a filled order; anything
-  // else is rethrown untouched, and the oracle guard above still bounds price.
-  let txHash: `0x${string}`;
-  let receipt;
-  try {
-    ({ txHash, receipt } = await sendSwap(route, account.address, slippageFor(usdcAmount)));
-  } catch (e) {
-    if (!isStaleQuote(e)) throw e;
-    const fresh = await getRoute(USDC_BASE, asset.token, amountIn, feeParams("buy"));
-    if (!fresh) throw e;
-    ({ txHash, receipt } = await sendSwap(fresh, account.address, slippageFor(usdcAmount) + 100));
-  }
+  const { txHash, receipt } = await swapWithRetry(
+    () => getRoute(USDC_BASE, asset.token, amountIn, feeParams("buy")),
+    account.address,
+    slippageFor(usdcAmount),
+  );
 
   // Credit what actually arrived, read from the trade's own Transfer logs. A
   // post-trade balanceOf can hit a lagging fallback RPC and read the pre-trade
@@ -298,7 +320,7 @@ export async function executeSell(symbol: string, qty: number): Promise<Executio
   const market = markets.find((m) => m.symbol === asset.symbol)!;
   const amountIn = parseUnits((qty / market.multiplier).toFixed(market.decimals), market.decimals);
 
-  let route = await getRoute(asset.token, USDC_BASE, amountIn, feeParams("sell"));
+  const route = await getRoute(asset.token, USDC_BASE, amountIn, feeParams("sell"));
   if (!route) throw new Error("no route available for this asset");
 
   const expectedUsdc = qty * market.price;
@@ -308,20 +330,13 @@ export async function executeSell(symbol: string, qty: number): Promise<Executio
     throw new Error(`route is ${impact.toFixed(1)}% from the oracle mark — refusing to trade`);
   }
 
-  // Re-quote after an approval wait, for the same reason as the buy path.
-  const approved = await ensureAllowance(asset.token, route.routerAddress, amountIn);
-  if (approved) route = (await getRoute(asset.token, USDC_BASE, amountIn, feeParams("sell"))) ?? route;
+  await ensureAllowance(asset.token, route.routerAddress, amountIn);
 
-  let txHash: `0x${string}`;
-  let receipt;
-  try {
-    ({ txHash, receipt } = await sendSwap(route, account.address, slippageFor(expectedUsdc)));
-  } catch (e) {
-    if (!isStaleQuote(e)) throw e;
-    const fresh = await getRoute(asset.token, USDC_BASE, amountIn, feeParams("sell"));
-    if (!fresh) throw e;
-    ({ txHash, receipt } = await sendSwap(fresh, account.address, slippageFor(expectedUsdc) + 100));
-  }
+  const { txHash, receipt } = await swapWithRetry(
+    () => getRoute(asset.token, USDC_BASE, amountIn, feeParams("sell")),
+    account.address,
+    slippageFor(expectedUsdc),
+  );
 
   // Proceeds read from the trade's own Transfer logs, not a post-trade
   // balanceOf — the same RPC-lag hazard would otherwise credit zero USDC.

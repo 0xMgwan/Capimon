@@ -242,7 +242,9 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
         {error && (
           <motion.p
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="mt-3 text-xs leading-snug text-[var(--color-down)]"
+            /* break-words matters: a revert carries an unbroken hex blob with no
+               spaces, which cannot wrap and stretches the page sideways on a phone. */
+            className="mt-3 overflow-hidden break-words text-xs leading-snug text-[var(--color-down)]"
           >
             {error}
           </motion.p>

@@ -30,6 +30,52 @@ const isStaleQuote = (e: unknown) =>
     e instanceof Error ? e.message : String(e),
   );
 
+/*
+ * Nonce discipline for the treasury EOA.
+ *
+ * One key signs for every customer, and a single order can send two
+ * transactions (approve, then swap). Left to itself each send asks the node for
+ * a nonce, and a node that has not yet seen the previous transaction hands back
+ * the same number twice — "nonce too low: next nonce 7, tx nonce 5". Two orders
+ * arriving together collide the same way.
+ *
+ * So signing is serialised in-process and the nonce is tracked across sends,
+ * never below what the chain reports pending. A nonce error resyncs from the
+ * chain and retries once, which covers the case where another process (or a
+ * previous deploy) moved the account on.
+ */
+let signingChain: Promise<unknown> = Promise.resolve();
+let lastNonce = -1;
+
+const isNonceError = (e: unknown) =>
+  /nonce too low|nonce is too low|already known|replacement transaction underpriced/i.test(
+    e instanceof Error ? e.message : String(e),
+  );
+
+async function reserveNonce(address: `0x${string}`) {
+  const pending = await publicClient.getTransactionCount({ address, blockTag: "pending" });
+  const nonce = Math.max(pending, lastNonce + 1);
+  lastNonce = nonce;
+  return nonce;
+}
+
+/** Serialises one signed send, supplying and retrying the nonce. */
+async function signedSend<T>(send: (nonce: number) => Promise<T>): Promise<T> {
+  const { account } = signer();
+  const run = signingChain.then(async () => {
+    try {
+      return await send(await reserveNonce(account.address));
+    } catch (e) {
+      if (!isNonceError(e)) throw e;
+      lastNonce = -1; // resync from the chain rather than from our own count
+      return await send(await reserveNonce(account.address));
+    }
+  });
+  // Keep the queue alive whether or not this send succeeded.
+  signingChain = run.then(() => {}, () => {});
+  return run;
+}
+
 /** Builds and sends one swap, waiting for it to mine. */
 async function sendSwap(
   route: Awaited<ReturnType<typeof getRoute>>,
@@ -38,11 +84,12 @@ async function sendSwap(
 ) {
   const { wallet } = signer();
   const built = await buildRoute(route!, sender, slippageBps);
-  const txHash = await wallet.sendTransaction({
+  const txHash = await signedSend((nonce) => wallet.sendTransaction({
     to: built.routerAddress,
     data: built.data,
     value: BigInt(built.transactionValue || 0),
-  });
+    nonce,
+  }));
   const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
   return { txHash, receipt };
 }
@@ -132,9 +179,9 @@ async function ensureAllowance(token: `0x${string}`, spender: `0x${string}`, nee
   let allowance = await read();
   if (allowance >= needed) return null;
 
-  const hash = await wallet.writeContract({
-    address: token, abi: b20Abi, functionName: "approve", args: [spender, maxUint256],
-  });
+  const hash = await signedSend((nonce) => wallet.writeContract({
+    address: token, abi: b20Abi, functionName: "approve", args: [spender, maxUint256], nonce,
+  }));
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   if (receipt.status !== "success") {
     throw new Error(`Approval ${hash} for ${token} reverted — not trading against a failed allowance.`);

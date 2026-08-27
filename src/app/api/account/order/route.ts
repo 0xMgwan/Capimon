@@ -119,8 +119,21 @@ export async function POST(req: Request) {
 
       return NextResponse.json({ ok: true, orderId, ...exec });
     } catch (e) {
-      const message = e instanceof Error ? e.message : "execution failed";
-      await sql`update capx.orders set status = 'failed', error = ${message} where id = ${orderId}`;
+      const raw = e instanceof Error ? e.message : "execution failed";
+      /*
+       * Keep the reason, drop the transport noise. A viem revert carries the
+       * whole request — including an unbroken calldata blob — which tells a
+       * customer nothing and, having no spaces to wrap at, stretches the page
+       * sideways on a phone. The full error is still on the order row.
+       */
+      const message = raw
+        .split(/\n\s*\n/)[0]
+        .replace(/0x[0-9a-fA-F]{40,}/g, "")
+        .replace(/\s*Version:\s*viem@[\d.]+/i, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 300);
+      await sql`update capx.orders set status = 'failed', error = ${raw.slice(0, 2000)} where id = ${orderId}`;
       return NextResponse.json(
         { ok: false, code: "execution_failed", orderId, error: message,
           note: "Nothing was debited from your balance." },

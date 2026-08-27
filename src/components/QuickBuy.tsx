@@ -54,7 +54,7 @@ export function QuickBuy() {
 
   return (
     <section className="border-y hairline">
-      <div className="mx-auto max-w-[1400px] px-5 py-20 sm:px-8 sm:py-28">
+      <div className="mx-auto max-w-[1400px] px-5 py-12 sm:px-8 sm:py-20 lg:py-28">
         <div className="grid gap-10 lg:grid-cols-[1fr_minmax(380px,460px)] lg:gap-16">
           <Reveal>
             <div className="lg:sticky lg:top-36">

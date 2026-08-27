@@ -35,7 +35,7 @@ const COLS = [
 export function Footer() {
   return (
     <footer className="border-t hairline">
-      <div className="mx-auto max-w-[1400px] px-5 py-16 sm:px-8">
+      <div className="mx-auto max-w-[1400px] px-5 py-10 sm:px-8 sm:py-16">
         <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(3,1fr)]">
           <div>
             <Lockup />

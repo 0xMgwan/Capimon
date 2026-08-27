@@ -60,7 +60,7 @@ export function ProductsSection() {
   const top = [...markets].sort((a, b) => b.tvl - a.tvl).slice(0, 6);
 
   return (
-    <section className="mx-auto max-w-[1400px] px-5 py-24 sm:px-8 sm:py-32">
+    <section className="mx-auto max-w-[1400px] px-5 py-14 sm:px-8 sm:py-24 lg:py-32">
       <Reveal>
         <div className="eyebrow">Our products</div>
         <h2 className="display mt-4 max-w-4xl text-[clamp(2.2rem,5.4vw,4.6rem)]">
@@ -75,18 +75,18 @@ export function ProductsSection() {
         </p>
       </Reveal>
 
-      <div className="mt-14 grid gap-4 lg:grid-cols-3">
+      <div className="mt-8 sm:mt-14 grid gap-4 lg:grid-cols-3">
         {/* Equities — the flagship */}
         <Reveal className="lg:col-span-2">
-          <div className="group relative h-full overflow-hidden rounded-3xl border hairline p-7 transition-colors hover:border-[var(--color-accent)] sm:p-9">
-            <div className="flex flex-wrap items-start justify-between gap-6">
+          <div className="group relative h-full overflow-hidden rounded-3xl border hairline p-5 transition-colors hover:border-[var(--color-accent)] sm:p-7 lg:p-9">
+            <div className="flex flex-wrap items-start justify-between gap-5 sm:gap-6">
               <div className="max-w-md">
                 <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[var(--fg)] text-[var(--bg)]">
                   <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
                     <path d="M3 17l5-6 4 4 5-8" /><circle cx="12" cy="12" r="10" />
                   </svg>
                 </div>
-                <h3 className="mt-6 font-[family-name:var(--font-display)] text-3xl font-medium tracking-[-0.04em] sm:text-4xl">
+                <h3 className="mt-4 sm:mt-6 font-[family-name:var(--font-display)] text-2xl font-medium tracking-[-0.04em] sm:text-3xl lg:text-4xl">
                   CAPX Equities
                 </h3>
                 <p className="mt-3 font-[family-name:var(--font-serif)] text-[17px] leading-relaxed text-[var(--muted)]">
@@ -98,7 +98,7 @@ export function ProductsSection() {
                 </span>
               </div>
 
-              <div className="grid flex-1 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:min-w-[280px] sm:grid-cols-2">
+              <div className="grid flex-1 grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:min-w-[280px]">
                 <Stat label="Onchain value" value={<Counter value={tvl} format={compactUsd} />} />
                 <Stat label="Assets" value={<Counter value={equities} format={(n) => Math.round(n).toString()} />} />
                 <Stat label="Live feeds" value={<Counter value={feeds} format={(n) => `${Math.round(n)}/${equities}`} />} />
@@ -106,7 +106,7 @@ export function ProductsSection() {
               </div>
             </div>
 
-            <div className="mt-8 flex flex-wrap items-center gap-2">
+            <div className="mt-6 sm:mt-8 flex flex-wrap items-center gap-2">
               {top.map((m) => (
                 <Link
                   key={m.symbol}
@@ -123,7 +123,7 @@ export function ProductsSection() {
               ))}
             </div>
 
-            <Link href="/markets" className="mt-8 inline-flex items-center gap-2 rounded-full bg-[var(--fg)] px-5 py-3 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03]">
+            <Link href="/markets" className="mt-6 sm:mt-8 inline-flex items-center gap-2 rounded-full bg-[var(--fg)] px-5 py-3 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03]">
               Discover CAPX Equities <span>→</span>
             </Link>
           </div>
@@ -194,7 +194,7 @@ export function LiveBoard() {
   const { data } = useMarkets();
   return (
     <section className="border-y hairline">
-      <div className="mx-auto max-w-[1400px] px-5 py-20 sm:px-8 sm:py-28">
+      <div className="mx-auto max-w-[1400px] px-5 py-12 sm:px-8 sm:py-20 lg:py-28">
         <Reveal>
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
@@ -227,7 +227,7 @@ export function StatsBand() {
   const rounds = (data?.markets ?? []).reduce((s, m) => s + m.history.length, 0);
 
   return (
-    <section ref={ref} className="overflow-hidden py-24 sm:py-32">
+    <section ref={ref} className="overflow-hidden py-14 sm:py-24 lg:py-32">
       <div className="mx-auto max-w-[1400px] px-5 sm:px-8">
         <Reveal>
           <h2 className="display max-w-3xl text-[clamp(2rem,5vw,4.2rem)]">
@@ -300,12 +300,12 @@ const BELIEFS = [
 export function BeliefSection() {
   return (
     <section className="border-y hairline">
-      <div className="mx-auto max-w-[1400px] px-5 py-24 sm:px-8 sm:py-32">
+      <div className="mx-auto max-w-[1400px] px-5 py-14 sm:px-8 sm:py-24 lg:py-32">
         <Reveal>
           <div className="eyebrow">A message from CAPX</div>
           <h2 className="display mt-4 text-[clamp(2rem,5vw,4rem)]">We believe in</h2>
         </Reveal>
-        <div className="mt-14 grid gap-px overflow-hidden rounded-3xl bg-[var(--border)] md:grid-cols-3">
+        <div className="mt-8 sm:mt-14 grid gap-px overflow-hidden rounded-3xl bg-[var(--border)] md:grid-cols-3">
           {BELIEFS.map((b, i) => (
             <Reveal key={b.title} delay={i * 0.1}>
               <div className="h-full bg-[var(--bg)] p-8">
@@ -333,8 +333,8 @@ const PILLARS = [
 
 export function PillarsSection() {
   return (
-    <section className="mx-auto max-w-[1400px] px-5 py-24 sm:px-8 sm:py-32">
-      <div className="grid gap-12 lg:grid-cols-[0.9fr_1.1fr]">
+    <section className="mx-auto max-w-[1400px] px-5 py-14 sm:px-8 sm:py-24 lg:py-32">
+      <div className="grid gap-8 sm:gap-12 lg:grid-cols-[0.9fr_1.1fr]">
         <Reveal>
           <div className="lg:sticky lg:top-32">
             <div className="eyebrow">Institutional grade</div>
@@ -351,7 +351,7 @@ export function PillarsSection() {
         <div>
           {PILLARS.map((p, i) => (
             <Reveal key={p.t} delay={i * 0.06}>
-              <div className="group border-b hairline py-7 first:border-t">
+              <div className="group border-b hairline py-5 sm:py-7 first:border-t">
                 <div className="flex items-baseline gap-5">
                   <span className="tnum text-xs text-[var(--muted)]">0{i + 1}</span>
                   <div>
@@ -385,7 +385,7 @@ export function ClosingCTA() {
           </div>
         )}
       </div>
-      <div className="mx-auto max-w-[1400px] px-5 py-28 text-center sm:px-8 sm:py-40">
+      <div className="mx-auto max-w-[1400px] px-5 py-16 text-center sm:px-8 sm:py-28 lg:py-40">
         <Reveal>
           <div className="eyebrow">The future of markets</div>
           <h2 className="display mx-auto mt-5 max-w-4xl text-[clamp(2.4rem,6.5vw,5.5rem)]">

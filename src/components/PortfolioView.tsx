@@ -68,7 +68,7 @@ export function PortfolioView() {
 
   if (!isConnected && !readOnly) {
     return (
-      <div className="mx-auto max-w-[1400px] px-5 py-24 sm:px-8">
+      <div className="mx-auto max-w-[1400px] px-5 py-10 sm:px-8 sm:py-16 lg:py-24">
         <div className="mx-auto max-w-lg rounded-3xl border hairline p-10 text-center">
           <div className="eyebrow">Portfolio</div>
           <h1 className="display mt-4 text-4xl">Read your positions off Base.</h1>

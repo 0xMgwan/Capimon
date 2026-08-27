@@ -82,3 +82,63 @@ export async function reconcileSwapDrift(): Promise<{
     creditedUsdc: Number(usdc.toFixed(6)),
   };
 }
+
+/**
+ * Writes balances down to what is actually held, per asset.
+ *
+ * The last resort, for money that left without the ledger learning of it — a
+ * payout that settled while the bookkeeping after it failed, before the debit
+ * was moved ahead of the payout. There is no local record of such a transfer to
+ * derive from, so the only evidence is the gap between owed and held.
+ *
+ * Because it reduces a customer's balance it will not guess whose: an asset
+ * held by exactly one account is unambiguous, and anything else is reported and
+ * left alone for an explicit correction. The shortfall itself is measured, not
+ * typed, and every entry carries its reason.
+ */
+export async function reconcileShortfall(): Promise<{
+  applied: boolean;
+  corrections: { asset: string; amount: number; userId: string }[];
+  skipped: string[];
+}> {
+  const solvency = await checkSolvency();
+  const corrections: { asset: string; amount: number; userId: string }[] = [];
+  const skipped: string[] = [];
+  if (solvency.unavailable) return { applied: false, corrections, skipped: [solvency.unavailable] };
+
+  await migrate();
+  const sql = db();
+  const stamp = Math.floor(Date.now() / 60_000); // a minute's granularity keeps repeats idempotent
+
+  for (const a of solvency.assets) {
+    const short = a.owed - a.held;
+    if (!(short > 0) || a.covered) continue;
+
+    const holders = await sql<{ user_id: string; balance: string }[]>`
+      select user_id::text, sum(amount)::text as balance
+        from capx.ledger_entries
+       where asset = ${a.asset}
+       group by user_id having sum(amount) > 0`;
+
+    if (holders.length !== 1) {
+      skipped.push(
+        `${a.asset}: ${short.toFixed(a.asset === "TZS" ? 0 : 6)} short across ${holders.length} accounts — ` +
+        `correct it explicitly rather than choosing whose balance to reduce.`);
+      continue;
+    }
+
+    const userId = holders[0].user_id;
+    // Never write a balance below zero, whatever the measured gap says.
+    const amount = Math.min(short, Number(holders[0].balance));
+    if (!(amount > 0)) continue;
+
+    await record([
+      { userId, kind: "adjustment", asset: a.asset, amount: (-amount).toString(),
+        ref: `reconcile:shortfall:${a.asset}:${stamp}`,
+        metadata: { reason: "balance exceeded what is held — funds left without a matching debit" } },
+    ]);
+    corrections.push({ asset: a.asset, amount, userId });
+  }
+
+  return { applied: corrections.length > 0, corrections, skipped };
+}

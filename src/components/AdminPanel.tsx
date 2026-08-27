@@ -83,14 +83,27 @@ export function AdminPanel() {
       const r = await fetch("/api/admin", {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: "reconcile-swap-drift" }),
+        body: JSON.stringify({ action: "reconcile-shortfall" }),
       });
       const j = await r.json();
-      setNote(j.ok
-        ? j.applied
-          ? `Moved ${j.movedTzs?.toLocaleString()} TZS to ${j.creditedUsdc} USDC on order ${String(j.orderId).slice(0, 8)}.`
-          : (j.reason ?? "Already reconciled.")
-        : j.error ?? "Reconciliation failed.");
+      if (!j.ok) {
+        setNote(j.error ?? "Reconciliation failed.");
+      } else {
+        // Report every part: the precise repair, the measured write-downs, and
+        // anything deliberately left alone.
+        const lines: string[] = [];
+        if (j.drift?.applied) {
+          lines.push(`Moved ${j.drift.movedTzs?.toLocaleString()} TZS to ${j.drift.creditedUsdc} USDC ` +
+            `on order ${String(j.drift.orderId).slice(0, 8)}.`);
+        }
+        for (const c of j.corrections ?? []) {
+          lines.push(`Reduced ${c.asset} by ${c.asset === "TZS"
+            ? Math.round(c.amount).toLocaleString()
+            : c.amount.toFixed(6)} to match what is held.`);
+        }
+        for (const sk of j.skipped ?? []) lines.push(sk);
+        setNote(lines.length ? lines.join(" ") : "Nothing to reconcile — balances match what is held.");
+      }
     } catch {
       setNote("Reconciliation failed.");
     }
@@ -139,10 +152,12 @@ export function AdminPanel() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Only offered when shillings are actually owed beyond what is held. */}
-          {s && !s.ok && s.assets?.some((a) => a.asset === "TZS" && !a.covered) && (
+          {/* Offered for any shortfall: money can leave without a debit in more
+              than one way, and the repair is measured either way. */}
+          {s && !s.ok && !s.unavailable && (
             <button onClick={reconcile} disabled={busy}
               className="rounded-full border border-[var(--color-down)]/50 px-5 py-2.5 text-sm text-[var(--color-down)] transition-colors hover:bg-[var(--color-down)]/[0.06] disabled:opacity-50">
-              {busy ? "Working…" : "Reconcile shilling drift"}
+              {busy ? "Working…" : "Reconcile balances to backing"}
             </button>
           )}
           <button onClick={settle} disabled={busy}

@@ -150,6 +150,15 @@ export async function POST(req: Request) {
      * solvency check and the account from the failed order that caused it, so
      * an operator cannot fat-finger a balance. Idempotent on the order id.
      */
+    if (body.action === "reconcile-shortfall") {
+      const { reconcileSwapDrift, reconcileShortfall } = await import("@/lib/reconcile");
+      // The precise repair first — an interrupted order explains itself — then
+      // the measured write-down for anything it does not account for.
+      const drift = await reconcileSwapDrift();
+      const rest = await reconcileShortfall();
+      return NextResponse.json({ ok: true, drift, ...rest }, { headers: { "cache-control": "no-store" } });
+    }
+
     if (body.action === "reconcile-swap-drift") {
       const { reconcileSwapDrift } = await import("@/lib/reconcile");
       const r = await reconcileSwapDrift();

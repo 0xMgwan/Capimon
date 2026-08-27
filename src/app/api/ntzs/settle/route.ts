@@ -160,7 +160,18 @@ export async function settlePending(): Promise<{ checked: number; results: Recor
 export async function POST() {
   const gate = requireDb();
   if (gate) return gate;
-  return NextResponse.json({ ok: true, ...(await settlePending()) }, { headers: { "cache-control": "no-store" } });
+  const settled = await settlePending();
+  /*
+   * Also finish any order that failed after its shillings were converted. That
+   * unwind is the missing half of an interrupted order, so it belongs here
+   * beside deposit settlement rather than waiting on someone to notice the
+   * shortfall it leaves — which pauses trading for everyone meanwhile.
+   */
+  const { reconcileSwapDrift } = await import("@/lib/reconcile");
+  const repaired = await reconcileSwapDrift().catch(
+    (e) => ({ applied: false, reason: e instanceof Error ? e.message : "reconcile failed" }));
+  return NextResponse.json({ ok: true, ...settled, repaired },
+    { headers: { "cache-control": "no-store" } });
 }
 
 export async function GET() {

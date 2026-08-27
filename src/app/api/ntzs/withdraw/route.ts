@@ -164,41 +164,74 @@ export async function POST(req: Request) {
     const caps = await capabilities();
     const viaRamp = caps.ramp.available;
 
-    let result: { id?: string; status?: string };
-    if (viaRamp) {
-      // The float pays the shillings, so put the USDC there first. The treasury
-      // signs that transfer itself — no user wallet involved — and funding is
-      // confirmed before the payout is requested.
-      const { fundRampFloat } = await import("@/lib/ntzsFunding");
-      await fundRampFloat(amountTzs, phoneNumber);
-      result = await rampOfframp({ quoteId, phoneNumber });
-    } else {
-      const { ensureNtzsHasTzs } = await import("@/lib/ntzsFunding");
-      await ensureNtzsHasTzs(amountTzs);
-      result = await createWithdrawal({
-        userId: await omnibusUserId(), quoteId, amountTzs, phoneNumber,
-      });
-    }
-    const ref = String(result.id ?? quoteId);
-
-    // Debit whichever asset actually funded it: shillings first, then the USDC
-    // leg at the same rate the amount was offered at. Debiting TZS an account
-    // does not hold would leave a negative balance and a phantom liability.
+    /*
+     * Debit before paying out, and refund if the payout does not happen.
+     *
+     * Paying first and recording after leaves one ordering where money reaches
+     * the customer and the ledger never learns of it — which is exactly what
+     * happened: an off-ramp settled, the bookkeeping after it threw, and the
+     * balance went on claiming funds that had already left. A debit that gets
+     * reversed is recoverable; money out with no debit is not.
+     *
+     * Keyed to the quote, which exists before the payout does, so a retry after
+     * an uncertain response cannot debit twice.
+     */
     const fromTzs = Math.min(funds.tzs, amountTzs);
     const remainderTzs = amountTzs - fromTzs;
     const fromUsdc = remainderTzs > 0 && funds.usdcPerTzs ? remainderTzs * funds.usdcPerTzs : 0;
+    const rail = viaRamp ? "ramp" : "disbursement";
 
-    // Keyed to the payout, so a retry after an uncertain response cannot debit twice.
     await record([
       ...(fromTzs > 0
         ? [{ userId: user.id, kind: "withdrawal" as const, asset: "TZS", amount: (-fromTzs).toString(),
-             ref: `withdrawal:${ref}`, metadata: { phoneNumber, quoteId, rail: viaRamp ? "ramp" : "disbursement" } }]
+             ref: `withdrawal:${quoteId}`, metadata: { phoneNumber, quoteId, rail } }]
         : []),
       ...(fromUsdc > 0
         ? [{ userId: user.id, kind: "withdrawal" as const, asset: "USDC", amount: (-fromUsdc).toString(),
-             ref: `withdrawal:${ref}:usdc`, metadata: { phoneNumber, quoteId, amountTzs: remainderTzs } }]
+             ref: `withdrawal:${quoteId}:usdc`, metadata: { phoneNumber, quoteId, amountTzs: remainderTzs } }]
         : []),
     ]);
+
+    let result: { id?: string; status?: string };
+    try {
+      if (viaRamp) {
+        // The float pays the shillings, so put the USDC there first. The
+        // treasury signs that transfer itself and funding is confirmed before
+        // the payout is requested.
+        const { fundRampFloat } = await import("@/lib/ntzsFunding");
+        await fundRampFloat(amountTzs, phoneNumber);
+        result = await rampOfframp({ quoteId, phoneNumber });
+      } else {
+        const { ensureNtzsHasTzs } = await import("@/lib/ntzsFunding");
+        await ensureNtzsHasTzs(amountTzs);
+        result = await createWithdrawal({
+          userId: await omnibusUserId(), quoteId, amountTzs, phoneNumber,
+        });
+      }
+    } catch (payoutError) {
+      /*
+       * Refund only when the payout certainly did not happen. An uncertain
+       * outcome — a timeout, a 5xx — may still have moved money, so the debit
+       * stands and the row is left for reconciliation rather than handing back
+       * funds that already left.
+       */
+      const err = payoutError instanceof NtzsError ? payoutError : null;
+      const uncertain = err?.retry === "verify";
+      if (!uncertain) {
+        await record([
+          ...(fromTzs > 0
+            ? [{ userId: user.id, kind: "adjustment" as const, asset: "TZS", amount: fromTzs.toString(),
+                 ref: `withdrawal:${quoteId}:refund`, metadata: { quoteId, reason: "payout did not execute" } }]
+            : []),
+          ...(fromUsdc > 0
+            ? [{ userId: user.id, kind: "adjustment" as const, asset: "USDC", amount: fromUsdc.toString(),
+                 ref: `withdrawal:${quoteId}:refund-usdc`, metadata: { quoteId, reason: "payout did not execute" } }]
+            : []),
+        ]).catch(() => null);
+      }
+      throw payoutError;
+    }
+    const ref = String(result.id ?? quoteId);
 
     return NextResponse.json({
       ok: true, withdrawalId: ref, amountTzs, status: result.status ?? "submitted",

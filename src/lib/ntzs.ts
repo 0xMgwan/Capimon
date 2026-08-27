@@ -366,6 +366,20 @@ export async function rampOnramp(input: { quoteId: string; phoneNumber: string }
   });
 }
 
+/**
+ * Pays a quoted off-ramp out to mobile money, debiting the USDC settlement
+ * float.
+ *
+ * This is the payout path that does not need a user wallet: the float is
+ * pre-funded with USDC from the treasury and nTZS settles the shillings. A 202
+ * is success-in-flight, same as an on-ramp.
+ */
+export async function rampOfframp(input: { quoteId: string; phoneNumber: string }) {
+  return call<{ id?: string; status?: string; [k: string]: unknown }>("/api/v1/ramp/offramp", {
+    method: "POST", body: input, idempotent: true,
+  });
+}
+
 export async function rampStatus(id: string) {
   return call<{ id?: string; status?: string; [k: string]: unknown }>(
     `/api/v1/ramp/${encodeURIComponent(id)}`,

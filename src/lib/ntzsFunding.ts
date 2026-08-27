@@ -22,6 +22,71 @@ export async function ntzsAvailableUsdc() {
 }
 
 /**
+ * Pre-funds the ramp settlement float so an off-ramp can be paid.
+ *
+ * The float is the one nTZS balance the treasury can reach: it is an ordinary
+ * Base address, so the treasury EOA signs USDC to it directly — the direction a
+ * private key can do unaided. (The reverse is impossible; no API sources a
+ * transfer from the float.) Prices the payout in USDC, tops the float up if it
+ * is short, and waits for the money to be visible before the caller pays out,
+ * so a payout is never requested against a balance that has not arrived.
+ */
+export async function fundRampFloat(amountTzs: number, phoneNumber: string) {
+  const { rampQuote, getSwapRate } = await import("./ntzs");
+  const b = await rampBalance();
+  const settlement = b.settlementAddress as `0x${string}` | undefined;
+  if (!settlement) {
+    throw new NtzsError("no_settlement_address", "The ramp float has no settlement address to fund.", 503);
+  }
+
+  const floatUsdc = () =>
+    rampBalance().then((r) => Number(r.usdcBalance ?? r.balance ?? r.usdc ?? 0)).catch(() => 0);
+
+  // Price from a real off-ramp quote: it reports the exact USDC the float will
+  // be debited, fee included. A mid-market rate understates that by the whole
+  // payout fee — several percent — which would leave the float short and the
+  // payout rejected. Quoting is free and creates no obligation.
+  let needUsdc = 0;
+  try {
+    const q = await rampQuote({ direction: "offramp", amount: amountTzs, phoneNumber });
+    needUsdc = Number(q.usdcAmount ?? 0);
+  } catch { /* fall back below */ }
+
+  if (!(needUsdc > 0)) {
+    const rate = await getSwapRate("NTZS", "USDC", Math.max(1000, Math.round(amountTzs)));
+    const implied = Number(rate.expectedOutput ?? 0);
+    if (!(implied > 0)) {
+      throw new NtzsError("rate_unavailable", "No rate is available to price this withdrawal.", 503);
+    }
+    // Cover the payout fee the mid rate does not include.
+    needUsdc = implied * 1.10;
+  }
+  // A little headroom, so rounding cannot leave it a cent short.
+  needUsdc *= 1.02;
+
+  let have = await floatUsdc();
+  if (have >= needUsdc) return { topUp: 0, floatUsdc: have, settlement };
+
+  const { sendUsdcToNtzs } = await import("./treasury");
+  const topUp = needUsdc - have;
+  await sendUsdcToNtzs(topUp, settlement);
+
+  for (let i = 0; i < 12 && have < needUsdc; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    have = await floatUsdc();
+  }
+  if (have < needUsdc) {
+    throw new NtzsError(
+      "funding_incomplete",
+      `Sent ${topUp.toFixed(2)} USDC to the settlement float but it still shows ${have.toFixed(2)} ` +
+      `against ${needUsdc.toFixed(2)} needed. Nothing was paid out.`,
+      409,
+    );
+  }
+  return { topUp, floatUsdc: have, settlement };
+}
+
+/**
  * USDC that can actually be moved to the treasury.
  *
  * Deliberately excludes the ramp settlement float. The float backs client

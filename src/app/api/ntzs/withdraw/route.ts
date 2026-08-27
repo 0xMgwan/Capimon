@@ -1,13 +1,41 @@
 import { NextResponse } from "next/server";
-import { withdrawalQuote, createWithdrawal, lookupRecipient, NtzsError, ntzsConfigured } from "@/lib/ntzs";
+import { withdrawalQuote, createWithdrawal, lookupRecipient, NtzsError, ntzsConfigured,
+         rampQuote, rampOfframp, getSwapRate } from "@/lib/ntzs";
 import { currentUser } from "@/lib/auth";
 import { balanceOf, record } from "@/lib/ledger";
 import { requireDb, bad, boom, notConfigured } from "@/lib/apiHelpers";
-import { omnibusUserId, capabilities } from "@/lib/omnibus";
+import { omnibusUserId, capabilities, collectionRoute } from "@/lib/omnibus";
 
 export const dynamic = "force-dynamic";
 
 const MIN_TZS = 5_000;
+
+/**
+ * What the account can actually withdraw, in shillings.
+ *
+ * A deposit settles as TZS on the wallet routes and as USDC on the ramp, so an
+ * account may hold either. Checking TZS alone told a fully funded ramp customer
+ * their balance was zero.
+ */
+async function spendableTzs(userId: string) {
+  const [tzs, usdc] = await Promise.all([
+    balanceOf(userId, "TZS"),
+    balanceOf(userId, "USDC"),
+  ]);
+  if (usdc <= 0) return { tzs, usdc, totalTzs: tzs, usdcPerTzs: null as number | null };
+
+  // Value the USDC leg at the live shilling rate; without one, only the TZS
+  // balance is offered rather than guessing at a conversion.
+  let usdcPerTzs: number | null = null;
+  try {
+    const r = await getSwapRate("NTZS", "USDC", 100_000);
+    const out = Number(r.expectedOutput ?? 0);
+    if (out > 0) usdcPerTzs = out / 100_000;
+  } catch { /* fall back to shillings only */ }
+
+  const totalTzs = tzs + (usdcPerTzs ? usdc / usdcPerTzs : 0);
+  return { tzs, usdc, totalTzs, usdcPerTzs };
+}
 
 /**
  * Cash out to mobile money.
@@ -35,27 +63,35 @@ export async function GET(req: Request) {
       return bad(`The minimum withdrawal is ${MIN_TZS.toLocaleString()} TZS.`);
     }
 
-    const balance = await balanceOf(user.id, "TZS");
-    if (amountTzs > balance) {
-      return bad(`Your balance is ${Math.floor(balance).toLocaleString()} TZS.`, "insufficient_balance");
+    const funds = await spendableTzs(user.id);
+    if (amountTzs > funds.totalTzs) {
+      return bad(`Your balance is ${Math.floor(funds.totalTzs).toLocaleString()} TZS.`, "insufficient_balance");
     }
 
-    // Payouts leave the CAPX account, so they carry the omnibus user id —
-    // which the deployment requires and which needs the `wallets` grant.
+    // Two payout rails. The ramp settles from the USDC float, which the treasury
+    // can fund directly, so it works without a user wallet. The disbursement
+    // rail pays from the omnibus account and needs one.
+    const route = await collectionRoute();
     const caps = await capabilities();
-    if (!caps.wallets.available) {
-      return NextResponse.json(
-        { ok: false, code: "withdrawals_unavailable",
-          error: "Withdrawals are not available yet. The payout endpoint needs a user id, which requires the 'wallets' capability on the nTZS key." },
-        { status: 503 },
-      );
-    }
-    const payoutUser = await omnibusUserId();
+    const viaRamp = route === "ramp" || !caps.wallets.available;
 
-    const [quote, recipient] = await Promise.all([
-      withdrawalQuote({ userId: payoutUser, amountTzs, phoneNumber }),
-      lookupRecipient(phoneNumber),
-    ]);
+    let quoteId: string | null = null;
+    let feeTzs = 0;
+    let quotedName: string | null = null;
+
+    if (viaRamp) {
+      const q = await rampQuote({ direction: "offramp", amount: amountTzs, phoneNumber });
+      quoteId = String(q.quoteId ?? q.id ?? "") || null;
+      feeTzs = Number(q.totalFeeTzs ?? q.feeTzs ?? 0);
+    } else {
+      const q = await withdrawalQuote({ userId: await omnibusUserId(), amountTzs, phoneNumber });
+      quoteId = q.quoteId ?? null;
+      feeTzs = Number(q.totalFeeTzs ?? 0);
+      quotedName = q.recipientName ?? null;
+    }
+
+    const recipient = await lookupRecipient(phoneNumber).catch(() => ({ name: null }));
+    const quote = { quoteId, totalFeeTzs: feeTzs, recipientName: quotedName };
 
     // A null quoteId upstream means the float cannot cover it — not a user error.
     if (!quote.quoteId) {
@@ -100,26 +136,49 @@ export async function POST(req: Request) {
     if (!phoneNumber) return bad("A mobile money number is required.");
 
     // Re-check against the ledger: the quote may be seconds old.
-    const balance = await balanceOf(user.id, "TZS");
-    if (amountTzs > balance) {
-      return bad(`Your balance is ${Math.floor(balance).toLocaleString()} TZS.`, "insufficient_balance");
+    const funds = await spendableTzs(user.id);
+    if (amountTzs > funds.totalTzs) {
+      return bad(`Your balance is ${Math.floor(funds.totalTzs).toLocaleString()} TZS.`, "insufficient_balance");
     }
 
-    // Walk the money back to nTZS first if it is sitting in the treasury —
-    // the payout is made from the nTZS balance, not from the chain.
-    const { ensureNtzsHasTzs } = await import("@/lib/ntzsFunding");
-    await ensureNtzsHasTzs(amountTzs);
+    const route = await collectionRoute();
+    const caps = await capabilities();
+    const viaRamp = route === "ramp" || !caps.wallets.available;
 
-    const result = await createWithdrawal({
-      userId: await omnibusUserId(), quoteId, amountTzs, phoneNumber,
-    });
+    let result: { id?: string; status?: string };
+    if (viaRamp) {
+      // The float pays the shillings, so put the USDC there first. The treasury
+      // signs that transfer itself — no user wallet involved — and funding is
+      // confirmed before the payout is requested.
+      const { fundRampFloat } = await import("@/lib/ntzsFunding");
+      await fundRampFloat(amountTzs, phoneNumber);
+      result = await rampOfframp({ quoteId, phoneNumber });
+    } else {
+      const { ensureNtzsHasTzs } = await import("@/lib/ntzsFunding");
+      await ensureNtzsHasTzs(amountTzs);
+      result = await createWithdrawal({
+        userId: await omnibusUserId(), quoteId, amountTzs, phoneNumber,
+      });
+    }
     const ref = String(result.id ?? quoteId);
 
-    // Debited once the payout is accepted, keyed to the payout so a retry after
-    // an uncertain response cannot debit twice.
+    // Debit whichever asset actually funded it: shillings first, then the USDC
+    // leg at the same rate the amount was offered at. Debiting TZS an account
+    // does not hold would leave a negative balance and a phantom liability.
+    const fromTzs = Math.min(funds.tzs, amountTzs);
+    const remainderTzs = amountTzs - fromTzs;
+    const fromUsdc = remainderTzs > 0 && funds.usdcPerTzs ? remainderTzs * funds.usdcPerTzs : 0;
+
+    // Keyed to the payout, so a retry after an uncertain response cannot debit twice.
     await record([
-      { userId: user.id, kind: "withdrawal", asset: "TZS", amount: (-amountTzs).toString(),
-        ref: `withdrawal:${ref}`, metadata: { phoneNumber, quoteId } },
+      ...(fromTzs > 0
+        ? [{ userId: user.id, kind: "withdrawal" as const, asset: "TZS", amount: (-fromTzs).toString(),
+             ref: `withdrawal:${ref}`, metadata: { phoneNumber, quoteId, rail: viaRamp ? "ramp" : "disbursement" } }]
+        : []),
+      ...(fromUsdc > 0
+        ? [{ userId: user.id, kind: "withdrawal" as const, asset: "USDC", amount: (-fromUsdc).toString(),
+             ref: `withdrawal:${ref}:usdc`, metadata: { phoneNumber, quoteId, amountTzs: remainderTzs } }]
+        : []),
     ]);
 
     return NextResponse.json({

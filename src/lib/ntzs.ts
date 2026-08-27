@@ -57,10 +57,10 @@ function toError(status: number, body: unknown): NtzsError {
     .filter(Boolean)
     .join("; ");
 
+  const raw = (body && typeof body === "object" ? JSON.stringify(body).slice(0, 300) : "");
   const message =
-    b.message ?? b.detail ?? b.reason ?? b.error ?? listed ||
-    (body && typeof body === "object" ? JSON.stringify(body).slice(0, 300) : "") ||
-    `nTZS request failed (${status})`;
+    b.message ?? b.detail ?? b.reason ?? b.error ??
+    (listed || raw || `nTZS request failed (${status})`);
 
   const retry = status >= 500 ? "verify" : status === 429 ? "backoff" : "no";
   return new NtzsError(code, message, status, retry);

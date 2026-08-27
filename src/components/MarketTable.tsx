@@ -65,7 +65,7 @@ export function MarketTable({ limit, showSearch = true }: { limit?: number; show
       )}
 
       {/* Phones get cards; the table needs more width than a phone has. */}
-      <div className="grid gap-2 md:hidden">
+      <div className="grid grid-cols-1 gap-2 md:hidden">
         {loading && !rows.length &&
           Array.from({ length: limit ?? 6 }).map((_, i) => (
             <div key={i} className="h-[92px] animate-pulse rounded-2xl surface" />
@@ -78,7 +78,7 @@ export function MarketTable({ limit, showSearch = true }: { limit?: number; show
             <Link
               key={m.symbol}
               href={`/markets/${m.ticker.toLowerCase()}`}
-              className="block rounded-2xl border hairline p-4 transition-colors active:surface"
+              className="block min-w-0 rounded-2xl border hairline p-4 transition-colors active:surface"
             >
               <div className="flex items-center gap-3">
                 <AssetLogo logo={m.logo} ticker={m.ticker} color={m.color} size={40} />

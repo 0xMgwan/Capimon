@@ -144,7 +144,7 @@ export function PortfolioView() {
         ) : (
           <>
           {/* Phones get cards; the positions table is wider than a phone. */}
-          <div className="grid gap-2 md:hidden">
+          <div className="grid grid-cols-1 gap-2 md:hidden">
             {positions.map((p) => {
               const m = markets?.markets.find((x) => x.symbol === p.symbol);
               const weight = pf && pf.total > 0 ? (p.value / pf.total) * 100 : 0;

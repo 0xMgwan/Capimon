@@ -4,7 +4,7 @@ import { db, migrate, dbConfigured } from "@/lib/db";
 import { checkSolvency } from "@/lib/solvency";
 import { ntzsTreasury, capabilities, collectionRoute } from "@/lib/omnibus";
 import { treasuryAddress, treasuryConfigured, treasuryHoldings } from "@/lib/treasury";
-import { ntzsConfigured } from "@/lib/ntzs";
+import { ntzsConfigured, getSwapRate } from "@/lib/ntzs";
 
 export const dynamic = "force-dynamic";
 
@@ -137,6 +137,71 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json().catch(() => ({}));
+
+    /*
+     * Reconcile shillings that a failed order already converted.
+     *
+     * A buy swaps TZS to USDC before it trades. If the trade then fails the
+     * swap cannot be undone, so the ledger keeps claiming shillings the omnibus
+     * no longer holds — an unbacked liability that pauses trading. Newer orders
+     * unwind themselves; this repairs rows written before that existed.
+     *
+     * The correction is derived, never typed: the shortfall comes from the
+     * solvency check and the account from the failed order that caused it, so
+     * an operator cannot fat-finger a balance. Idempotent on the order id.
+     */
+    if (body.action === "reconcile-swap-drift") {
+      const solvency = await checkSolvency();
+      const tzs = solvency.assets.find((a) => a.asset === "TZS");
+      const drift = tzs ? tzs.owed - tzs.held : 0;
+      if (!(drift > 1)) {
+        return NextResponse.json({ ok: true, applied: false, reason: "No shilling drift to reconcile." });
+      }
+
+      await migrate();
+      const sql = db();
+      const candidates = await sql<{ id: string; user_id: string }[]>`
+        select o.id::text, o.user_id::text
+          from capx.orders o
+         where o.side = 'buy' and o.status = 'failed' and o.usdc_amount is null
+           and not exists (
+             select 1 from capx.ledger_entries l where l.ref = o.id::text || ':unwind-tzs')
+         order by o.created_at desc
+         limit 1`;
+      if (!candidates.length) {
+        return NextResponse.json({
+          ok: false, code: "unattributed",
+          error: `A ${Math.round(drift).toLocaleString()} TZS shortfall exists but no failed shilling order ` +
+                 `explains it. Reconcile it explicitly with userId/asset/amount rather than guessing.`,
+        }, { status: 409 });
+      }
+
+      const { id: orderId, user_id } = candidates[0];
+      // Value the converted shillings at the live rate — that is what the swap
+      // actually produced, and what the customer should now hold.
+      const r = await getSwapRate("NTZS", "USDC", Math.max(1000, Math.round(drift)));
+      const usdc = Number(r.expectedOutput ?? 0);
+      if (!(usdc > 0)) {
+        return NextResponse.json({ ok: false, code: "rate_unavailable",
+          error: "No shilling rate is available to value the correction." }, { status: 503 });
+      }
+
+      const { record } = await import("@/lib/ledger");
+      const result = await record([
+        { userId: user_id, kind: "adjustment", asset: "TZS", amount: (-drift).toString(),
+          ref: `${orderId}:unwind-tzs`,
+          metadata: { orderId, reason: "order failed after the shilling swap" } },
+        { userId: user_id, kind: "adjustment", asset: "USDC", amount: usdc.toString(),
+          ref: `${orderId}:unwind-usdc`,
+          metadata: { orderId, reason: "shillings already converted; held as USDC" } },
+      ]);
+
+      return NextResponse.json({
+        ok: true, applied: !result.duplicate, orderId, userId: user_id,
+        movedTzs: Math.round(drift), creditedUsdc: Number(usdc.toFixed(6)),
+      }, { headers: { "cache-control": "no-store" } });
+    }
+
     const userId = String(body.userId ?? "");
     const rawAsset = String(body.asset ?? "").trim();
     const amount = Number(body.amount);

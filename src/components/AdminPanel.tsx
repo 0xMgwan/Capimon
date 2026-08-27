@@ -73,6 +73,30 @@ export function AdminPanel() {
     await load(token);
   };
 
+  // Repairs shillings a failed order already converted. The server derives both
+  // the amount and the account from the failed order, so there is nothing to
+  // mistype here — this only decides when to run it.
+  const [note, setNote] = useState<string | null>(null);
+  const reconcile = async () => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "reconcile-swap-drift" }),
+      });
+      const j = await r.json();
+      setNote(j.ok
+        ? j.applied
+          ? `Moved ${j.movedTzs?.toLocaleString()} TZS to ${j.creditedUsdc} USDC on order ${String(j.orderId).slice(0, 8)}.`
+          : (j.reason ?? "Already reconciled.")
+        : j.error ?? "Reconciliation failed.");
+    } catch {
+      setNote("Reconciliation failed.");
+    }
+    await load(token);
+  };
+
   if (!data) {
     return (
       <div className="mx-auto max-w-md px-5 py-24">
@@ -113,11 +137,26 @@ export function AdminPanel() {
           <div className="eyebrow">Operations</div>
           <h1 className="display mt-2 text-[clamp(1.8rem,4vw,2.8rem)]">Custody desk.</h1>
         </div>
-        <button onClick={settle} disabled={busy}
-          className="rounded-full border hairline px-5 py-2.5 text-sm transition-colors hover:surface disabled:opacity-50">
-          {busy ? "Working…" : "Settle pending deposits"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Only offered when shillings are actually owed beyond what is held. */}
+          {s && !s.ok && s.assets?.some((a) => a.asset === "TZS" && !a.covered) && (
+            <button onClick={reconcile} disabled={busy}
+              className="rounded-full border border-[var(--color-down)]/50 px-5 py-2.5 text-sm text-[var(--color-down)] transition-colors hover:bg-[var(--color-down)]/[0.06] disabled:opacity-50">
+              {busy ? "Working…" : "Reconcile shilling drift"}
+            </button>
+          )}
+          <button onClick={settle} disabled={busy}
+            className="rounded-full border hairline px-5 py-2.5 text-sm transition-colors hover:surface disabled:opacity-50">
+            {busy ? "Working…" : "Settle pending deposits"}
+          </button>
+        </div>
       </div>
+
+      {note && (
+        <p className="mt-4 rounded-2xl border hairline px-4 py-3 text-xs leading-relaxed text-[var(--muted)]">
+          {note}
+        </p>
+      )}
 
       {/* Solvency leads — it is the number that decides whether anything else matters. */}
       <div className={`mt-8 rounded-3xl border p-6 ${

@@ -11,7 +11,10 @@ import { upsertUser, getUser, rampBalance, probeCapabilities, NtzsError, type Ca
  * CAPX's obligation rather than something inherited from nTZS.
  */
 
-export const OMNIBUS_EXTERNAL_ID = "capx-omnibus";
+// Overridable because POST /users is idempotent on externalId: an account
+// already stuck at kyc "none" may not upgrade when identity fields are added
+// later, and a new externalId provisions a fresh, fully-KYC'd one.
+export const OMNIBUS_EXTERNAL_ID = process.env.NTZS_OMNIBUS_EXTERNAL_ID ?? "capx-omnibus";
 export const OMNIBUS_EMAIL = process.env.NTZS_OMNIBUS_EMAIL ?? "treasury@capx.finance";
 const CONFIGURED_ID = process.env.NTZS_OMNIBUS_USER_ID ?? "";
 // Identity for the omnibus account. Without these, KYC stays pending_review

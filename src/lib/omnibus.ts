@@ -76,14 +76,17 @@ async function provisionOmnibus(): Promise<string> {
   // The create response can lag the wallet; confirm against a read.
   const wallet = user.walletAddress ?? (await getUser(user.id).catch(() => null))?.walletAddress;
   if (!wallet) {
-    const status = user.kycStatus ?? "unknown";
+    // nTZS holds the wallet until compliance clears the account, and says so in
+    // the create response. Pass its own words through rather than guessing at a
+    // cause — identity fields do not shortcut this, and suggesting they might
+    // sent us chasing the wrong fix for a while.
+    const status = String(user.kycStatus ?? "unknown");
+    const upstream = [user.message, user.nextStep && `Next step: ${user.nextStep}.`]
+      .filter(Boolean).join(" ");
     throw new NtzsError(
       "omnibus_no_wallet",
-      `The CAPX omnibus nTZS account (${user.id}) has no wallet — KYC is "${status}". A wallet is ` +
-      `only issued once KYC is approved. ` +
-      (OMNIBUS_NIDA
-        ? "Approve this account in the nTZS dashboard, then redeploy."
-        : "Set NTZS_OMNIBUS_NIDA and NTZS_OMNIBUS_PHONE so it can auto-approve, or approve it in the nTZS dashboard."),
+      `The CAPX nTZS account (${user.id}) has no wallet yet — KYC is "${status}". ` +
+      (upstream || "nTZS activates wallets once the account clears compliance review."),
       503,
     );
   }

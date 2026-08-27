@@ -441,7 +441,13 @@ export async function probeCapabilities(omnibus: Parameters<typeof upsertUser>[0
       .then((u) => {
         result.wallets = u.walletAddress
           ? { available: true, detail: u.id }
-          : { available: false, detail: `user ${u.id} has no wallet (kyc: ${u.kycStatus ?? "unknown"})` };
+          : {
+              available: false,
+              // Carry nTZS's own explanation — the wallet is held pending
+              // compliance review, which no field we send can shortcut.
+              detail: `user ${u.id} has no wallet (kyc: ${u.kycStatus ?? "unknown"})` +
+                (u.nextStep ? ` — next step: ${u.nextStep}` : ""),
+            };
       })
       .catch((e) => { result.wallets = { available: false, detail: e instanceof Error ? e.message : "unavailable" }; }),
   ]);

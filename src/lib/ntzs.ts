@@ -198,6 +198,14 @@ export async function createDeposit(input: {
   amountTzs: number;
   phoneNumber: string;
   paymentMethod?: PaymentMethod;
+  /**
+   * The account the money is sent FROM, required for a bank transfer.
+   *
+   * A bank credit arriving over TIPS loses its narration, so the sending
+   * account is the only thing that identifies whose deposit it is. Mobile money
+   * has the payer's number for that; a bank transfer has nothing else.
+   */
+  payerAccountNumber?: string;
 }) {
   const amount = Math.round(input.amountTzs);
   const body: Record<string, unknown> = {
@@ -207,6 +215,7 @@ export async function createDeposit(input: {
     paymentMethod: input.paymentMethod ?? "mobile_money",
   };
   if (input.userId) body.userId = input.userId;
+  if (input.payerAccountNumber) body.payerAccountNumber = input.payerAccountNumber;
   return call<{ id: string; status: string; [k: string]: unknown }>("/api/v1/deposits", {
     method: "POST", body, idempotent: true,
   });

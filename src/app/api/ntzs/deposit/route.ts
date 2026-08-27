@@ -31,7 +31,14 @@ export async function POST(req: Request) {
     const phoneNumber = String(body.phoneNumber ?? user.phone ?? "").replace(/[^\d]/g, "");
     const amountTzs = Math.round(Number(body.amountTzs));
     const method: PaymentMethod = body.paymentMethod === "bank_transfer" ? "bank_transfer" : "mobile_money";
+    const payerAccountNumber = String(body.payerAccountNumber ?? "").replace(/[^\d]/g, "");
     if (!phoneNumber) return bad("A mobile money number is required.");
+    // A bank credit loses its narration in transit, so the sending account is
+    // the only way to tell whose money arrived.
+    if (method === "bank_transfer" && !payerAccountNumber) {
+      return bad("For a bank transfer, enter the bank account number you are sending from.",
+                 "payer_account_required");
+    }
     if (!Number.isFinite(amountTzs) || amountTzs < ABSOLUTE_MIN_TZS) {
       return bad(`The minimum deposit is ${ABSOLUTE_MIN_TZS.toLocaleString()} TZS.`);
     }
@@ -97,7 +104,7 @@ export async function POST(req: Request) {
         let deposit: { id: string; status: string } | null = null;
         let usedRoute = "treasury";
         try {
-          deposit = await createDeposit({ amountTzs, phoneNumber, paymentMethod: method });
+          deposit = await createDeposit({ amountTzs, phoneNumber, paymentMethod: method, payerAccountNumber });
         } catch (e) {
           const err = e as NtzsError;
           const wantsUser = /userId/i.test(err?.message ?? "");
@@ -113,7 +120,7 @@ export async function POST(req: Request) {
               { status: 503 },
             );
           }
-          deposit = await createDeposit({ userId: await omnibusUserId(), amountTzs, phoneNumber, paymentMethod: method });
+          deposit = await createDeposit({ userId: await omnibusUserId(), amountTzs, phoneNumber, paymentMethod: method, payerAccountNumber });
           usedRoute = "omnibus-wallet";
         }
 
@@ -152,7 +159,7 @@ export async function POST(req: Request) {
         });
       }
 
-      const deposit = await createDeposit({ userId: await omnibusUserId(), amountTzs, phoneNumber, paymentMethod: method });
+      const deposit = await createDeposit({ userId: await omnibusUserId(), amountTzs, phoneNumber, paymentMethod: method, payerAccountNumber });
       await sql`update capx.deposits
                    set ntzs_deposit_id = ${String(deposit.id)},
                        metadata = metadata || ${sql.json({ route: "omnibus-wallet" })}

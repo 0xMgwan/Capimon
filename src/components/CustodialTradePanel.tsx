@@ -7,7 +7,6 @@ import { motion, AnimatePresence } from "motion/react";
 import type { AssetMeta } from "@/lib/assets";
 import type { Market } from "@/lib/useMarkets";
 import { useCapimonAccount, useCurrency } from "@/lib/useCapimonAccount";
-import { AssetLogo } from "./AssetLogo";
 import { UsdcIcon } from "./icons/Usdc";
 import { NtzsIcon } from "./icons/Ntzs";
 import { AssetPicker } from "./AssetPicker";
@@ -63,6 +62,8 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
   // What the user typed, expressed in USDC — the router and the quote both work
   // in USDC whatever the screen says.
   const spendUsdc = side === "buy" ? toUsdc(amountNum) : amountNum;
+  // The quote endpoint takes USDC for a buy and a share quantity for a sell.
+  const quoteAmount = side === "buy" ? spendUsdc : sellByValueAmount();
   /*
    * The toggle decides which balance is spent, not merely how figures are
    * shown. An account can hold both, and treating any TZS balance as "pay in
@@ -71,19 +72,37 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
    */
   const payTzs = side === "buy" && currency === "TZS" && !!rate && rate > 0;
   const tzsToSpend = payTzs ? amountNum : 0;
+
+  /*
+   * Selling by value rather than by share count.
+   *
+   * People decide "cash out 50,000 shillings", not "sell 0.00874403 shares" —
+   * the quantity is an artefact of the price, and with eight decimals it is
+   * unreadable and easy to mistype. So the sell side takes an amount in the
+   * chosen currency and converts to a quantity here, at the live mark.
+   */
+  function sellByValueAmount() { return sellQty; }
+  const markUsd = market?.price ?? 0;
+  const sellByValue = side === "sell" && markUsd > 0;
+  const sellValueUsd = sellByValue ? (currency === "TZS" && rate ? amountNum * rate : amountNum) : 0;
+  // Never ask to sell more than is held: a rounding error at eight decimals
+  // reverts the whole trade for the sake of a fraction of a cent.
+  const sellQty = sellByValue ? Math.min(held, sellValueUsd / markUsd) : amountNum;
+  const heldValue = currency === "TZS" && rate ? (held * markUsd) / rate : held * markUsd;
+
   // What is actually spendable in the currency on screen.
-  const available = side !== "buy" ? held : payTzs ? tzsCash : cash;
+  const available = side !== "buy" ? (sellByValue ? heldValue : held) : payTzs ? tzsCash : cash;
   const wanted = side !== "buy" ? amountNum : payTzs ? tzsToSpend : spendUsdc;
-  const insufficient = wanted > available;
+  const insufficient = wanted > available * 1.0001; // tolerate float noise at the max
 
   useEffect(() => {
-    if (!(spendUsdc > 0)) return;
+    if (!(quoteAmount > 0)) return;
     let alive = true;
     const t = setTimeout(async () => {
       if (!alive) return;
       setQuoting(true);
       try {
-        const r = await fetch(`/api/quote?symbol=${asset.symbol}&side=${side}&amount=${spendUsdc}`, { cache: "no-store" });
+        const r = await fetch(`/api/quote?symbol=${asset.symbol}&side=${side}&amount=${quoteAmount}`, { cache: "no-store" });
         const j: Quote = await r.json();
         if (alive) setQuote(j);
       } catch {
@@ -93,7 +112,7 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
       }
     }, 350);
     return () => { alive = false; clearTimeout(t); };
-  }, [spendUsdc, side, asset.symbol, market?.price]);
+  }, [quoteAmount, side, asset.symbol, market?.price]);
 
   const place = async () => {
     setBusy(true); setError(null); setResult(null);
@@ -102,9 +121,11 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(
-          payTzs
-            ? { symbol: asset.symbol, side, amount: tzsToSpend, currency: "TZS" }
-            : { symbol: asset.symbol, side, amount: spendUsdc },
+          side === "sell"
+            ? { symbol: asset.symbol, side, amount: sellQty }
+            : payTzs
+              ? { symbol: asset.symbol, side, amount: tzsToSpend, currency: "TZS" }
+              : { symbol: asset.symbol, side, amount: spendUsdc },
         ),
       });
       const j = await r.json();
@@ -140,7 +161,14 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
         {(["buy", "sell"] as const).map((s) => (
           <button
             key={s}
-            onClick={() => { setSide(s); setResult(null); setError(null); setAmount(s === "buy" ? "100" : String(held || 0)); }}
+            onClick={() => {
+              setSide(s); setResult(null); setError(null);
+              // Both sides are money now, so the default is an amount, and
+              // selling defaults to the whole position.
+              setAmount(s === "buy"
+                ? (currency === "TZS" ? "25000" : "100")
+                : String(currency === "TZS" ? Math.floor(heldValue) : Number(heldValue.toFixed(2))));
+            }}
             className={`flex-1 rounded-full py-2 text-sm font-medium capitalize transition-colors ${
               side === s ? "bg-[var(--bg)] shadow-sm" : "text-[var(--muted)]"
             }`}
@@ -171,12 +199,14 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
         </div>
         <div className="mt-1 flex justify-end">
           <button
-            onClick={() => setAmount(String(side === "buy" ? (payTzs ? Math.floor(tzsCash) : cash) : held))}
+            onClick={() => setAmount(String(side === "buy"
+              ? (payTzs ? Math.floor(tzsCash) : cash)
+              : currency === "TZS" ? Math.floor(heldValue) : Number(heldValue.toFixed(2))))}
             className="tnum text-[11px] text-[var(--muted)] hover:text-[var(--fg)]"
           >
             {side === "buy"
               ? `${payTzs ? `${Math.floor(tzsCash).toLocaleString()} TZS` : usd(cash)} available`
-              : `${held.toFixed(6)} held`}
+              : `${currency === "TZS" ? `${Math.floor(heldValue).toLocaleString()} TZS` : usd(heldValue)} held`}
           </button>
         </div>
         <div className="mt-2 flex items-center gap-3 rounded-2xl border hairline px-4 py-3 focus-within:border-[var(--color-accent)]">
@@ -188,13 +218,11 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
             placeholder="0"
           />
           <span className="flex shrink-0 items-center gap-1.5 rounded-full surface px-3 py-1.5 text-xs font-medium">
-            {side === "buy"
-              ? (currency === "TZS" ? <NtzsIcon className="h-4 w-4" /> : <UsdcIcon className="h-4 w-4" />)
-              : <AssetLogo logo={market?.logo} ticker={asset.ticker} color={asset.color} size={16} />}
-            {side === "buy" ? currency : asset.symbol}
+            {currency === "TZS" ? <NtzsIcon className="h-4 w-4" /> : <UsdcIcon className="h-4 w-4" />}
+            {currency}
           </span>
         </div>
-        {side === "buy" && (
+        {(side === "buy" || sellByValue) && (
           <div className="mt-2.5 grid grid-cols-4 gap-2">
             {(currency === "TZS" ? PRESETS_TZS : PRESETS_USDC).map((p) => (
               <button
@@ -226,6 +254,11 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
       </div>
 
       <dl className="mt-4 space-y-2 text-xs">
+        {/* The value is what people choose; the quantity is what actually
+            trades, so it stays visible rather than being hidden behind it. */}
+        {sellByValue && sellQty > 0 && (
+          <Row k="Shares sold" v={`${sellQty.toFixed(6)} ${asset.symbol}`} />
+        )}
         <Row k="Oracle mark" v={market ? format(market.price) : "—"} />
         {quote?.executionPrice ? <Row k="Execution price" v={format(quote.executionPrice)} /> : null}
         {quote?.venues?.length ? <Row k="Route" v={quote.venues.join(" + ")} /> : null}
@@ -248,7 +281,7 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
           </p>
         ) : insufficient ? (
           <button disabled className="w-full rounded-full surface py-3.5 text-sm text-[var(--muted)]">
-            {side === "buy" ? `Not enough ${payTzs ? "TZS" : "USDC"}` : `You hold ${held.toFixed(6)}`}
+            {side === "buy" ? `Not enough ${payTzs ? "TZS" : "USDC"}` : "More than you hold"}
           </button>
         ) : (
           <button

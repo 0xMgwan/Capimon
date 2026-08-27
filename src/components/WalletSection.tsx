@@ -69,6 +69,7 @@ export function WalletSection() {
   const [error, setError] = useState<string | null>(null);
   const [panel, setPanel] = useState<"none" | "deposit" | "withdraw">("none");
   const [wdAmount, setWdAmount] = useState(10_000);
+  const [payerAccount, setPayerAccount] = useState("");
   const [quote, setQuote] = useState<{ quoteId: string; feeTzs: number; recipientName: string | null } | null>(null);
 
   const loadDeposits = useCallback(async () => {
@@ -109,7 +110,10 @@ export function WalletSection() {
       const r = await fetch("/api/ntzs/deposit", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ amountTzs: amount, phoneNumber: phoneToUse, paymentMethod: method }),
+        body: JSON.stringify({
+          amountTzs: amount, phoneNumber: phoneToUse, paymentMethod: method,
+          ...(method === "bank_transfer" ? { payerAccountNumber: payerAccount } : {}),
+        }),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error);
@@ -321,9 +325,20 @@ export function WalletSection() {
                     inputMode="numeric" placeholder="Mobile money number"
                     className="mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
                   />
+                  {/* A bank credit arrives without its narration, so the sending
+                      account is the only thing that identifies whose it is. */}
+                  {method === "bank_transfer" && (
+                    <input
+                      value={payerAccount}
+                      onChange={(e) => setPayerAccount(e.target.value)}
+                      inputMode="numeric" placeholder="Bank account you are sending from"
+                      className="tnum mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+                    />
+                  )}
                   <button
                     onClick={deposit}
-                    disabled={busy || amount < minTzs || !phoneToUse}
+                    disabled={busy || amount < minTzs || !phoneToUse
+                              || (method === "bank_transfer" && !payerAccount.trim())}
                     className="mt-3 w-full rounded-full bg-[var(--fg)] py-3 text-sm font-medium text-[var(--bg)] disabled:opacity-50"
                   >
                     {busy
@@ -333,7 +348,8 @@ export function WalletSection() {
                   <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
                     Minimum {minTzs.toLocaleString()} TZS
                     {account.depositRoute === "ramp" && method === "mobile_money" && " on this rail"}.
-                    {method === "bank_transfer" && " Bank transfers settle more slowly than mobile money."}
+                    {method === "bank_transfer" &&
+                      " Send from the account you enter above — that is how the credit is matched to you. Bank transfers settle more slowly than mobile money."}
                   </p>
                 </div>
               </motion.div>

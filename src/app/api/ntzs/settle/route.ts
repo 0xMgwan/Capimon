@@ -25,6 +25,18 @@ const TERMINAL_OK =
 const TERMINAL_BAD = /(fail|cancel|expir|reject|declin|revers|abandon|timed?_?out)/i;
 
 /**
+ * How long a collection may sit un-actioned before it stops being presented as
+ * in flight.
+ *
+ * A mobile money prompt lives a few minutes. Decline or ignore it and nTZS
+ * leaves the deposit "submitted" indefinitely, so the row polled forever and
+ * the customer was told a payment was on its way that they had already
+ * cancelled. Ageing it out is presentation only — the row keeps being checked
+ * below, so a collection that somehow lands later is still credited.
+ */
+const STALE_AFTER_MS = 30 * 60_000;
+
+/**
  * Settles pending deposits: confirm the collection landed and credit the
  * depositor. Every route but ramp credits shillings and leaves them in the
  * omnibus to be swapped at buy time; ramp settles straight to USDC and is
@@ -45,10 +57,14 @@ export async function settlePending(): Promise<{ checked: number; results: Recor
   const sql = db();
 
   const pending = await sql<{ id: string; user_id: string; ntzs_deposit_id: string;
-                             amount_tzs: number; metadata: { route?: string; quotedUsdc?: number } }[]>`
-    select id::text, user_id::text, ntzs_deposit_id, amount_tzs, metadata
+                             amount_tzs: number; age_ms: number;
+                             metadata: { route?: string; quotedUsdc?: number } }[]>`
+    select id::text, user_id::text, ntzs_deposit_id, amount_tzs, metadata,
+           extract(epoch from (now() - created_at)) * 1000 as age_ms
       from capx.deposits
-     where status in ('pending','uncertain') and ntzs_deposit_id is not null
+     -- 'expired' is still watched: it means "stop showing this as in flight",
+     -- never "stop crediting it if the money arrives".
+     where status in ('pending','uncertain','expired') and ntzs_deposit_id is not null
      order by created_at asc
      limit 20`;
 
@@ -97,6 +113,13 @@ export async function settlePending(): Promise<{ checked: number; results: Recor
         continue;
       }
       if (!TERMINAL_OK.test(status)) {
+        // Long past the life of a payment prompt and upstream has not moved:
+        // stop presenting it as in flight, but keep it in the watch list.
+        if (Number(d.age_ms) > STALE_AFTER_MS) {
+          await sql`update capx.deposits set status = 'expired' where id = ${d.id} and status <> 'expired'`;
+          results.push({ id: d.id, outcome: `expired after ${Math.round(Number(d.age_ms) / 60000)} min (upstream: ${status || "pending"})` });
+          continue;
+        }
         results.push({ id: d.id, outcome: `still ${status || "pending"}` });
         continue;
       }

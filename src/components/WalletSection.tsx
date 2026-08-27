@@ -24,6 +24,9 @@ const STATUS_LABEL: Record<string, string> = {
   uncertain: "Checking with the network",
   settled: "Added to your balance",
   failed: "Not completed",
+  // Declined or ignored on the phone. Still watched server-side, so the wording
+  // does not promise it can never arrive.
+  expired: "Payment not completed",
 };
 
 const IN_FLIGHT = new Set(["pending", "uncertain"]);

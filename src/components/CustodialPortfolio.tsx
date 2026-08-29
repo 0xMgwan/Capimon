@@ -22,7 +22,7 @@ export function CustodialPortfolio() {
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             <div className="eyebrow">Portfolio</div>
-            <h1 className="display mt-3 text-[clamp(2rem,5vw,3.6rem)]">Your book.</h1>
+            <h1 className="display mt-3 text-[clamp(1.65rem,5vw,3.6rem)]">Your book.</h1>
             <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
               {account.user.username ? `@${account.user.username}` : account.user.email}
               <span className="rounded-full surface px-2 py-0.5 text-[11px]">held by CAPX</span>

@@ -34,11 +34,15 @@ export function Hero() {
   const scale = useTransform(scrollYProgress, [0, 1], [1, 1.12]);
 
   const { data } = useMarkets();
+  // Longest history available, so the curve has shape rather than a flat line.
+  const backdrop = (data?.markets ?? [])
+    .filter((m) => m.history.length > 8)
+    .sort((a, b) => b.history.length - a.history.length)[0];
   const tvl = data?.totals.tvl ?? 0;
   const movers = [...(data?.markets ?? [])].sort((a, b) => Math.abs(b.change) - Math.abs(a.change)).slice(0, 2);
 
   return (
-    <section ref={ref} className="relative isolate flex min-h-[88vh] flex-col justify-center overflow-hidden [@supports(height:100dvh)]:min-h-[88dvh]">
+    <section ref={ref} className="relative isolate flex min-h-[76vh] flex-col justify-center overflow-hidden [@supports(height:100dvh)]:min-h-[76dvh] sm:min-h-[88vh] sm:[@supports(height:100dvh)]:min-h-[88dvh]">
       {/* Living mesh backdrop — cheap, GPU-only, and it never blocks the type. */}
       <motion.div style={reduced ? undefined : { scale }} className="absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-[var(--bg)]" />
@@ -60,12 +64,33 @@ export function Hero() {
           className="absolute bottom-[2%] left-[26%] h-[36vw] w-[36vw] rounded-full blur-[110px]"
           style={{ background: "radial-gradient(circle, color-mix(in oklab, #ffb86b 30%, transparent), transparent 70%)" }}
         />
+        {/*
+          The hero's backdrop is the product's own data rather than decoration:
+          a real price curve, faint enough never to compete with the type.
+        */}
+        {backdrop && (
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 opacity-[0.10]
+                       [&>svg]:h-[38vh] [&>svg]:w-full"
+            /* The svg carries a viewBox, so overriding its width lets the curve
+               span whatever the screen is instead of being drawn at a fixed
+               1400px and cut off on a phone. */
+          >
+            <Sparkline
+              data={backdrop.history}
+              color="var(--color-accent)"
+              width={1400}
+              height={320}
+              strokeWidth={2}
+            />
+          </div>
+        )}
         <div className="grain absolute inset-0 mix-blend-overlay" />
         <div className="absolute inset-0 bg-gradient-to-b from-[var(--bg)]/10 via-transparent to-[var(--bg)]" />
       </motion.div>
 
-      <motion.div style={reduced ? undefined : { y, opacity }} className="mx-auto w-full max-w-[1400px] px-5 pb-16 pt-20 sm:px-8">
-        <h1 className="display text-center text-[clamp(2.9rem,9vw,8.5rem)] sm:text-left">
+      <motion.div style={reduced ? undefined : { y, opacity }} className="mx-auto w-full max-w-[1400px] px-5 pb-10 pt-10 sm:px-8 sm:pb-16 sm:pt-20">
+        <h1 className="display text-center text-[clamp(2.4rem,9vw,8.5rem)] sm:text-left">
           <RevealWords text="Own the open" />
           <br />
           <span className="italic font-[family-name:var(--font-serif)] font-light tracking-[-0.02em]">

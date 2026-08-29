@@ -68,7 +68,7 @@ export function MarketTable({ limit, showSearch = true }: { limit?: number; show
       <div className="grid grid-cols-1 gap-2 md:hidden">
         {loading && !rows.length &&
           Array.from({ length: limit ?? 6 }).map((_, i) => (
-            <div key={i} className="h-[92px] animate-pulse rounded-2xl surface" />
+            <div key={i} className="h-[68px] animate-pulse rounded-2xl surface" />
           ))}
         {rows.map((m) => {
           const dirTick = ticks[m.symbol];
@@ -78,41 +78,37 @@ export function MarketTable({ limit, showSearch = true }: { limit?: number; show
             <Link
               key={m.symbol}
               href={`/markets/${m.ticker.toLowerCase()}`}
-              className="block min-w-0 rounded-2xl border hairline p-4 transition-colors active:surface"
+              className="block min-w-0 rounded-2xl border hairline px-3.5 py-3 transition-colors active:surface"
             >
+              {/*
+                Price and move lead; the logo and company name support them.
+                Everything used to sit at one weight, so scanning a list meant
+                reading it. The supply and TVL row is gone from the phone — it
+                is reference detail for the asset page, not a reason to tap.
+              */}
               <div className="flex items-center gap-3">
-                <AssetLogo logo={m.logo} ticker={m.ticker} color={m.color} size={40} />
+                <AssetLogo logo={m.logo} ticker={m.ticker} color={m.color} size={34} />
                 <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span className="text-[15px] font-medium tracking-tight">{m.ticker}</span>
-                    {v && (
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                        v.tradeable
-                          ? "bg-[var(--color-up)]/10 text-[var(--color-up)]"
-                          : "surface text-[var(--muted)]"
-                      }`}>
-                        {v.tradeable ? "Tradeable" : "Mint only"}
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-[15px] font-semibold tracking-tight">{m.ticker}</span>
+                    {v && !v.tradeable && (
+                      <span className="rounded-full surface px-1.5 py-0.5 text-[9px] font-medium text-[var(--muted)]">
+                        Mint only
                       </span>
                     )}
                   </span>
-                  <span className="block truncate text-xs text-[var(--muted)]">{m.name}</span>
+                  <span className="block truncate text-[11px] leading-tight text-[var(--muted)]">{m.name}</span>
                 </span>
-                <Sparkline data={m.history.slice(-30)} color={up ? "var(--color-up)" : "var(--color-down)"} width={56} height={26} />
+                <Sparkline data={m.history.slice(-30)} color={up ? "var(--color-up)" : "var(--color-down)"} width={48} height={22} />
                 <span className="shrink-0 text-right">
-                  <span className={`tnum block text-[15px] ${dirTick === "up" ? "flash-up" : dirTick === "down" ? "flash-down" : ""}`}>
+                  <span className={`tnum block text-[17px] font-medium leading-tight ${dirTick === "up" ? "flash-up" : dirTick === "down" ? "flash-down" : ""}`}>
                     ${m.price.toFixed(2)}
                   </span>
-                  <span className={`tnum block text-xs ${up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                  <span className={`tnum block text-[12px] font-medium leading-tight ${up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
                     {up ? "+" : ""}{m.change.toFixed(2)}%
                   </span>
                 </span>
               </div>
-              {m.tvl > 0 && (
-                <div className="tnum mt-3 flex justify-between border-t hairline pt-2.5 text-[11px] text-[var(--muted)]">
-                  <span>{compact(m.supply, 2)} share-equivalents</span>
-                  <span>{compactUsd(m.tvl)} onchain</span>
-                </div>
-              )}
             </Link>
           );
         })}

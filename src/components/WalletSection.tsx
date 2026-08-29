@@ -168,7 +168,7 @@ export function WalletSection() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="eyebrow">Wallet</div>
-          <h2 className="display mt-2 text-[clamp(1.6rem,3.6vw,2.4rem)]">Cash and activity.</h2>
+          <h2 className="display mt-2 text-[clamp(1.35rem,3.6vw,2.4rem)]">Cash and activity.</h2>
         </div>
       </div>
 

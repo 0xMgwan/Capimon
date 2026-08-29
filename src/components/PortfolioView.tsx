@@ -93,7 +93,7 @@ export function PortfolioView() {
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             <div className="eyebrow">Portfolio</div>
-            <h1 className="display mt-3 text-[clamp(2rem,5vw,3.6rem)]">Your onchain book.</h1>
+            <h1 className="display mt-3 text-[clamp(1.65rem,5vw,3.6rem)]">Your onchain book.</h1>
             <p className="tnum mt-3 flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
               <a href={`https://basescan.org/address/${address}`} target="_blank" rel="noreferrer" className="hover:text-[var(--fg)]">
                 {short(address)} ↗

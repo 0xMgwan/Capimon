@@ -63,7 +63,7 @@ export function ProductsSection() {
     <section className="mx-auto max-w-[1400px] px-5 py-14 sm:px-8 sm:py-24 lg:py-32">
       <Reveal>
         <div className="eyebrow">Our products</div>
-        <h2 className="display mt-4 max-w-4xl text-[clamp(2.2rem,5.4vw,4.6rem)]">
+        <h2 className="display mt-4 max-w-4xl text-[clamp(1.8rem,5.4vw,4.6rem)]">
           <RevealWords text="A new standard" />
           <br />
           <span className="font-[family-name:var(--font-serif)] font-light italic text-[var(--muted)]">
@@ -199,7 +199,7 @@ export function LiveBoard() {
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
               <div className="eyebrow">Live board</div>
-              <h2 className="display mt-3 text-[clamp(2rem,4.6vw,3.6rem)]">Everything, marked to the chain.</h2>
+              <h2 className="display mt-3 text-[clamp(1.65rem,4.6vw,3.6rem)]">Everything, marked to the chain.</h2>
             </div>
             <Link href="/markets" className="rounded-full border hairline px-5 py-2.5 text-sm transition-colors hover:surface">
               View all {data?.totals.assets ?? ""} markets →
@@ -230,7 +230,7 @@ export function StatsBand() {
     <section ref={ref} className="overflow-hidden py-14 sm:py-24 lg:py-32">
       <div className="mx-auto max-w-[1400px] px-5 sm:px-8">
         <Reveal>
-          <h2 className="display max-w-3xl text-[clamp(2rem,5vw,4.2rem)]">
+          <h2 className="display max-w-3xl text-[clamp(1.65rem,5vw,4.2rem)]">
             <RevealWords text="CAPX is building the rails" />{" "}
             <span className="font-[family-name:var(--font-serif)] font-light italic text-[var(--muted)]">
               <RevealWords text="for the next market." delay={0.12} />
@@ -303,7 +303,7 @@ export function BeliefSection() {
       <div className="mx-auto max-w-[1400px] px-5 py-14 sm:px-8 sm:py-24 lg:py-32">
         <Reveal>
           <div className="eyebrow">A message from CAPX</div>
-          <h2 className="display mt-4 text-[clamp(2rem,5vw,4rem)]">We believe in</h2>
+          <h2 className="display mt-4 text-[clamp(1.65rem,5vw,4rem)]">We believe in</h2>
         </Reveal>
         <div className="mt-8 sm:mt-14 grid gap-px overflow-hidden rounded-3xl bg-[var(--border)] md:grid-cols-3">
           {BELIEFS.map((b, i) => (
@@ -338,7 +338,7 @@ export function PillarsSection() {
         <Reveal>
           <div className="lg:sticky lg:top-32">
             <div className="eyebrow">Institutional grade</div>
-            <h2 className="display mt-4 text-[clamp(2rem,4.6vw,3.6rem)]">
+            <h2 className="display mt-4 text-[clamp(1.65rem,4.6vw,3.6rem)]">
               Serious plumbing,{" "}
               <span className="font-[family-name:var(--font-serif)] font-light italic text-[var(--muted)]">visible to everyone.</span>
             </h2>
@@ -388,7 +388,7 @@ export function ClosingCTA() {
       <div className="mx-auto max-w-[1400px] px-5 py-16 text-center sm:px-8 sm:py-28 lg:py-40">
         <Reveal>
           <div className="eyebrow">The future of markets</div>
-          <h2 className="display mx-auto mt-5 max-w-4xl text-[clamp(2.4rem,6.5vw,5.5rem)]">
+          <h2 className="display mx-auto mt-5 max-w-4xl text-[clamp(1.95rem,6.5vw,5.5rem)]">
             <RevealWords text="Markets that never" />{" "}
             <span className="font-[family-name:var(--font-serif)] font-light italic">
               <RevealWords text="close on you." delay={0.12} />

@@ -59,7 +59,7 @@ export function QuickBuy() {
           <Reveal>
             <div className="lg:sticky lg:top-36">
               <div className="eyebrow">Quick buy</div>
-              <h2 className="display mt-4 text-[clamp(2rem,4.6vw,3.6rem)]">
+              <h2 className="display mt-4 text-[clamp(1.65rem,4.6vw,3.6rem)]">
                 <RevealWords text="One ticket." />
                 <br />
                 <span className="font-[family-name:var(--font-serif)] font-light italic text-[var(--muted)]">

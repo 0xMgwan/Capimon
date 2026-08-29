@@ -39,9 +39,13 @@ export function NotificationBell() {
 
   useEffect(() => {
     if (!account) return;
-    void load();
-    const id = setInterval(load, 30_000);
-    return () => clearInterval(id);
+    let alive = true;
+    // Deferred rather than called in the effect body: a synchronous setState
+    // during an effect cascades a second render before the first has painted.
+    const tick = () => { if (alive) void load(); };
+    const first = setTimeout(tick, 0);
+    const id = setInterval(tick, 30_000);
+    return () => { alive = false; clearTimeout(first); clearInterval(id); };
   }, [account, load]);
 
   useEffect(() => {

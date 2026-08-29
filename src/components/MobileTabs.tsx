@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
 import { useAccount } from "wagmi";
+import { useCapimonAccount } from "@/lib/useCapimonAccount";
 
 const TABS = [
   {
@@ -19,21 +20,28 @@ const TABS = [
     icon: <path d="M4 8h16v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8Zm4 0V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />,
   },
   {
-    href: "/how-it-works", label: "How",
-    icon: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.2 2.4c-.6.2-.9.7-.9 1.3v.4M12 17h.01" /></>,
+    href: "/settings", label: "Account",
+    icon: <><circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" /></>,
   },
 ];
 
 /**
- * Phone navigation for signed-in users. Before a wallet is connected the site
- * reads as a landing page, so it uses the nav menu instead — the tab bar only
- * appears once there is an account to move around inside.
+ * Phone navigation for anyone signed in.
+ *
+ * This used to require a connected wallet, which meant the customers CAPX is
+ * actually built for — who sign in with an email and never touch a wallet —
+ * never saw it, and moved around a trading app through a hamburger menu. An
+ * account is an account however it was opened.
+ *
+ * A visitor who has not signed in still gets the menu: with nothing to move
+ * around inside, a tab bar is chrome over a landing page.
  */
 export function MobileTabs() {
   const path = usePathname();
   const { isConnected } = useAccount();
+  const { account } = useCapimonAccount();
 
-  if (!isConnected) return null;
+  if (!isConnected && !account) return null;
 
   return (
     <>

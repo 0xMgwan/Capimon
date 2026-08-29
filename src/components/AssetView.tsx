@@ -39,7 +39,7 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
   const up = (market?.change ?? 0) >= 0;
 
   return (
-    <div className="mx-auto max-w-[1400px] px-5 pb-24 pt-10 sm:px-8">
+    <div className="mx-auto max-w-[1400px] px-5 pb-24 pt-6 sm:px-8 sm:pt-10">
       <Link href="/markets" className="text-sm text-[var(--muted)] transition-colors hover:text-[var(--fg)]">
         ← All markets
       </Link>
@@ -119,7 +119,7 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
           </Reveal>
         </Reveal>
 
-        <div className="lg:sticky lg:top-32 lg:self-start">
+        <div id="ticket" className="scroll-mt-24 lg:sticky lg:top-32 lg:self-start">
           <Reveal delay={0.08}>
             <PanelBoundary label="Order ticket">
               {custodial
@@ -149,6 +149,23 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
           )}
         </div>
       </div>
+
+      {/*
+        On a phone the ticket sits below the chart and the peers list, so buying
+        meant scrolling past everything to find it. A fixed bar keeps the action
+        one tap away wherever you are on the page; above lg the ticket is
+        already pinned beside the chart, so it would only be clutter.
+      */}
+      <div className="safe-b fixed inset-x-0 bottom-[4.25rem] z-40 px-4 lg:hidden">
+        <a
+          href="#ticket"
+          className="flex items-center justify-between gap-3 rounded-full bg-[var(--fg)] px-5 py-3.5 text-sm font-medium text-[var(--bg)] shadow-lg shadow-black/20 transition-transform active:scale-95"
+        >
+          <span>Trade {asset.ticker}</span>
+          <span className="tnum opacity-70">{market ? usd(market.price) : "—"}</span>
+        </a>
+      </div>
+
     </div>
   );
 }
@@ -172,6 +189,7 @@ function RefRow({ k, v }: { k: string; v: string }) {
           {short(v)} ↗
         </a>
       </dd>
+
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { passwordProblem } from "@/lib/passwordRule";
 
 export type AccountMode = "signin" | "signup";
 
@@ -68,6 +69,23 @@ export function AccountForm({
             compact ? "py-3" : "mt-1.5 py-2.5"
           }`}
         />
+        {/*
+          Compact mode hides labels and hints, which on a phone meant the
+          password rule existed nowhere until the attempt failed. A requirement
+          you can only discover by breaking it is not a requirement, it is a
+          trap — so it is stated up front here and marked as it is met.
+        */}
+        {compact && hint && (
+          <span className={`mt-1 block text-[11px] ${
+            key === "password" && form.password
+              ? passwordProblem(form.password)
+                ? "text-[var(--muted)]"
+                : "text-[var(--color-up)]"
+              : "text-[var(--muted)]"
+          }`}>
+            {key === "password" && form.password && !passwordProblem(form.password) ? "Password looks good" : hint}
+          </span>
+        )}
       </label>
     );
   };

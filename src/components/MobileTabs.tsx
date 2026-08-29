@@ -56,21 +56,39 @@ export function MobileTabs() {
               key={t.href}
               href={t.href}
               aria-current={active ? "page" : undefined}
-              className="relative flex flex-1 flex-col items-center gap-1 py-2.5 active:scale-95 transition-transform"
+              className="relative flex flex-1 flex-col items-center gap-1 py-2 active:scale-95 transition-transform"
               style={{ color: active ? "var(--fg)" : "var(--muted)" }}
             >
-              {active && (
-                <motion.span
-                  layoutId="tab-indicator"
-                  className="absolute inset-x-5 top-0 h-0.5 rounded-full bg-[var(--color-accent)]"
-                  transition={{ type: "spring", stiffness: 400, damping: 34 }}
-                />
-              )}
-              <svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" fill="none" stroke="currentColor"
-                strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                {t.icon}
-              </svg>
-              <span className="text-[10px] font-medium tracking-tight">{t.label}</span>
+              {/*
+                A hairline above the tab was the only mark of the current page,
+                which reads as nothing on a phone. The active icon now sits in a
+                filled pill that slides between tabs — the label carries weight
+                too, so the state is legible at a glance rather than inferred
+                from a two-pixel line.
+              */}
+              <span className="relative grid h-8 w-[3.25rem] place-items-center">
+                {active && (
+                  <motion.span
+                    layoutId="tab-pill"
+                    className="absolute inset-0 rounded-full bg-[var(--fg)]"
+                    transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                  />
+                )}
+                <svg
+                  viewBox="0 0 24 24"
+                  className="relative h-[21px] w-[21px]"
+                  fill="none"
+                  stroke={active ? "var(--bg)" : "currentColor"}
+                  strokeWidth={active ? 2.1 : 1.8}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  {t.icon}
+                </svg>
+              </span>
+              <span className={`text-[10px] tracking-tight ${active ? "font-semibold" : "font-medium"}`}>
+                {t.label}
+              </span>
             </Link>
           );
         })}

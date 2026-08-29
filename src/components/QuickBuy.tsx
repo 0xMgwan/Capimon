@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useMarkets } from "@/lib/useMarkets";
 import { useVenues } from "@/lib/useVenues";
@@ -10,9 +10,11 @@ import { AssetPicker } from "./AssetPicker";
 import { AssetLogo } from "./AssetLogo";
 import { Reveal, RevealWords } from "./Reveal";
 import { UsdcIcon } from "./icons/Usdc";
+import { NtzsIcon } from "./icons/Ntzs";
 import { usd } from "@/lib/format";
 
 const PRESETS = [50, 100, 500, 1000];
+const PRESETS_TZS = [25_000, 100_000, 250_000, 500_000];
 
 /**
  * A single order ticket: how much, what, what you get. The company selector is
@@ -24,6 +26,39 @@ export function QuickBuy() {
   const { venues } = useVenues();
   const router = useRouter();
   const [amount, setAmount] = useState(100);
+  /*
+   * The ticket prices in USDC because the router does, but a Tanzanian visitor
+   * thinks in shillings — and this is the first number they see on the site.
+   * The toggle changes what they type; the conversion happens here.
+   */
+  /*
+   * The rate comes from the public endpoint, not from the signed-in account.
+   * This ticket is the first thing a visitor sees and they are signed out by
+   * definition — reading the account's rate meant the shilling option was
+   * hidden from exactly the people it exists for.
+   */
+  /*
+   * Local, not the shared useCurrency hook: that one forces USDC whenever the
+   * signed-in account has no shilling rate, which is always true here — this
+   * ticket is for logged-out visitors. It would have rendered the toggle and
+   * then ignored every press.
+   */
+  const [currency, setCurrency] = useState<"TZS" | "USDC">("USDC");
+  const [rate, setRate] = useState<number | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/ntzs/rate", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        const out = Number(j?.expectedOutput ?? 0);
+        if (alive && j?.ok && out > 0) setRate(out / 100_000);
+      })
+      .catch(() => { /* the ticket still works in USDC */ });
+    return () => { alive = false; };
+  }, []);
+  const canShowTzs = !!rate && rate > 0;
+  const inTzs = currency === "TZS" && !!rate && rate > 0;
+  const amountUsd = inTzs && rate ? amount * rate : amount;
   const [custom, setCustom] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
 
@@ -36,7 +71,7 @@ export function QuickBuy() {
 
   const selected = markets.find((m) => m.ticker === picked) ?? markets[0];
   const venue = selected ? venues[selected.symbol] : undefined;
-  const units = selected && selected.price > 0 ? amount / selected.price : 0;
+  const units = selected && selected.price > 0 ? amountUsd / selected.price : 0;
   const tick = selected ? ticks[selected.symbol] : undefined;
 
   const setPreset = (n: number) => { setAmount(n); setCustom(""); };
@@ -49,7 +84,7 @@ export function QuickBuy() {
 
   const go = () => {
     if (!selected) return;
-    router.push(`/markets/${selected.ticker.toLowerCase()}?side=buy&amount=${amount}`);
+    router.push(`/markets/${selected.ticker.toLowerCase()}?side=buy&amount=${amountUsd}`);
   };
 
   return (
@@ -89,22 +124,44 @@ export function QuickBuy() {
           <Reveal delay={0.08}>
             <div className="rounded-3xl border hairline p-5 shadow-sm sm:p-6">
               {/* 1 — size */}
-              <div className="eyebrow flex items-center gap-1.5">
-                <UsdcIcon className="h-3.5 w-3.5" /> You pay · USDC
+              <div className="flex items-center justify-between gap-2">
+                <div className="eyebrow flex items-center gap-1.5">
+                  {inTzs ? <NtzsIcon className="h-3.5 w-3.5" /> : <UsdcIcon className="h-3.5 w-3.5" />}
+                  You pay · {inTzs ? "TZS" : "USDC"}
+                </div>
+                {canShowTzs && (
+                  <div className="flex rounded-full surface p-0.5">
+                    {(["TZS", "USDC"] as const).map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => {
+                          setCurrency(c);
+                          setCustom("");
+                          setAmount(c === "TZS" ? PRESETS_TZS[1] : PRESETS[1]);
+                        }}
+                        className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
+                          currency === c ? "bg-[var(--bg)] shadow-sm" : "text-[var(--muted)]"
+                        }`}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="mt-3 flex items-center gap-3 rounded-2xl border hairline px-4 py-3.5 focus-within:border-[var(--color-accent)]">
-                <span className="text-2xl text-[var(--muted)]">$</span>
+                <span className="text-2xl text-[var(--muted)]">{inTzs ? "TSh" : "$"}</span>
                 <input
                   value={custom || String(amount)}
                   onChange={(e) => onCustom(e.target.value)}
                   inputMode="decimal"
-                  aria-label="Amount in USDC"
+                  aria-label={inTzs ? "Amount in shillings" : "Amount in USDC"}
                   className="tnum w-full bg-transparent text-2xl outline-none"
                 />
-                <UsdcIcon className="h-6 w-6 shrink-0" />
+                {inTzs ? <NtzsIcon className="h-6 w-6 shrink-0" /> : <UsdcIcon className="h-6 w-6 shrink-0" />}
               </div>
               <div className="mt-2.5 grid grid-cols-4 gap-2">
-                {PRESETS.map((p) => (
+                {(inTzs ? PRESETS_TZS : PRESETS).map((p) => (
                   <button
                     key={p}
                     onClick={() => setPreset(p)}
@@ -114,7 +171,7 @@ export function QuickBuy() {
                         : "hairline hover:surface"
                     }`}
                   >
-                    ${p >= 1000 ? `${p / 1000}k` : p}
+                    {inTzs ? `${p / 1000}k` : `$${p >= 1000 ? `${p / 1000}k` : p}`}
                   </button>
                 ))}
               </div>

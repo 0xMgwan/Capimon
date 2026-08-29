@@ -32,14 +32,9 @@ export async function verifyPassword(password: string, stored: string) {
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
-/** Passwords guarding custody of other people's assets deserve a real floor. */
-export function passwordProblem(password: string): string | null {
-  if (password.length < 10) return "Use at least 10 characters.";
-  if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
-    return "Use at least one letter and one number.";
-  }
-  return null;
-}
+// Re-exported so existing server callers keep working while the rule itself
+// lives somewhere the sign-up form can also read it.
+export { passwordProblem } from "./passwordRule";
 
 export type SessionUser = {
   id: string;

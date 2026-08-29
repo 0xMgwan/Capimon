@@ -5,11 +5,15 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 export type CustodialPosition = {
   symbol: string; ticker: string; name: string; color: string; logo: string | null;
   qty: number; price: number; value: number; change: number;
+  /** What the held shares cost, and what they have made since. */
+  avgCost: number; costBasis: number; pnl: number; pnlPct: number; realised: number;
 };
 
 export type CustodialAccount = {
   user: { id: string; email: string; username: string | null; name: string | null; phone: string | null; avatar: string | null; ntzsUserId: string | null; kycStatus: string };
   cash: number;
+  /** Cost and return, derived from the prices every fill already recorded. */
+  pnl?: { invested: number; unrealised: number; realised: number; unrealisedPct: number };
   /** Shillings held directly, when the treasury route is in use. */
   tzs: number;
   /** Cash expressed in shillings at the live rate; null when unavailable. */

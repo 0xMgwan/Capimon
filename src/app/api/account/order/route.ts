@@ -6,6 +6,7 @@ import { BY_SYMBOL } from "@/lib/assets";
 import { executeBuy, executeSell, treasuryConfigured } from "@/lib/treasury";
 import { requireDb, bad, boom, notConfigured } from "@/lib/apiHelpers";
 import { assertSolvent } from "@/lib/solvency";
+import { notify } from "@/lib/notify";
 
 export const dynamic = "force-dynamic";
 
@@ -110,8 +111,11 @@ export async function POST(req: Request) {
                 metadata: { orderId, txHash: exec.txHash, price: exec.price } },
             ]
           : [
+              // Price on the share leg as well as the cash leg: cost basis is
+              // read from the share entries, and joining back through the order
+              // to find a number we already had is needless indirection.
               { userId: user.id, kind: "sell", asset: asset.symbol, amount: (-exec.qty).toString(), ref: `${orderId}:asset`,
-                metadata: { orderId, txHash: exec.txHash } },
+                metadata: { orderId, txHash: exec.txHash, price: exec.price } },
               { userId: user.id, kind: "sell", asset: "USDC", amount: exec.usdc.toString(), ref: `${orderId}:cash`,
                 metadata: { orderId, txHash: exec.txHash, price: exec.price } },
             ],
@@ -122,6 +126,13 @@ export async function POST(req: Request) {
                qty = ${exec.qty}, usdc_amount = ${exec.usdc}, settled_at = now()
          where id = ${orderId}`;
 
+      await notify({
+        userId: user.id, kind: "trade", ref: `order:${orderId}`,
+        title: side === "buy"
+          ? `Bought ${exec.qty.toFixed(6)} ${asset.ticker}`
+          : `Sold ${exec.qty.toFixed(6)} ${asset.ticker}`,
+        body: `${side === "buy" ? "Cost" : "Proceeds"} $${exec.usdc.toFixed(2)} at $${exec.price.toFixed(2)}.`,
+      });
       return NextResponse.json({ ok: true, orderId, ...exec });
     } catch (e) {
       const raw = e instanceof Error ? e.message : "execution failed";

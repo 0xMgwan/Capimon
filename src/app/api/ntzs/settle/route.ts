@@ -3,6 +3,7 @@ import { timingSafeEqual } from "crypto";
 import { getDeposit, rampStatus, rampSettlements, ntzsConfigured } from "@/lib/ntzs";
 import { db, migrate } from "@/lib/db";
 import { record } from "@/lib/ledger";
+import { notify } from "@/lib/notify";
 import { requireDb } from "@/lib/apiHelpers";
 import { dbConfigured } from "@/lib/db";
 
@@ -141,6 +142,11 @@ export async function settlePending(): Promise<{ checked: number; results: Recor
                      set status = 'settled', settled_at = now(),
                          metadata = metadata || ${sql.json(asJson({ route }))}
                    where id = ${d.id}`;
+        await notify({
+          userId: d.user_id, kind: "deposit", ref: `deposit:${d.id}`,
+          title: `${d.amount_tzs.toLocaleString()} TZS added`,
+          body: "Your deposit cleared and is ready to invest.",
+        });
         results.push({ id: d.id, outcome: `credited ${d.amount_tzs.toLocaleString()} TZS` });
         continue;
       }
@@ -167,6 +173,11 @@ export async function settlePending(): Promise<{ checked: number; results: Recor
                        rate_tzs_usdc = ${d.amount_tzs > 0 ? usdc / d.amount_tzs : null},
                        metadata = metadata || ${sql.json(asJson({ route: "ramp" }))}
                  where id = ${d.id}`;
+      await notify({
+        userId: d.user_id, kind: "deposit", ref: `deposit:${d.id}`,
+        title: `$${usdc.toFixed(2)} added`,
+        body: `Your ${d.amount_tzs.toLocaleString()} TZS deposit cleared.`,
+      });
       results.push({ id: d.id, outcome: `credited ${usdc.toFixed(2)} USDC` });
     } catch (e) {
       const message = e instanceof Error ? e.message : "settlement failed";

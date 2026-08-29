@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { useAccount } from "wagmi";
 import { Logo, Wordmark } from "./Logo";
 import { WalletButton } from "./WalletButton";
+import { NotificationBell } from "./NotificationBell";
 import { ThemeToggle } from "./ThemeToggle";
 import { useBodyLock } from "@/lib/useBodyLock";
 
@@ -80,6 +81,8 @@ export function Nav() {
 
           <div className="flex items-center gap-2">
             <ThemeToggle />
+            {/* Renders nothing when signed out, so it never crowds a visitor. */}
+            <NotificationBell />
             <WalletButton />
             {/* Before connecting there is no tab bar, so the menu carries
                 navigation on phones. */}

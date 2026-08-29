@@ -134,6 +134,22 @@ export async function migrate() {
           settled_at     timestamptz
         )`;
 
+      // What happened to someone's money while they were not looking. Settling
+      // runs on a cron, so without this the only way to learn a deposit landed
+      // was to keep the page open and watch a number change.
+      await sql`
+        create table if not exists capx.notifications (
+          id          bigserial primary key,
+          user_id     uuid not null references capx.users(id) on delete cascade,
+          kind        text not null,
+          title       text not null,
+          body        text,
+          /* Unique per event, so a cron that runs twice cannot notify twice. */
+          ref         text,
+          read_at     timestamptz,
+          created_at  timestamptz not null default now()
+        )`;
+
       /*
        * Columns added after a table first shipped.
        *
@@ -174,6 +190,8 @@ export async function migrate() {
                   on capx.users (lower(username)) where username is not null`;
       await sql`create index if not exists ledger_user_asset_idx on capx.ledger_entries(user_id, asset)`;
       await sql`create unique index if not exists ledger_ref_idx on capx.ledger_entries(ref) where ref is not null`;
+      await sql`create index if not exists notif_user_idx on capx.notifications(user_id, id desc)`;
+      await sql`create unique index if not exists notif_ref_idx on capx.notifications(ref) where ref is not null`;
       await sql`create index if not exists orders_user_idx on capx.orders(user_id, created_at desc)`;
       await sql`create index if not exists deposits_user_idx on capx.deposits(user_id, created_at desc)`;
       await sql`create index if not exists deposits_status_idx on capx.deposits(status)`;

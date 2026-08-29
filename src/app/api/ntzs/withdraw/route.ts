@@ -3,6 +3,7 @@ import { withdrawalQuote, createWithdrawal, lookupRecipient, NtzsError, ntzsConf
          rampQuote, rampOfframp, getSwapRate } from "@/lib/ntzs";
 import { currentUser } from "@/lib/auth";
 import { balanceOf, record } from "@/lib/ledger";
+import { notify } from "@/lib/notify";
 import { requireDb, bad, notConfigured } from "@/lib/apiHelpers";
 import { omnibusUserId, capabilities } from "@/lib/omnibus";
 
@@ -233,6 +234,11 @@ export async function POST(req: Request) {
     }
     const ref = String(result.id ?? quoteId);
 
+    await notify({
+      userId: user.id, kind: "withdrawal", ref: `withdrawal:${ref}`,
+      title: `${amountTzs.toLocaleString()} TZS sent`,
+      body: `On its way to ${phoneNumber}.`,
+    });
     return NextResponse.json({
       ok: true, withdrawalId: ref, amountTzs, status: result.status ?? "submitted",
       note: "On its way to your mobile money account.",

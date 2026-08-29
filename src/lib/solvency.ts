@@ -90,9 +90,36 @@ export async function checkSolvency(): Promise<Solvency> {
   const names = [...new Set([...liabilities.map((l) => l.asset), "USDC",
     ...holdings.holdings.map((h) => h.asset)])];
 
+  /*
+   * Shillings and dollars are one pool, shares are not.
+   *
+   * TZS and USDC are convertible on demand — the buy path swaps between them on
+   * every shilling order — so holding 3,000 TZS while a quarter of a dollar
+   * short of USDC is a composition to correct, not a shortfall. Judged per
+   * asset it read as insolvency and paused trading for everyone, with more
+   * value held than owed.
+   *
+   * Shares stay strict: a missing share cannot be conjured from cash at a
+   * guaranteed price, and pretending otherwise would hide a real hole.
+   */
+  const isCash = (asset: string) => asset === "USDC" || asset === "TZS";
+  const cashOwedUsd = names.filter(isCash)
+    .reduce((sum, a) => sum + (liabilities.find((l) => l.asset === a)?.amount ?? 0) * priceOf(a), 0);
+  const cashHeldUsd = names.filter(isCash).reduce((sum, a) => sum + heldOf(a) * priceOf(a), 0);
+  const cashGapUsd = cashOwedUsd - cashHeldUsd;
+  const cashCovered = !(cashGapUsd > ABSOLUTE_DUST && cashGapUsd > cashOwedUsd * TOLERANCE);
+
   const assets: AssetSolvency[] = names.map((asset) => {
     const owed = liabilities.find((l) => l.asset === asset)?.amount ?? 0;
     const held = heldOf(asset);
+
+    if (isCash(asset)) {
+      // Attribute any real cash gap to the leg that is actually short, so the
+      // admin view still points at what to convert.
+      const short = !cashCovered && owed > held ? owed - held : 0;
+      return { asset, owed, held, shortfall: short, covered: cashCovered, valueUsd: owed * priceOf(asset) };
+    }
+
     const rawShortfall = owed - held;
     // Ignore dust: a few wei of rounding is not an insolvency.
     const shortfall = rawShortfall > ABSOLUTE_DUST && rawShortfall > owed * TOLERANCE ? rawShortfall : 0;

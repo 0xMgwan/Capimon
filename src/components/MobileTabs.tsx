@@ -6,22 +6,57 @@ import { motion } from "motion/react";
 import { useAccount } from "wagmi";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 
+/*
+ * Filled glyphs rather than outline strokes.
+ *
+ * A 1.7px stroke at 21px reads as a thin scratch on a phone, and every icon
+ * ended up the same visual weight as every other — the bar looked generic
+ * because nothing in it had mass. Solid shapes hold their form at this size and
+ * invert cleanly against the active pill.
+ */
 const TABS = [
   {
     href: "/", label: "Home",
-    icon: <path d="M4 11.5 12 4l8 7.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1v-8.5Z" />,
+    // House with the doorway cut out, so the shape reads at a glance.
+    icon: (
+      <path
+        fillRule="evenodd"
+        d="M11.36 2.72a1 1 0 0 1 1.28 0l8.5 7.1A1 1 0 0 1 20.5 11.6h-.9v7.15a2.25 2.25 0 0 1-2.25 2.25h-2.9v-5.1a2.45 2.45 0 0 0-4.9 0V21h-2.9A2.25 2.25 0 0 1 4.4 18.75V11.6h-.9a1 1 0 0 1-.64-1.77l8.5-7.11Z"
+      />
+    ),
   },
   {
     href: "/markets", label: "Markets",
-    icon: <path d="M4 18l5-6 4 3.5L20 7" />,
+    // Three rising bars — a market, not a generic chart line.
+    icon: (
+      <>
+        <rect x="3.4" y="13.2" width="4.1" height="7.4" rx="1.5" opacity="0.55" />
+        <rect x="9.95" y="9.1" width="4.1" height="11.5" rx="1.5" opacity="0.78" />
+        <rect x="16.5" y="4.2" width="4.1" height="16.4" rx="1.5" />
+      </>
+    ),
   },
   {
     href: "/portfolio", label: "Portfolio",
-    icon: <path d="M4 8h16v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8Zm4 0V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />,
+    // A briefcase: what you hold, rather than an abstract folder.
+    icon: (
+      <>
+        <path d="M9.1 3.6A2.4 2.4 0 0 1 11.5 2.6h1a2.4 2.4 0 0 1 2.4 1v1.05h-1.9V4.6a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v.05H9.1V3.6Z" />
+        <path
+          fillRule="evenodd"
+          d="M3 8.5a2.4 2.4 0 0 1 2.4-2.4h13.2A2.4 2.4 0 0 1 21 8.5v2.34l-9 2.5-9-2.5V8.5Zm0 4.42V18.6A2.4 2.4 0 0 0 5.4 21h13.2a2.4 2.4 0 0 0 2.4-2.4v-5.68l-8.06 2.24a2.1 2.1 0 0 1-1.12 0L3 12.92Z"
+        />
+      </>
+    ),
   },
   {
     href: "/settings", label: "Account",
-    icon: <><circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" /></>,
+    icon: (
+      <>
+        <circle cx="12" cy="7.6" r="3.9" />
+        <path d="M12 13.1c-4.1 0-7.4 2.42-7.4 5.4 0 1.38 1.05 2.5 2.35 2.5h10.1c1.3 0 2.35-1.12 2.35-2.5 0-2.98-3.3-5.4-7.4-5.4Z" />
+      </>
+    ),
   },
 ];
 
@@ -77,11 +112,7 @@ export function MobileTabs() {
                 <svg
                   viewBox="0 0 24 24"
                   className="relative h-[21px] w-[21px]"
-                  fill="none"
-                  stroke={active ? "var(--bg)" : "currentColor"}
-                  strokeWidth={active ? 2.1 : 1.8}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+                  fill={active ? "var(--bg)" : "currentColor"}
                 >
                   {t.icon}
                 </svg>

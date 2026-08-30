@@ -35,7 +35,18 @@ export function ago(ts: number) {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-/** US equity regular session, 09:30–16:00 America/New_York, Mon–Fri. */
+/**
+ * Whether the underlying US session is live — which is not whether CAPX trades.
+ *
+ * B20 tokens trade on Aerodrome around the clock; it is the Chainlink
+ * total-return feed that only publishes while the underlying market is open, so
+ * outside those hours the marks are frozen rather than the venue shut. Labelling
+ * that "Market closed" told customers they could not trade at exactly the times
+ * they most often open the app, which was untrue.
+ *
+ * `open` therefore means "marks are updating", and the labels say what is
+ * actually frozen.
+ */
 export function marketSession(now = new Date()) {
   const f = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false,
@@ -43,9 +54,9 @@ export function marketSession(now = new Date()) {
   const parts = Object.fromEntries(f.formatToParts(now).map((p) => [p.type, p.value]));
   const day = parts.weekday as string;
   const mins = Number(parts.hour) * 60 + Number(parts.minute);
-  if (day === "Sat" || day === "Sun") return { open: false, label: "Weekend" as const };
-  if (mins >= 570 && mins < 960) return { open: true, label: "Market open" as const };
-  if (mins >= 240 && mins < 570) return { open: false, label: "Pre-market" as const };
-  if (mins >= 960 && mins < 1200) return { open: false, label: "After hours" as const };
-  return { open: false, label: "Market closed" as const };
+  if (day === "Sat" || day === "Sun") return { open: false, label: "Weekend · marks held" as const };
+  if (mins >= 570 && mins < 960) return { open: true, label: "Marks live" as const };
+  if (mins >= 240 && mins < 570) return { open: false, label: "Pre-market · marks held" as const };
+  if (mins >= 960 && mins < 1200) return { open: false, label: "After hours · marks held" as const };
+  return { open: false, label: "Overnight · marks held" as const };
 }

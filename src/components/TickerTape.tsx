@@ -26,8 +26,10 @@ export function TickerTape() {
           <span
             className={`live-dot inline-block h-1.5 w-1.5 rounded-full ${session.open ? "bg-[var(--color-up)]" : "bg-[var(--color-muted)]"}`}
           />
+          {/* Trading never stops here, so the short label says what is frozen
+              rather than implying the door is shut. */}
           <span className="eyebrow hidden sm:inline">{session.label}</span>
-          <span className="eyebrow sm:hidden">{session.open ? "Open" : "Closed"}</span>
+          <span className="eyebrow sm:hidden">{session.open ? "Live" : "Held"}</span>
         </div>
 
         <div className="marquee relative flex-1 overflow-hidden">

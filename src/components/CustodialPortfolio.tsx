@@ -42,7 +42,13 @@ export function CustodialPortfolio() {
         </div>
       </Reveal>
 
-      {pnl && pnl.invested > 0 && (
+      {/*
+        Only when it says something the rows do not. With a single holding the
+        strip repeats that row's return verbatim, and a figure shown twice reads
+        as two facts — worse than not showing it. Banked gains from a position
+        already closed have nowhere else to appear, so they bring it back.
+      */}
+      {pnl && pnl.invested > 0 && (positions.length > 1 || Math.abs(pnl.realised) > 0.005) && (
         <Reveal delay={0.04}>
           <div className="mt-6 flex flex-wrap items-baseline gap-x-6 gap-y-2 rounded-2xl border hairline p-4">
             <div>

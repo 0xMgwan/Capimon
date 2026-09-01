@@ -33,7 +33,7 @@ export type Solvency = {
   assets: AssetSolvency[];
   totals: { owedUsd: number; heldUsd: number; shortfallUsd: number };
   /** Where the USDC actually sits, since it backs balances from two places. */
-  usdc: { treasury: number; rampFloat: number };
+  usdc: { treasury: number; rampFloat: number; omnibus: number };
   /** Present when solvency could not be established, which is not the same as insolvent. */
   unavailable?: string;
 };
@@ -42,7 +42,7 @@ export async function checkSolvency(): Promise<Solvency> {
   const checkedAt = Math.floor(Date.now() / 1000);
   if (!treasuryConfigured) {
     return { ok: false, checkedAt, assets: [], totals: { owedUsd: 0, heldUsd: 0, shortfallUsd: 0 },
-      usdc: { treasury: 0, rampFloat: 0 }, unavailable: "No treasury is configured." };
+      usdc: { treasury: 0, rampFloat: 0, omnibus: 0 }, unavailable: "No treasury is configured." };
   }
 
   const [liabilities, holdings, markets, float, ntzsTzs] = await Promise.all([
@@ -56,20 +56,28 @@ export async function checkSolvency(): Promise<Solvency> {
     // Shilling accounts hold TZS until they buy, so client TZS balances are
     // backed by the shillings sitting in the nTZS omnibus, not by anything
     // onchain. Read it so a TZS liability is checked against a real holding.
+    //
+    // Both legs of that account, not just the shillings: a shilling buy swaps
+    // TZS to USDC inside the omnibus and only sweeps to the treasury what the
+    // trade is short of, so USDC accumulates there. Counting the shillings and
+    // ignoring the dollars beside them made real backing invisible — the
+    // reported shortfall grew with every buy while nothing was actually
+    // missing, and each top-up was undone by the next trade.
     ntzsConfigured
-      ? import("./omnibus").then((m) => m.omnibusBalances()).then((b) => b.tzs).catch(() => 0)
-      : 0,
+      ? import("./omnibus").then((m) => m.omnibusBalances()).catch(() => ({ tzs: 0, usdc: 0 }))
+      : { tzs: 0, usdc: 0 },
   ]);
+  const omnibus = ntzsTzs as { tzs: number; usdc: number };
   if (!holdings) {
     return { ok: false, checkedAt, assets: [], totals: { owedUsd: 0, heldUsd: 0, shortfallUsd: 0 },
-      usdc: { treasury: 0, rampFloat: 0 }, unavailable: "Treasury holdings could not be read." };
+      usdc: { treasury: 0, rampFloat: 0, omnibus: 0 }, unavailable: "Treasury holdings could not be read." };
   }
 
   // Coverage per asset is checked in the asset's own units (owed TZS vs held
   // TZS), so the trading gate never depends on a rate. This USD value is only
   // for the reported totals — a stale or missing rate cannot mask a shortfall.
   let tzsUsd = 0;
-  if (ntzsConfigured && (liabilities.some((l) => l.asset === "TZS") || ntzsTzs > 0)) {
+  if (ntzsConfigured && (liabilities.some((l) => l.asset === "TZS") || omnibus.tzs > 0)) {
     try {
       const r = await getSwapRate("NTZS", "USDC", 100_000);
       const out = Number(r.expectedOutput ?? 0);
@@ -81,8 +89,8 @@ export async function checkSolvency(): Promise<Solvency> {
     asset === "USDC" ? 1 : asset === "TZS" ? tzsUsd : markets.find((m) => m.symbol === asset)?.price ?? 0;
 
   const heldOf = (asset: string) =>
-    asset === "USDC" ? holdings.usdc + float
-    : asset === "TZS" ? ntzsTzs
+    asset === "USDC" ? holdings.usdc + float + omnibus.usdc
+    : asset === "TZS" ? omnibus.tzs
     : holdings.holdings.find((h) => h.asset === asset)?.qty ?? 0;
 
   // Every asset either side knows about, so a holding with no liability shows
@@ -134,7 +142,7 @@ export async function checkSolvency(): Promise<Solvency> {
     ok: assets.every((a) => a.covered),
     checkedAt, assets,
     totals: { owedUsd, heldUsd, shortfallUsd },
-    usdc: { treasury: holdings.usdc, rampFloat: float },
+    usdc: { treasury: holdings.usdc, rampFloat: float, omnibus: omnibus.usdc },
   };
 }
 

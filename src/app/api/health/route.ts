@@ -151,6 +151,26 @@ export async function GET() {
     }
   }
 
+  /*
+   * The last few orders, without who placed them.
+   *
+   * Aggregate balances say a shortfall exists but not which order caused it,
+   * and every diagnosis so far has needed the admin token and a round trip.
+   * Side, size and outcome are enough to see what a trade thought it was doing;
+   * no customer appears here.
+   */
+  if (dbConfigured) {
+    try {
+      const rows = await db()<{ side: string; symbol: string; usdc_amount: string | null;
+                                qty: string | null; status: string; error: string | null;
+                                created_at: string }[]>`
+        select side, symbol, usdc_amount::text, qty::text, status,
+               left(coalesce(error, ''), 120) as error, created_at
+          from capx.orders order by created_at desc limit 8`;
+      checks.recentOrders = rows;
+    } catch { /* not fatal */ }
+  }
+
   const ready = dbConfigured && ntzsConfigured && treasuryConfigured;
   return NextResponse.json(
     {

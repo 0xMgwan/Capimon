@@ -116,6 +116,17 @@ export async function GET() {
         heldUsd: Number(s.totals.heldUsd.toFixed(2)),
         shortfallUsd: Number(s.totals.shortfallUsd.toFixed(2)),
         unavailable: s.unavailable ?? null,
+        // Per asset, so a shortfall says which leg is short instead of only
+        // that one exists. These are totals across all accounts — no customer
+        // appears in them — and without it every diagnosis needed the admin
+        // token and a round trip through someone who has it.
+        assets: s.assets.map((a) => ({
+          asset: a.asset,
+          owed: Number(a.owed.toFixed(6)),
+          held: Number(a.held.toFixed(6)),
+          covered: a.covered,
+        })),
+        usdc: s.usdc,
       };
     } catch (e) {
       checks.solvency = { solvent: null, error: e instanceof Error ? e.message : "check failed" };

@@ -48,14 +48,13 @@ export async function GET() {
       t.needsGas = Number(formatEther(wei)) < 0.0005;
 
       /*
-       * Working capital, reported before it runs out.
+       * Reported, not judged.
        *
-       * Spreads, rounding and the odd failed leg are ordinary costs of moving
-       * money, and they come out of the treasury rather than out of any one
-       * customer. Run it at zero and the first few cents of friction show up as
-       * a shortfall that halts trading for everyone — which is a funding
-       * problem wearing an incident's clothes. Better to say so while it is
-       * still cheap to fix.
+       * The treasury is a pass-through: a buy sweeps exactly what it needs from
+       * the omnibus, spends it, and holds nothing between trades. A near-zero
+       * balance here is the design working, so flagging it as "needs capital"
+       * would nag about the normal state forever. The number is still worth
+       * showing — it is what a trade is funded from.
        */
       const { b20Abi } = await import("@/lib/abis");
       const { USDC_BASE } = await import("@/lib/assets");
@@ -65,7 +64,6 @@ export async function GET() {
       const { formatUnits } = await import("viem");
       const usdc = Number(formatUnits(raw as bigint, 6));
       t.usdc = usdc;
-      t.needsCapital = usdc < 5;
     } catch {
       /* the address still reports */
     }

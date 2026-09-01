@@ -93,6 +93,27 @@ export async function POST(req: Request) {
         const converted = await swapTzsToUsdc(amount);
         tzsSpent = converted.tzsSpent;
         swapped = converted;
+
+        /*
+         * Never buy more than the customer paid for.
+         *
+         * The trade is sized from the swap's output, so anything that
+         * overstates that output buys shares nobody funded — and the ledger
+         * debits the shillings either way, so the difference comes out of
+         * everyone else's backing. A second, independent ceiling from the live
+         * rate means one bad reading cannot become a hole in the book.
+         */
+        const { getSwapRate } = await import("@/lib/ntzs");
+        const ceilingQuote = await getSwapRate("NTZS", "USDC", Math.max(1, Math.round(amount)))
+          .then((r) => Number(r.expectedOutput ?? 0))
+          .catch(() => 0);
+        if (ceilingQuote > 0 && converted.usdc > ceilingQuote * 1.05) {
+          throw new Error(
+            `Refusing to spend ${converted.usdc.toFixed(6)} USDC for ${amount.toLocaleString()} TZS, ` +
+            `which is worth about ${ceilingQuote.toFixed(6)}. Nothing was traded.`,
+          );
+        }
+
         exec = await executeBuy(asset.symbol, converted.usdc);
       } else {
         exec = side === "buy" ? await executeBuy(asset.symbol, amount)

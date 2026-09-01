@@ -204,7 +204,7 @@ export async function swapTzsToUsdc(amountTzs: number) {
     throw new NtzsError("wallets_required",
       "Spending a shilling balance needs the 'wallets' capability to swap USDC.", 503);
   }
-  const { swap } = await import("./ntzs");
+  const { swap, getSwapRate } = await import("./ntzs");
   const userId = await omnibusUserId();
 
   const before = await omnibusBalances();
@@ -214,13 +214,65 @@ export async function swapTzsToUsdc(amountTzs: number) {
       `${amountTzs.toLocaleString()} to convert.`, 409);
   }
 
-  await swap({ userId, from: "NTZS", to: "USDC", amount: amountTzs });
+  /*
+   * Price the conversion before making it, so there is an independent ceiling
+   * on what this swap can be worth.
+   */
+  const quote = await getSwapRate("NTZS", "USDC", Math.max(1, Math.round(amountTzs)));
+  const quoted = Number(quote.expectedOutput ?? 0);
 
-  const after = await omnibusBalances();
-  const usdc = Math.max(0, after.usdc - before.usdc);
+  const result = await swap({ userId, from: "NTZS", to: "USDC", amount: amountTzs });
+
+  /*
+   * Take what the swap says it produced, never a balance delta.
+   *
+   * The omnibus is one shared account: a sweep, another customer's order or a
+   * withdrawal's funding leg all move that balance too, and differencing it
+   * before and after attributes every one of them to this swap. It read 0.514
+   * USDC for a 200 TZS conversion worth 0.076, and the buy that followed spent
+   * — and credited the customer — seven times what they had paid.
+   *
+   * This is the same mistake as reading a trade's fill from balanceOf instead
+   * of its own receipt, in a place where the balance is not even ours alone.
+   */
+  const reported = Number(
+    (result as Record<string, unknown>).toAmount
+    ?? (result as Record<string, unknown>).outputAmount
+    ?? (result as Record<string, unknown>).amountOut
+    ?? (result as Record<string, unknown>).usdcAmount
+    ?? 0,
+  );
+
+  const usdc = reported > 0 ? reported : quoted;
   if (!(usdc > 0)) {
-    throw new NtzsError("swap_incomplete", "Swapped shillings but no USDC is visible yet.", 409);
+    throw new NtzsError("swap_incomplete",
+      "The swap reported no USDC output, and no rate was available to price it.", 409);
   }
+
+  /*
+   * Refuse anything above what the shillings were just quoted at. A field we
+   * misread, or an unexpected unit, must not become a purchase the customer did
+   * not fund — buying too little is a bad trade, buying too much is a hole in
+   * the book that everyone else pays for.
+   */
+  if (quoted > 0 && usdc > quoted * 1.05) {
+    throw new NtzsError(
+      "swap_output_implausible",
+      `The swap reported ${usdc.toFixed(6)} USDC for ${amountTzs.toLocaleString()} TZS, but that is ` +
+      `only worth about ${quoted.toFixed(6)}. Not trading on a figure that does not add up.`,
+      409,
+    );
+  }
+
+  // Confirm the money is really there before it is spent, without using the
+  // reading as the amount.
+  const after = await omnibusBalances();
+  if (after.usdc + 1e-9 < usdc) {
+    throw new NtzsError("swap_incomplete",
+      `Swapped ${amountTzs.toLocaleString()} TZS but the omnibus shows ${after.usdc.toFixed(6)} USDC ` +
+      `against ${usdc.toFixed(6)} expected.`, 409);
+  }
+
   return { usdc, tzsSpent: amountTzs };
 }
 

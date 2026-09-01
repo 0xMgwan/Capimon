@@ -46,6 +46,26 @@ export async function GET() {
       const t = checks.treasury as Record<string, unknown>;
       t.gasEth = Number(formatEther(wei));
       t.needsGas = Number(formatEther(wei)) < 0.0005;
+
+      /*
+       * Working capital, reported before it runs out.
+       *
+       * Spreads, rounding and the odd failed leg are ordinary costs of moving
+       * money, and they come out of the treasury rather than out of any one
+       * customer. Run it at zero and the first few cents of friction show up as
+       * a shortfall that halts trading for everyone — which is a funding
+       * problem wearing an incident's clothes. Better to say so while it is
+       * still cheap to fix.
+       */
+      const { b20Abi } = await import("@/lib/abis");
+      const { USDC_BASE } = await import("@/lib/assets");
+      const raw = await publicClient.readContract({
+        address: USDC_BASE, abi: b20Abi, functionName: "balanceOf", args: [treasuryAddress()!],
+      });
+      const { formatUnits } = await import("viem");
+      const usdc = Number(formatUnits(raw as bigint, 6));
+      t.usdc = usdc;
+      t.needsCapital = usdc < 5;
     } catch {
       /* the address still reports */
     }

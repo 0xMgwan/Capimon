@@ -103,6 +103,10 @@ export function WalletSection() {
   const minTzs = account.depositMinTzs ?? 500;
   const presets = presetsFor(minTzs);
   const amount = amountTzs || presets[1];
+  // Shillings plus whatever the USDC leg is worth — the same total the payout
+  // is priced against, so the button and the panel cannot disagree.
+  const withdrawable = account.tzs + (account.cashTzs ?? 0);
+  const belowMinWithdraw = withdrawable < MIN_WITHDRAW;
 
   const deposit = async () => {
     setBusy(true); setError(null); setNotice(null);
@@ -265,12 +269,29 @@ export function WalletSection() {
               )}
               <button
                 onClick={() => { setPanel((p) => (p === "withdraw" ? "none" : "withdraw")); setQuote(null); }}
-                disabled={account.tzs + (account.cashTzs ?? 0) < MIN_WITHDRAW}
+                disabled={belowMinWithdraw}
+                title={belowMinWithdraw
+                  ? `Withdrawals start at ${MIN_WITHDRAW.toLocaleString()} TZS`
+                  : undefined}
                 className="whitespace-nowrap rounded-full border hairline py-3 text-[13px] font-medium transition-colors hover:surface disabled:opacity-40"
               >
                 {panel === "withdraw" ? "Cancel" : "Withdraw"}
               </button>
             </div>
+
+            {/*
+              A greyed-out button that will not say why is a dead end: the
+              customer cannot tell whether it is broken, not for them, or simply
+              waiting on something they could fix. The rail's floor is 5,000
+              TZS, so say that, and say how far off they are.
+            */}
+            {belowMinWithdraw && (
+              <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
+                Withdrawals start at {MIN_WITHDRAW.toLocaleString()} TZS — the mobile money
+                network&apos;s minimum, not ours. You have {TZS(withdrawable)}
+                {withdrawable > 0 && <>, so {TZS(MIN_WITHDRAW - withdrawable)} more to go</>}.
+              </p>
+            )}
           </div>
 
           <AnimatePresence initial={false}>

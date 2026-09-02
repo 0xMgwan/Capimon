@@ -279,17 +279,10 @@ export function WalletSection() {
               </button>
             </div>
 
-            {/*
-              A greyed-out button that will not say why is a dead end: the
-              customer cannot tell whether it is broken, not for them, or simply
-              waiting on something they could fix. The rail's floor is 5,000
-              TZS, so say that, and say how far off they are.
-            */}
+            {/* A disabled button needs a reason, and the reason is one line. */}
             {belowMinWithdraw && (
-              <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
-                Withdrawals start at {MIN_WITHDRAW.toLocaleString()} TZS — the mobile money
-                network&apos;s minimum, not ours. You have {TZS(withdrawable)}
-                {withdrawable > 0 && <>, so {TZS(MIN_WITHDRAW - withdrawable)} more to go</>}.
+              <p className="mt-2 text-[11px] text-[var(--muted)]">
+                Withdrawals minimum {MIN_WITHDRAW.toLocaleString()} TZS.
               </p>
             )}
           </div>

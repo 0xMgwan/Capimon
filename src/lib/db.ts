@@ -151,6 +151,63 @@ export async function migrate() {
         )`;
 
       /*
+       * Tokenised securities: a custody attestation, and the tokens issued
+       * against it.
+       *
+       * Kept apart from `deposits` and `orders` on purpose. Those describe
+       * CAPX holding money for a customer; these describe a claim on a share
+       * somebody else is holding in a vault, and conflating the two would make
+       * the backing question impossible to answer cleanly.
+       */
+      await sql`
+        create table if not exists capx.custody_attestations (
+          id           uuid primary key default gen_random_uuid(),
+          security     text not null,
+          custodian    text not null,
+          quantity     numeric(38,8) not null,
+          locked       numeric(38,8) not null,
+          doc_ref      text,
+          /* Evidence goes stale: a statement from six months ago does not say
+             the shares are there today. */
+          issued_at    timestamptz not null default now(),
+          expires_at   timestamptz not null,
+          status       text not null default 'pending',
+          approved_by  text,
+          approved_at  timestamptz,
+          /* Signature and signer, empty until a custodian signs its own
+             attestations. The column exists now so that day needs no migration. */
+          signature    text,
+          signer       text,
+          metadata     jsonb not null default '{}'::jsonb,
+          created_at   timestamptz not null default now()
+        )`;
+
+      await sql`
+        create table if not exists capx.securities (
+          symbol        text primary key,
+          name          text not null,
+          token_address text,
+          decimals      int not null default 2,
+          chain_id      int not null default 84532,
+          status        text not null default 'draft',
+          metadata      jsonb not null default '{}'::jsonb,
+          created_at    timestamptz not null default now()
+        )`;
+
+      // Every mint and burn, so issuance is auditable end to end (Rule 10).
+      await sql`
+        create table if not exists capx.issuance_events (
+          id             uuid primary key default gen_random_uuid(),
+          security       text not null,
+          kind           text not null,        -- mint | burn
+          quantity       numeric(38,8) not null,
+          attestation_id uuid references capx.custody_attestations(id),
+          tx_hash        text,
+          actor          text,
+          created_at     timestamptz not null default now()
+        )`;
+
+      /*
        * Columns added after a table first shipped.
        *
        * `create table if not exists` is a no-op on an existing table, so a new
@@ -192,6 +249,8 @@ export async function migrate() {
       await sql`create unique index if not exists ledger_ref_idx on capx.ledger_entries(ref) where ref is not null`;
       await sql`create index if not exists notif_user_idx on capx.notifications(user_id, id desc)`;
       await sql`create unique index if not exists notif_ref_idx on capx.notifications(ref) where ref is not null`;
+      await sql`create index if not exists custody_sec_idx on capx.custody_attestations(security, created_at desc)`;
+      await sql`create index if not exists issuance_sec_idx on capx.issuance_events(security, created_at desc)`;
       await sql`create index if not exists orders_user_idx on capx.orders(user_id, created_at desc)`;
       await sql`create index if not exists deposits_user_idx on capx.deposits(user_id, created_at desc)`;
       await sql`create index if not exists deposits_status_idx on capx.deposits(status)`;

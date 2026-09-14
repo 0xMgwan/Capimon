@@ -1,0 +1,160 @@
+import { NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
+import { db, migrate, dbConfigured } from "@/lib/db";
+import { backing, canIssue, recordIssuance } from "@/lib/custody";
+
+export const dynamic = "force-dynamic";
+
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
+
+function authorised(req: Request) {
+  if (!ADMIN_TOKEN) return false;
+  const url = new URL(req.url);
+  const given = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "")
+    || url.searchParams.get("token") || "";
+  const a = Buffer.from(given);
+  const b = Buffer.from(ADMIN_TOKEN);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/** Attestations and issuance history for the custody desk. */
+export async function GET(req: Request) {
+  if (!dbConfigured) return NextResponse.json({ ok: false, code: "not_configured" }, { status: 503 });
+  if (!authorised(req)) return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
+
+  try {
+    await migrate();
+    const sql = db();
+    const [securities, attestations, issuance] = await Promise.all([
+      sql`select symbol, name, token_address, decimals, chain_id, status from capx.securities order by symbol`,
+      sql`select id::text, security, custodian, quantity::float8 as quantity, locked::float8 as locked,
+                 doc_ref, issued_at, expires_at, status, approved_by, approved_at,
+                 (expires_at <= now()) as expired
+            from capx.custody_attestations order by created_at desc limit 50`,
+      sql`select id::text, security, kind, quantity::float8 as quantity, tx_hash, actor, created_at
+            from capx.issuance_events order by created_at desc limit 50`,
+    ]);
+
+    const withBacking = await Promise.all(
+      (securities as { symbol: string }[]).map(async (s) => ({ ...s, backing: await backing(s.symbol) })),
+    );
+
+    return NextResponse.json(
+      { ok: true, securities: withBacking, attestations, issuance },
+      { headers: { "cache-control": "no-store" } },
+    );
+  } catch (e) {
+    return NextResponse.json(
+      { ok: false, error: e instanceof Error ? e.message : "custody query failed" },
+      { status: 500 },
+    );
+  }
+}
+
+/**
+ * Custody desk actions.
+ *
+ * Filing an attestation and approving it are separate steps even with one
+ * operator: the approval is the moment CAPX asserts the shares are really
+ * there, and it should be its own decision rather than a side effect of
+ * typing numbers into a form.
+ */
+export async function POST(req: Request) {
+  if (!dbConfigured) return NextResponse.json({ ok: false, code: "not_configured" }, { status: 503 });
+  if (!authorised(req)) return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const action = String(body.action ?? "");
+    await migrate();
+    const sql = db();
+
+    if (action === "register-security") {
+      const symbol = String(body.symbol ?? "").trim().toUpperCase();
+      const name = String(body.name ?? "").trim();
+      if (!symbol || !name) return NextResponse.json({ ok: false, error: "symbol and name are required" }, { status: 400 });
+      await sql`
+        insert into capx.securities (symbol, name, token_address, decimals, chain_id, status)
+        values (${symbol}, ${name}, ${body.tokenAddress ?? null}, ${Number(body.decimals ?? 2)},
+                ${Number(body.chainId ?? 84532)}, ${String(body.status ?? "draft")})
+        on conflict (symbol) do update
+          set name = excluded.name,
+              token_address = coalesce(excluded.token_address, capx.securities.token_address),
+              decimals = excluded.decimals,
+              chain_id = excluded.chain_id,
+              status = excluded.status`;
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === "attest") {
+      const security = String(body.security ?? "").trim().toUpperCase();
+      const quantity = Number(body.quantity);
+      const locked = Number(body.locked ?? body.quantity);
+      const expiresAt = String(body.expiresAt ?? "");
+      if (!security || !(quantity > 0)) {
+        return NextResponse.json({ ok: false, error: "security and a positive quantity are required" }, { status: 400 });
+      }
+      // The same ceiling the contract enforces: you cannot earmark shares you
+      // have not said you hold.
+      if (locked > quantity) {
+        return NextResponse.json({ ok: false, error: "Locked cannot exceed the quantity held." }, { status: 400 });
+      }
+      if (!expiresAt || new Date(expiresAt).getTime() <= Date.now()) {
+        return NextResponse.json({ ok: false, error: "An attestation needs an expiry in the future." }, { status: 400 });
+      }
+      const rows = await sql<{ id: string }[]>`
+        insert into capx.custody_attestations (security, custodian, quantity, locked, doc_ref, expires_at, status)
+        values (${security}, ${String(body.custodian ?? "")}, ${quantity}, ${locked},
+                ${body.docRef ?? null}, ${expiresAt}, 'pending')
+        returning id::text`;
+      return NextResponse.json({ ok: true, id: rows[0].id });
+    }
+
+    if (action === "approve-attestation") {
+      const id = String(body.id ?? "");
+      if (!id) return NextResponse.json({ ok: false, error: "id is required" }, { status: 400 });
+      await sql`update capx.custody_attestations
+                   set status = 'approved', approved_by = ${String(body.approvedBy ?? "admin")}, approved_at = now()
+                 where id = ${id}::uuid and status = 'pending'`;
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === "reject-attestation") {
+      const id = String(body.id ?? "");
+      await sql`update capx.custody_attestations set status = 'rejected' where id = ${id}::uuid`;
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === "mint" || action === "burn") {
+      const security = String(body.security ?? "").trim().toUpperCase();
+      const quantity = Number(body.quantity);
+      try {
+        const id = await recordIssuance({
+          security, kind: action, quantity,
+          attestationId: body.attestationId ?? null,
+          txHash: body.txHash ?? null,
+          actor: String(body.actor ?? "admin"),
+        });
+        return NextResponse.json({ ok: true, id, backing: await backing(security) });
+      } catch (e) {
+        // A refusal here is the invariant doing its job, not a server fault.
+        return NextResponse.json(
+          { ok: false, error: e instanceof Error ? e.message : "issuance refused" },
+          { status: 409 },
+        );
+      }
+    }
+
+    if (action === "check-issue") {
+      const security = String(body.security ?? "").trim().toUpperCase();
+      return NextResponse.json({ ok: true, ...(await canIssue(security, Number(body.quantity))) });
+    }
+
+    return NextResponse.json({ ok: false, error: `Unknown action "${action}".` }, { status: 400 });
+  } catch (e) {
+    return NextResponse.json(
+      { ok: false, error: e instanceof Error ? e.message : "custody action failed" },
+      { status: 500 },
+    );
+  }
+}

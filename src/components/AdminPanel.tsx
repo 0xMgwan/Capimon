@@ -490,8 +490,23 @@ export function AdminPanel() {
             ))}
             {tab === "holdings" && (data.holdingsByAsset ?? []).map((h) => {
               const owed = Math.abs(Number(h.qty));
-              const held = data.onchain?.holdings.find((x) => x.asset === h.asset)?.qty ?? 0;
-              const covered = held + 1e-8 >= owed;
+              /*
+               * Coverage comes from the solvency check, not from the treasury's
+               * asset list.
+               *
+               * That list is the Chainlink-fed US equities. A local security
+               * like CRDB has its own token and is not in it, so looking there
+               * found nothing, reported zero held against real client holdings,
+               * and flagged a fully backed position as short — the same fault
+               * that once paused trading for everyone, showing up in a second
+               * place because two bits of code were both working out "held".
+               * There is now one answer, and this reads it.
+               */
+              const fromSolvency = data.solvency?.assets.find((a) => a.asset === h.asset);
+              const held = fromSolvency?.held
+                ?? data.onchain?.holdings.find((x) => x.asset === h.asset)?.qty
+                ?? 0;
+              const covered = fromSolvency?.covered ?? held + 1e-8 >= owed;
               return (
                 <tr key={h.asset} className="border-b hairline last:border-0">
                   <td className="px-3 py-3 font-medium">{h.asset}</td>

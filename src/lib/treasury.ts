@@ -399,6 +399,28 @@ export async function treasuryHoldings() {
     return { asset: a.symbol, qty: Number(formatUnits(raw, m.decimals)) };
   }).filter((h) => h.qty > 0);
 
+  /*
+   * Local securities, which are not in the Chainlink asset list.
+   *
+   * `ASSETS` is the US equities with price feeds. CRDB has its own token and
+   * its own price source, so anything reading this to answer "what does the
+   * treasury hold" found nothing for it and concluded zero — which reads as a
+   * fully backed position being short. That has now surfaced twice, in solvency
+   * and again in the admin holdings table, because each caller was working the
+   * answer out for itself. It belongs here, once, where they all read it.
+   */
+  try {
+    const { CRDBT, CRDBT_DECIMALS, CRDBT_SECURITY } = await import("./assets");
+    const raw = await publicClient.readContract({
+      address: CRDBT, abi: b20Abi, functionName: "balanceOf", args: [address],
+    });
+    const qty = Number(formatUnits(raw as bigint, CRDBT_DECIMALS));
+    if (qty > 0) holdings.push({ asset: CRDBT_SECURITY, qty });
+  } catch {
+    // A token that cannot be read is omitted rather than reported as zero:
+    // zero is a claim about the balance, and an unreadable one is not.
+  }
+
   return { address, usdc: Number(formatUnits(usdc as bigint, 6)), holdings };
 }
 

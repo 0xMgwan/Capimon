@@ -38,21 +38,6 @@ export type Solvency = {
   unavailable?: string;
 };
 
-/** CRDBt the treasury holds, in whole shares. */
-async function crdbtHeld(): Promise<number> {
-  const { treasuryAddress } = await import("./treasury");
-  const addr = treasuryAddress();
-  if (!addr) return 0;
-  const { publicClient } = await import("./chain");
-  const { b20Abi } = await import("./abis");
-  const { CRDBT, CRDBT_DECIMALS } = await import("./assets");
-  const { formatUnits } = await import("viem");
-  const raw = await publicClient.readContract({
-    address: CRDBT, abi: b20Abi, functionName: "balanceOf", args: [addr],
-  });
-  return Number(formatUnits(raw as bigint, CRDBT_DECIMALS));
-}
-
 export async function checkSolvency(): Promise<Solvency> {
   const checkedAt = Math.floor(Date.now() / 1000);
   if (!treasuryConfigured) {
@@ -60,7 +45,7 @@ export async function checkSolvency(): Promise<Solvency> {
       usdc: { treasury: 0, rampFloat: 0, omnibus: 0 }, unavailable: "No treasury is configured." };
   }
 
-  const [liabilities, holdings, markets, float, ntzsTzs, crdbShares] = await Promise.all([
+  const [liabilities, holdings, markets, float, ntzsTzs] = await Promise.all([
     totalLiabilities(),
     treasuryHoldings(),
     getMarkets({ depth: 2 }),
@@ -81,15 +66,6 @@ export async function checkSolvency(): Promise<Solvency> {
     ntzsConfigured
       ? import("./omnibus").then((m) => m.omnibusBalances()).catch(() => ({ tzs: 0, usdc: 0 }))
       : { tzs: 0, usdc: 0 },
-    /*
-     * CRDBt is not in the treasury's asset list.
-     *
-     * That list is the Chainlink-fed US equities; CRDB is a local security with
-     * its own token and its own price source, so it would be counted as owed
-     * and never as held — every share sold to a customer would have read as a
-     * shortfall and paused trading for everyone.
-     */
-    crdbtHeld().catch(() => 0),
   ]);
   const omnibus = ntzsTzs as { tzs: number; usdc: number };
   if (!holdings) {
@@ -102,7 +78,7 @@ export async function checkSolvency(): Promise<Solvency> {
   // for the reported totals — a stale or missing rate cannot mask a shortfall.
   // Only for the dollar totals; a missing CRDB mark cannot mask a share gap.
   let crdbPriceTzs = 0;
-  if (crdbShares > 0 || liabilities.some((l) => l.asset === "CRDB")) {
+  if (holdings.holdings.some((h) => h.asset === "CRDB") || liabilities.some((l) => l.asset === "CRDB")) {
     try {
       const { readOraclePrice } = await import("./oracle");
       crdbPriceTzs = (await readOraclePrice("CRDB"))?.price ?? 0;
@@ -130,14 +106,12 @@ export async function checkSolvency(): Promise<Solvency> {
   const heldOf = (asset: string) =>
     asset === "USDC" ? holdings.usdc + float + omnibus.usdc
     : asset === "TZS" ? omnibus.tzs
-    : asset === "CRDB" ? crdbShares
     : holdings.holdings.find((h) => h.asset === asset)?.qty ?? 0;
 
   // Every asset either side knows about, so a holding with no liability shows
   // up too — that is a surplus, and worth seeing.
   const names = [...new Set([...liabilities.map((l) => l.asset), "USDC",
-    ...holdings.holdings.map((h) => h.asset),
-    ...(crdbShares > 0 ? ["CRDB"] : [])])];
+    ...holdings.holdings.map((h) => h.asset)])];
 
   /*
    * Shillings and dollars are one pool, shares are not.

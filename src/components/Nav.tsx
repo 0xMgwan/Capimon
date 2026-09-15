@@ -79,7 +79,15 @@ export function Nav() {
             })}
           </div>
 
-          <div className="flex items-center gap-2">
+          {/*
+            * Positioned, because the notification panel hangs off this cluster
+            * rather than off the bell. Anchored to the bell it was anchored to
+            * a 36px box with the avatar and menu still to its right, so a
+            * 300px panel opened leftwards into the middle of the screen and
+            * ran off the edge. The right edge of this row is the page margin,
+            * which is where a dropdown should line up.
+            */}
+          <div className="relative flex items-center gap-2">
             <ThemeToggle />
             {/* Renders nothing when signed out, so it never crowds a visitor. */}
             <NotificationBell />

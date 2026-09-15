@@ -15,35 +15,73 @@ type Item = {
  * identical grey dots makes the reader parse the sentence to find out which.
  * Colour carries direction, the glyph carries the kind.
  */
-const KIND_STYLE: Record<string, { path: string; className: string }> = {
+/**
+ * A drawn mark per kind, not a generic arrow.
+ *
+ * Money arriving, money leaving and a trade are three different events, and a
+ * column of near-identical strokes makes the reader parse the sentence to find
+ * out which one they are looking at. Each mark says what happened in its own
+ * shape — into a tray, out of a tray, two prices crossing — and colour carries
+ * the direction on top of that rather than instead of it.
+ */
+type Mark = { className: string; draw: React.ReactNode };
+
+const KIND_MARK: Record<string, Mark> = {
   deposit: {
-    path: "M8 3v8m0 0 3-3m-3 3L5 8M3 13h10",
     className: "bg-[var(--color-up)]/12 text-[var(--color-up)]",
+    draw: (
+      <>
+        <path d="M8 2.5v6.2" />
+        <path d="M5.3 6.3 8 9l2.7-2.7" />
+        <path d="M2.8 10.2v1.9a1.4 1.4 0 0 0 1.4 1.4h7.6a1.4 1.4 0 0 0 1.4-1.4v-1.9" />
+      </>
+    ),
   },
   withdrawal: {
-    path: "M8 13V5m0 0L5 8m3-3 3 3M3 3h10",
     className: "bg-[var(--color-down)]/12 text-[var(--color-down)]",
+    draw: (
+      <>
+        <path d="M8 9.2V3" />
+        <path d="M5.3 5.7 8 3l2.7 2.7" />
+        <path d="M2.8 10.2v1.9a1.4 1.4 0 0 0 1.4 1.4h7.6a1.4 1.4 0 0 0 1.4-1.4v-1.9" />
+      </>
+    ),
   },
   trade: {
-    path: "M2 11l4-4 3 3 5-5M14 5h-3m3 0v3",
-    className: "bg-[var(--color-accent)]/12 text-[var(--color-accent)]",
+    // Two prices crossing — the shape of an exchange rather than a direction.
+    className: "bg-[var(--color-accent)]/14 text-[var(--color-accent)]",
+    draw: (
+      <>
+        <path d="M2.6 11.6 6 8.2l2.3 2.3 5.1-6.1" />
+        <path d="M10.4 4.4h3v3" />
+      </>
+    ),
   },
   alert: {
-    path: "M8 4v5m0 2.5v.5M8 1.5 15 14H1z",
-    className: "bg-[var(--color-down)]/12 text-[var(--color-down)]",
+    className: "bg-[#b45309]/14 text-[#b45309]",
+    draw: (
+      <>
+        <path d="M8 2.6 14.2 13H1.8z" />
+        <path d="M8 6.6v3.1" />
+        <path d="M8 11.7h.01" />
+      </>
+    ),
   },
 };
 
 function KindIcon({ kind }: { kind: string }) {
-  const s = KIND_STYLE[kind] ?? {
-    path: "M8 4.5v7M4.5 8h7",
+  const m = KIND_MARK[kind] ?? {
     className: "surface text-[var(--muted)]",
+    draw: <><path d="M8 4.6v6.8" /><path d="M4.6 8h6.8" /></>,
   };
   return (
-    <span className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full ${s.className}`}>
-      <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor"
-        strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d={s.path} />
+    <span
+      className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full ${m.className}`}
+      aria-hidden
+    >
+      <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor"
+        strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        {m.draw}
       </svg>
     </span>
   );
@@ -107,7 +145,7 @@ export function NotificationBell() {
   };
 
   return (
-    <div className="relative" ref={ref}>
+    <div ref={ref}>
       <button
         onClick={() => void toggle()}
         aria-label={unread > 0 ? `${unread} new notifications` : "Notifications"}
@@ -125,7 +163,7 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-[min(19rem,calc(100vw-5rem))] origin-top-right overflow-hidden rounded-2xl border hairline bg-[var(--bg)] shadow-2xl shadow-black/10">
+        <div className="absolute right-0 top-full z-50 mt-2.5 w-[min(21rem,calc(100vw-1.75rem))] origin-top-right overflow-hidden rounded-2xl border hairline bg-[var(--bg)] shadow-2xl shadow-black/20">
           <div className="border-b hairline px-4 py-3">
             <span className="eyebrow">Activity</span>
           </div>

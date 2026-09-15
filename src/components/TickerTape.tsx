@@ -22,7 +22,7 @@ export function TickerTape() {
   return (
     <div className="border-b hairline bg-[var(--bg)] md:bg-[var(--bg)]/95 md:backdrop-blur-xl">
       <div className="flex items-center">
-        <div className="flex shrink-0 items-center gap-2 border-r hairline px-3 py-2 sm:px-4">
+        <div className="flex shrink-0 items-center gap-2 border-r hairline px-3 py-1.5 sm:px-4 sm:py-2">
           <span
             className={`live-dot inline-block h-1.5 w-1.5 rounded-full ${session.open ? "bg-[var(--color-up)]" : "bg-[var(--color-muted)]"}`}
           />
@@ -34,13 +34,13 @@ export function TickerTape() {
 
         <div className="marquee relative flex-1 overflow-hidden">
           {loop.length === 0 ? (
-            <div className="flex gap-8 px-4 py-2">
+            <div className="flex gap-8 px-4 py-1.5 sm:py-2">
               {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="h-3 w-24 animate-pulse rounded surface" />
               ))}
             </div>
           ) : (
-            <div className="marquee-track flex w-max gap-7 py-2" style={{ "--marquee-duration": "60s" } as React.CSSProperties}>
+            <div className="marquee-track flex w-max gap-7 py-1.5 sm:py-2" style={{ "--marquee-duration": "60s" } as React.CSSProperties}>
               {loop.map((m, i) => {
                 const dir = ticks[m.symbol];
                 const up = m.change >= 0;

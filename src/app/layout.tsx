@@ -5,6 +5,7 @@ import { Providers } from "@/components/Providers";
 import { Nav } from "@/components/Nav";
 import { Footer } from "@/components/Footer";
 import { TickerTape } from "@/components/TickerTape";
+import { DseTape } from "@/components/DseTape";
 import { MobileTabs } from "@/components/MobileTabs";
 
 const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit", weight: ["200", "300", "400", "500", "600"] });
@@ -79,6 +80,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${outfit.variable} ${figtree.variable} ${newsreader.variable} ${jbmono.variable}`}>
         <Providers>
           <div className="sticky top-0 z-50">
+            <DseTape />
             <TickerTape />
             <Nav />
           </div>

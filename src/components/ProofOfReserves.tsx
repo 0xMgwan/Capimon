@@ -96,7 +96,13 @@ export function ProofOfReserves() {
                   </div>
                 </div>
 
-                <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-3 lg:grid-cols-6">
+                {/*
+                  * An odd number of cells leaves a hole, and the grid's own
+                  * background shows through it as a grey block that looks like
+                  * a figure failed to load. The last cell spans the row when
+                  * there is nothing to pair it with.
+                  */}
+                <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-3 lg:grid-cols-5 [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1">
                   <Cell label={t("Underlying shares")} value={b.underlying.toLocaleString()} />
                   <Cell label={t("Locked in custody")} value={b.locked.toLocaleString()} />
                   <Cell label={t("Tokens outstanding")} value={b.issued.toLocaleString()} />

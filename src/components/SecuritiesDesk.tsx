@@ -213,8 +213,38 @@ export function SecuritiesDesk() {
                 </p>
               )}
 
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-4 flex flex-wrap items-center gap-2">
                 <MintBurn security={s.symbol} headroom={b.headroom} issued={b.issued} onAct={act} busy={busy} />
+
+                {/*
+                  * Status was set once at registration and never again, so
+                  * everything stayed "draft" — including a security trading
+                  * live with real money against it. It is a property of the
+                  * security, so it belongs on the security rather than buried
+                  * in the form that created it.
+                  */}
+                <span className="ml-auto inline-flex overflow-hidden rounded-full border hairline text-[11px]">
+                  {(["draft", "live", "suspended"] as const).map((st) => (
+                    <button
+                      key={st}
+                      onClick={() => void act({
+                        action: "register-security",
+                        symbol: s.symbol, name: s.name,
+                        tokenAddress: s.token_address, status: st,
+                      })}
+                      disabled={busy || s.status === st}
+                      className={`px-3 py-1 capitalize transition-colors disabled:opacity-100 ${
+                        s.status === st
+                          ? st === "live" ? "bg-[var(--color-up)] text-white"
+                            : st === "suspended" ? "bg-[var(--color-down)] text-white"
+                            : "bg-[var(--fg)] text-[var(--bg)]"
+                          : "hover:surface"
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </span>
               </div>
 
               {/* The holders of this security specifically, not every position
@@ -374,7 +404,7 @@ function MintBurn({ security, headroom, issued, onAct, busy }: {
 }
 
 function RegisterSecurity({ onAct, busy }: { onAct: (b: Record<string, unknown>) => Promise<void>; busy: boolean }) {
-  const [f, setF] = useState({ symbol: "", name: "", tokenAddress: "", decimals: "8" });
+  const [f, setF] = useState({ symbol: "", name: "", tokenAddress: "", decimals: "8", status: "live" });
   return (
     <div className="rounded-3xl border hairline p-5">
       <div className="eyebrow">Register a security</div>
@@ -394,6 +424,25 @@ function RegisterSecurity({ onAct, busy }: { onAct: (b: Record<string, unknown>)
         hint="Checked against the token on Base before it is saved." />
       <Field label="Decimals" v={f.decimals} on={(v) => setF({ ...f, decimals: v })} ph="8"
         hint="Read from the token itself when an address is given." />
+      <label className="mb-3 block">
+        <span className="eyebrow">Status</span>
+        <div className="mt-1.5 flex gap-2">
+          {(["draft", "live"] as const).map((st) => (
+            <button
+              key={st}
+              onClick={() => setF({ ...f, status: st })}
+              className={`flex-1 rounded-xl border px-3 py-2.5 text-[13px] font-medium capitalize transition-colors ${
+                f.status === st ? "border-[var(--fg)] bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"
+              }`}
+            >
+              {st}
+            </button>
+          ))}
+        </div>
+        <span className="mt-1 block text-[11px] text-[var(--muted)]">
+          Draft keeps it off the public proof page. A security customers can buy should be live.
+        </span>
+      </label>
       <button
         onClick={() => void onAct({ action: "register-security", ...f, decimals: Number(f.decimals) })}
         disabled={busy || !f.symbol || !f.name}

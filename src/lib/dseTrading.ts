@@ -3,7 +3,7 @@ import { formatUnits } from "viem";
 import { publicClient } from "./chain";
 import { b20Abi } from "./abis";
 import { treasuryAddress } from "./treasury";
-import { readOraclePrice } from "./oracle";
+import { readOraclePrice, refreshIfStale } from "./oracle";
 import { totalLiabilities } from "./ledger";
 import { FEE_BPS, feeEnabled } from "./fees";
 import { CRDBT, CRDBT_DECIMALS, CRDBT_SECURITY } from "./assets";
@@ -63,6 +63,10 @@ async function treasuryShares(): Promise<number> {
 }
 
 export async function crdbMarket(): Promise<CrdbMarket> {
+  // Kicked off, never awaited: whoever loaded this page is not waiting on a
+  // chain write, and the next reader gets the fresher mark.
+  refreshIfStale(CRDBT_SECURITY);
+
   const [oracle, custodyShares, liabilities] = await Promise.all([
     readOraclePrice(CRDBT_SECURITY).catch(() => null),
     treasuryShares().catch(() => 0),

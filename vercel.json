@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/oracle/sync",
-      "schedule": "0 * * * 1-5"
+      "schedule": "0 6 * * *"
     }
   ]
 }

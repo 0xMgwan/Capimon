@@ -143,3 +143,41 @@ export async function publishDsePrice(
 
   return { ok: true, txHash, price, quote };
 }
+
+
+/* --------------------------------------------------------- opportunistic -- */
+
+/**
+ * Refreshes a stale mark without waiting for the scheduler.
+ *
+ * The hourly cron is the intended mechanism, but a schedule is a promise made
+ * by the host and hosting plans cap how often one may fire. A mark that only
+ * moves when a cron happens to run means customers trade all afternoon against
+ * the morning's price, and the first anyone knows is a settlement refused for
+ * deviating from a number nobody refreshed.
+ *
+ * The staleness test is a chain read, so every instance sees the same answer
+ * and they do not each decide independently to publish. Nothing here is
+ * awaited by the caller: a page load should never wait on a transaction, and a
+ * failed refresh leaves the previous mark standing, which is the safe outcome.
+ */
+const REFRESH_AFTER_MS = 12 * 60_000;
+
+export function refreshIfStale(symbol: string) {
+  void (async () => {
+    try {
+      const current = await readOraclePrice(symbol);
+      if (current) {
+        const age = Date.now() - Date.parse(current.updatedAt);
+        if (age < REFRESH_AFTER_MS) return;
+
+        // Old, but only worth a transaction if the exchange has actually moved.
+        const quote = await dseQuote(symbol);
+        if (quote && currentPrice(quote) === current.price) return;
+      }
+      await publishDsePrice(symbol);
+    } catch {
+      /* the previous mark stands, which is the safe failure */
+    }
+  })();
+}

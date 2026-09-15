@@ -464,53 +464,74 @@ export function WalletSection({ holdings }: {
             </p>
           ) : (
             <div className="divide-y divide-[var(--border)]">
-              {deposits.map((d) => (
-                <div key={d.id} className="flex items-center gap-3 px-5 py-3.5">
-                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] ${
-                    IN_FLIGHT.has(d.status) ? "bg-[#b45309]/10 text-[#b45309]" : "surface"}`}>
-                    {IN_FLIGHT.has(d.status)
-                      ? <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      : "↓"}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium">{t("Deposit")}</span>
-                    <span className="block truncate text-[11px] text-[var(--muted)]">
-                      {STATUS_LABEL[d.status] ?? d.status} ·{" "}
-                      {new Date(d.created_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+              {/*
+                * One list, ordered by when things happened.
+                *
+                * Deposits and trades were rendered as two lists one after the
+                * other, so everything a customer paid in came before everything
+                * they did with it no matter how long ago. A statement that
+                * groups by kind instead of by time is not a statement.
+                */}
+              {[
+                ...deposits.map((d) => ({
+                  key: `d-${d.id}`,
+                  at: d.created_at,
+                  inFlight: IN_FLIGHT.has(d.status),
+                  glyph: "↓",
+                  title: t("Deposit"),
+                  sub: `${STATUS_LABEL[d.status] ?? d.status}`,
+                  main: TZS(d.amount_tzs),
+                  extra: d.usdc_credited ? `+${usd(Number(d.usdc_credited))}` : null,
+                  tone: "neutral" as const,
+                })),
+                ...account.entries
+                  .filter((e) => e.kind !== "deposit")
+                  .map((e) => {
+                    const amount = Number(e.amount);
+                    return {
+                      key: `e-${e.id}`,
+                      at: e.created_at,
+                      inFlight: false,
+                      glyph: e.kind === "buy" ? "↗" : e.kind === "sell" ? "↘" : "•",
+                      title: `${e.kind[0].toUpperCase()}${e.kind.slice(1)} ${e.asset}`,
+                      sub: null,
+                      main: `${amount >= 0 ? "+" : ""}${amount.toFixed(e.asset === "USDC" ? 2 : 6)}`,
+                      extra: null,
+                      tone: (amount >= 0 ? "up" : "down") as "up" | "down",
+                    };
+                  }),
+              ]
+                .sort((a, b) => +new Date(b.at) - +new Date(a.at))
+                .slice(0, 20)
+                .map((row) => (
+                  <div key={row.key} className="flex items-center gap-3 px-5 py-3.5">
+                    <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] ${
+                      row.inFlight ? "bg-[#b45309]/10 text-[#b45309]" : "surface"}`}>
+                      {row.inFlight
+                        ? <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        : row.glyph}
                     </span>
-                  </span>
-                  <span className="shrink-0 text-right">
-                    <span className="tnum block text-sm">{TZS(d.amount_tzs)}</span>
-                    {d.usdc_credited && (
-                      <span className="tnum block text-[11px] text-[var(--color-up)]">
-                        +{usd(Number(d.usdc_credited))}
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium">{row.title}</span>
+                      <span className="block truncate text-[11px] text-[var(--muted)]">
+                        {row.sub ? `${row.sub} · ` : ""}
+                        {new Date(row.at).toLocaleString("en-GB", {
+                          day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+                        })}
                       </span>
-                    )}
-                  </span>
-                </div>
-              ))}
-              {account.entries
-                .filter((e) => e.kind !== "deposit")
-                .slice(0, 10)
-                .map((e) => {
-                  const amount = Number(e.amount);
-                  return (
-                    <div key={e.id} className="flex items-center gap-3 px-5 py-3.5">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full surface text-[11px]">
-                        {e.kind === "buy" ? "↗" : e.kind === "sell" ? "↘" : "•"}
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className={`tnum block text-sm ${
+                        row.tone === "up" ? "text-[var(--color-up)]"
+                        : row.tone === "down" ? "text-[var(--color-down)]" : ""}`}>
+                        {row.main}
                       </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-medium capitalize">{e.kind} {e.asset}</span>
-                        <span className="block text-[11px] text-[var(--muted)]">
-                          {new Date(e.created_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                        </span>
-                      </span>
-                      <span className={`tnum shrink-0 text-sm ${amount >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
-                        {amount >= 0 ? "+" : ""}{amount.toFixed(e.asset === "USDC" ? 2 : 6)}
-                      </span>
-                    </div>
-                  );
-                })}
+                      {row.extra && (
+                        <span className="tnum block text-[11px] text-[var(--color-up)]">{row.extra}</span>
+                      )}
+                    </span>
+                  </div>
+                ))}
             </div>
           )}
         </div>

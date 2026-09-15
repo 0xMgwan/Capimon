@@ -146,3 +146,31 @@ export function quoteAgeDays(q: DseQuote, now = Date.now()): number {
   if (!Number.isFinite(t)) return Infinity;
   return Math.floor((now - t) / 86_400_000);
 }
+
+export type DseCandle = { t: number; p: number; round: string };
+
+/**
+ * A security's closing prices, as the chart wants them.
+ *
+ * One point per session, which is all DSE publishes — no interpolation between
+ * days, because a line drawn through prices the exchange never printed is a
+ * picture of nothing.
+ */
+export async function dseHistory(symbol: string, days = 180): Promise<DseCandle[]> {
+  try {
+    const d = await dseFetch<{ success: boolean; data: Row[] }>(
+      `/api/get/market/prices/for/range/duration?security_code=${encodeURIComponent(symbol.toUpperCase())}&days=${days}&class=EQUITY`,
+    );
+    return (d.data ?? [])
+      .filter((r) => Number(r.closing_price) > 0)
+      .map((r) => ({
+        t: Math.floor(Date.parse(`${String(r.trade_date).slice(0, 10)}T00:00:00Z`) / 1000),
+        p: Number(r.closing_price),
+        round: String(r.trade_date).slice(0, 10),
+      }))
+      .filter((c) => Number.isFinite(c.t))
+      .sort((a, b) => a.t - b.t);
+  } catch {
+    return [];
+  }
+}

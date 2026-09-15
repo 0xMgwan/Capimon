@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { CrdbPanel } from "@/components/CrdbPanel";
+import { CrdbChart } from "@/components/CrdbChart";
 
 export const metadata: Metadata = {
   title: "CRDB Bank Plc",
@@ -23,6 +24,8 @@ export default function CrdbPage() {
           One CRDBt is one share, held in custody and settled in shillings.
         </p>
       </div>
+      <CrdbChart />
+      <div className="mt-6" />
       <CrdbPanel />
     </main>
   );

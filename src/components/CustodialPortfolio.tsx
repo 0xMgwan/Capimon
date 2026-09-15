@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCapimonAccount } from "@/lib/useCapimonAccount";
+import { useCapimonAccount, useCurrency } from "@/lib/useCapimonAccount";
 import { AssetLogo } from "./AssetLogo";
 import { Counter } from "./Counter";
 import { Reveal } from "./Reveal";
@@ -11,6 +11,13 @@ import { usd, costLabel } from "@/lib/format";
 /** The book CAPX holds for a shilling-funded account. */
 export function CustodialPortfolio() {
   const { account, signOut } = useCapimonAccount();
+  /*
+   * Most of the people using this earn, save and think in shillings, so the
+   * page should be able to speak in them. The figures are held in dollars
+   * because that is what the marks are quoted in; the choice here is only
+   * about how they are read.
+   */
+  const { currency, setCurrency, canShowTzs, format: money } = useCurrency();
   if (!account) return null;
 
   const { tzs, cashTzs, positions, equity, total } = account;
@@ -19,7 +26,7 @@ export function CustodialPortfolio() {
   // the inputs to it.
   const pnl = account.pnl;
   const up = (pnl?.unrealised ?? 0) >= 0;
-  const sign = (n: number) => `${n >= 0 ? "+" : "−"}${usd(Math.abs(n))}`;
+  const sign = (n: number) => `${n >= 0 ? "+" : "−"}${money(Math.abs(n))}`;
 
   return (
     <div className="mx-auto max-w-[1400px] px-5 pb-24 pt-12 sm:px-8">
@@ -31,13 +38,28 @@ export function CustodialPortfolio() {
             <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
               {account.user.username ? `@${account.user.username}` : account.user.email}
               <span className="rounded-full surface px-2 py-0.5 text-[11px]">held by CAPX</span>
+              {canShowTzs && (
+                <span className="inline-flex overflow-hidden rounded-full border hairline text-[11px]">
+                  {(["TZS", "USDC"] as const).map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setCurrency(c)}
+                      className={`px-2.5 py-0.5 transition-colors ${
+                        currency === c ? "bg-[var(--fg)] text-[var(--bg)]" : "hover:surface"
+                      }`}
+                    >
+                      {c === "USDC" ? "USD" : "TZS"}
+                    </button>
+                  ))}
+                </span>
+              )}
               <button onClick={signOut} className="underline underline-offset-2 hover:text-[var(--fg)]">Sign out</button>
             </p>
           </div>
           <div className="grid w-full grid-cols-3 gap-px overflow-hidden rounded-2xl bg-[var(--border)] lg:w-auto">
-            <Cell label="Shares" value={<Counter value={equity} format={usd} />} />
+            <Cell label="Shares" value={<Counter value={equity} format={money} />} />
             <Cell label="Cash" value={<Counter value={shillings} format={(n) => `${Math.round(n).toLocaleString()} TZS`} />} />
-            <Cell label="Total value" value={<Counter value={total} format={usd} />} />
+            <Cell label="Total value" value={<Counter value={total} format={money} />} />
           </div>
         </div>
       </Reveal>
@@ -61,7 +83,7 @@ export function CustodialPortfolio() {
               </div>
             </div>
             <div className="tnum text-xs text-[var(--muted)]">
-              {usd(pnl.invested)} invested
+              {money(pnl.invested)} invested
               {/* Banked gains do not vanish when a position is closed, so they
                   are shown beside the open ones rather than folded into them. */}
               {Math.abs(pnl.realised) > 0.005 && <> · {sign(pnl.realised)} realised</>}
@@ -88,12 +110,12 @@ export function CustodialPortfolio() {
                   </div>
                 </div>
                 <div className="shrink-0 text-right">
-                  <div className="tnum text-[15px] font-medium">{usd(p.value)}</div>
+                  <div className="tnum text-[15px] font-medium">{money(p.value)}</div>
                   {/* Return on what this position cost, not the day's move —
                       the day's move is on the market page; this is the money. */}
                   {p.costBasis > 0 ? (
                     <div className={`tnum text-xs ${p.pnl >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
-                      {p.pnl >= 0 ? "+" : "−"}{usd(Math.abs(p.pnl))} ({p.pnlPct >= 0 ? "+" : ""}{p.pnlPct.toFixed(1)}%)
+                      {p.pnl >= 0 ? "+" : "−"}{money(Math.abs(p.pnl))} ({p.pnlPct >= 0 ? "+" : ""}{p.pnlPct.toFixed(1)}%)
                     </div>
                   ) : (
                     <div className={`tnum text-xs ${p.change >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>

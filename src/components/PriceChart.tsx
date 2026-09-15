@@ -11,13 +11,37 @@ const RANGES = [
   { key: "ALL", hours: Infinity },
 ] as const;
 
-type RangeKey = (typeof RANGES)[number]["key"];
+export type RangeKey = (typeof RANGES)[number]["key"];
 
 /**
  * Interactive price chart over real Chainlink round data. Every point is an
  * onchain print — there is no interpolation or synthetic fill.
  */
-export function PriceChart({ data, color, height = 320 }: { data: Candle[]; color: string; height?: number }) {
+export function PriceChart({ data, color, height = 320, format = usd, ranges, provenance }: {
+  data: Candle[]; color: string; height?: number;
+  /**
+   * How to render a price. Defaults to dollars, which is what the Chainlink
+   * marks are quoted in — a DSE listing passes its own so the axis does not
+   * claim a shilling figure is a dollar one.
+   */
+  format?: (n: number) => string;
+  /** Ranges to offer. A daily-printing market has nothing to say about "1D". */
+  ranges?: readonly RangeKey[];
+  /**
+   * What the points are and where they came from, given the count.
+   *
+   * Hardcoding this said every chart was a Chainlink feed read on Base, which
+   * on a DSE listing describes neither the source nor the cadence — the points
+   * are exchange closes, not onchain rounds.
+   */
+  provenance?: (points: number) => string;
+}) {
+  // Offering a range the data cannot fill draws an empty chart and reads as a
+  // fault. A market that prints once a day has nothing to put under "1D".
+  const shownRanges = useMemo(
+    () => RANGES.filter((r) => !ranges || ranges.includes(r.key)),
+    [ranges],
+  );
   const [range, setRange] = useState<RangeKey>("ALL");
   const [compact, setCompact] = useState(false);
 
@@ -80,7 +104,7 @@ export function PriceChart({ data, color, height = 320 }: { data: Candle[]; colo
       <div className="mb-3 flex items-start justify-between gap-4">
         <div>
           <div className="tnum text-3xl font-medium tracking-tight sm:text-4xl">
-            {shown ? usd(shown.p) : "—"}
+            {shown ? format(shown.p) : "—"}
           </div>
           <div className="mt-1 flex items-center gap-2 text-xs">
             <span className={`tnum ${change >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
@@ -95,7 +119,7 @@ export function PriceChart({ data, color, height = 320 }: { data: Candle[]; colo
         </div>
 
         <div className="flex gap-1 rounded-full border hairline p-1">
-          {RANGES.map((r) => (
+          {shownRanges.map((r) => (
             <button
               key={r.key}
               onClick={() => setRange(r.key)}
@@ -151,14 +175,16 @@ export function PriceChart({ data, color, height = 320 }: { data: Candle[]; colo
 
         {geo && (
           <>
-            <span className="tnum pointer-events-none absolute right-3 top-2 text-[10px] text-[var(--muted)]">{usd(geo.max)}</span>
-            <span className="tnum pointer-events-none absolute bottom-2 right-3 text-[10px] text-[var(--muted)]">{usd(geo.min)}</span>
+            <span className="tnum pointer-events-none absolute right-3 top-2 text-[10px] text-[var(--muted)]">{format(geo.max)}</span>
+            <span className="tnum pointer-events-none absolute bottom-2 right-3 text-[10px] text-[var(--muted)]">{format(geo.min)}</span>
           </>
         )}
       </div>
 
       <p className="mt-2 text-[11px] text-[var(--muted)]">
-        {series.length} onchain price rounds · Chainlink total-return feed on Base · 24/5, frozen through corporate actions
+        {provenance
+          ? provenance(series.length)
+          : `${series.length} onchain price rounds · Chainlink total-return feed on Base · 24/5, frozen through corporate actions`}
       </p>
     </div>
   );

@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
+import Image from "next/image";
 import { motion, AnimatePresence } from "motion/react";
 import type { Market } from "@/lib/useMarkets";
 import type { Venue } from "@/lib/useVenues";
@@ -70,10 +72,46 @@ export function AssetPicker({
     );
   }, [markets, venues, q]);
 
+  /*
+   * CRDB is a link, not a selectable row.
+   *
+   * This picker chooses which asset the ticket around it will trade, and that
+   * ticket converts shillings to dollars and signs a swap — none of which CRDB
+   * does. Making it selectable would put the wrong ticket in front of it; the
+   * alternative, faking a Chainlink market so it fits the row shape, would mean
+   * inventing a feed address and round history to satisfy a type.
+   */
+  const showCrdb = (() => {
+    const s = q.trim().toLowerCase();
+    return !s || "crdb".includes(s) || "crdb bank plc".includes(s)
+      || "dar es salaam".includes(s) || "tanzania".includes(s);
+  })();
+
   const list = (
     <div className="scroll-thin max-h-[52vh] overflow-y-auto overscroll-contain p-1.5">
-      {rows.length === 0 && (
+      {rows.length === 0 && !showCrdb && (
         <p className="px-3 py-6 text-center text-sm text-[var(--muted)]">No company matches “{q}”.</p>
+      )}
+      {showCrdb && (
+        <Link
+          href="/markets/crdb"
+          onClick={() => setOpen(false)}
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:surface"
+        >
+          <Image src="/crdb.jpg" alt="" width={34} height={34} className="shrink-0 rounded-full object-cover" />
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-1.5">
+              <span className="text-sm font-medium">CRDB</span>
+              <span className="rounded-full bg-[var(--color-up)]/12 px-1.5 py-0.5 text-[10px] text-[var(--color-up)]">
+                Shillings
+              </span>
+            </span>
+            <span className="block truncate text-[11px] text-[var(--muted)]">
+              CRDB Bank Plc · Dar es Salaam
+            </span>
+          </span>
+          <span className="shrink-0 text-[11px] text-[var(--muted)]">Open →</span>
+        </Link>
       )}
       {rows.map((m) => {
         const v = venues[m.symbol];

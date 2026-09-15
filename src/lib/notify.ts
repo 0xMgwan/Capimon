@@ -43,7 +43,11 @@ export async function listNotifications(userId: string, limit = 30) {
     select id::text, kind, title, body, read_at, created_at
       from capx.notifications
      where user_id = ${userId}
-     order by id desc
+     -- Sort by the timestamp the list actually displays. Ordering by id sorts
+     -- by when the row was written, which is not the same thing once anything
+     -- backfills — a deposit settled late lands with a new id and an older
+     -- date, and then sits above trades that happened after it.
+     order by created_at desc, id desc
      limit ${limit}`;
 }
 

@@ -6,7 +6,7 @@ import { AssetLogo } from "./AssetLogo";
 import { Counter } from "./Counter";
 import { Reveal } from "./Reveal";
 import { WalletSection } from "./WalletSection";
-import { usd } from "@/lib/format";
+import { usd, costLabel } from "@/lib/format";
 
 /** The book CAPX holds for a shilling-funded account. */
 export function CustodialPortfolio() {
@@ -84,7 +84,7 @@ export function CustodialPortfolio() {
                   <div className="text-[15px] font-medium">{p.ticker}</div>
                   <div className="tnum text-xs text-[var(--muted)]">
                     {p.qty.toFixed(6)}
-                    {p.avgCost > 0 ? <> · avg {usd(p.avgCost)}</> : <> @ {usd(p.price)}</>}
+                    {p.avgCostNative > 0 ? <> · avg {costLabel(p.avgCostNative, p.currency)}</> : <> @ {usd(p.price)}</>}
                   </div>
                 </div>
                 <div className="shrink-0 text-right">

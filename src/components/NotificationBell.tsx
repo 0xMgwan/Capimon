@@ -8,9 +8,46 @@ type Item = {
   read_at: string | null; created_at: string;
 };
 
-const ICON: Record<string, string> = {
-  deposit: "↓", trade: "↗", withdrawal: "↑", alert: "!",
+/**
+ * A glyph and a colour per kind.
+ *
+ * Money in, money out and a trade are three different events, and a row of
+ * identical grey dots makes the reader parse the sentence to find out which.
+ * Colour carries direction, the glyph carries the kind.
+ */
+const KIND_STYLE: Record<string, { path: string; className: string }> = {
+  deposit: {
+    path: "M8 3v8m0 0 3-3m-3 3L5 8M3 13h10",
+    className: "bg-[var(--color-up)]/12 text-[var(--color-up)]",
+  },
+  withdrawal: {
+    path: "M8 13V5m0 0L5 8m3-3 3 3M3 3h10",
+    className: "bg-[var(--color-down)]/12 text-[var(--color-down)]",
+  },
+  trade: {
+    path: "M2 11l4-4 3 3 5-5M14 5h-3m3 0v3",
+    className: "bg-[var(--color-accent)]/12 text-[var(--color-accent)]",
+  },
+  alert: {
+    path: "M8 4v5m0 2.5v.5M8 1.5 15 14H1z",
+    className: "bg-[var(--color-down)]/12 text-[var(--color-down)]",
+  },
 };
+
+function KindIcon({ kind }: { kind: string }) {
+  const s = KIND_STYLE[kind] ?? {
+    path: "M8 4.5v7M4.5 8h7",
+    className: "surface text-[var(--muted)]",
+  };
+  return (
+    <span className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full ${s.className}`}>
+      <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor"
+        strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d={s.path} />
+      </svg>
+    </span>
+  );
+}
 
 /**
  * What happened while the customer was elsewhere.
@@ -88,7 +125,7 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border hairline bg-[var(--bg)] shadow-2xl shadow-black/10">
+        <div className="absolute right-0 z-50 mt-2 w-[min(19rem,calc(100vw-5rem))] origin-top-right overflow-hidden rounded-2xl border hairline bg-[var(--bg)] shadow-2xl shadow-black/10">
           <div className="border-b hairline px-4 py-3">
             <span className="eyebrow">Activity</span>
           </div>
@@ -100,9 +137,7 @@ export function NotificationBell() {
             <div className="scroll-thin max-h-[60vh] divide-y divide-[var(--border)] overflow-y-auto">
               {items.map((n) => (
                 <div key={n.id} className="flex gap-3 px-4 py-3">
-                  <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full surface text-[12px]">
-                    {ICON[n.kind] ?? "•"}
-                  </span>
+                  <KindIcon kind={n.kind} />
                   <span className="min-w-0 flex-1">
                     <span className="block text-[13px] font-medium leading-snug">{n.title}</span>
                     {n.body && (

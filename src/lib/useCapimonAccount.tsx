@@ -7,6 +7,8 @@ export type CustodialPosition = {
   qty: number; price: number; value: number; change: number;
   /** What the held shares cost, and what they have made since. */
   avgCost: number; costBasis: number; pnl: number; pnlPct: number; realised: number;
+  /** What was actually paid, before any conversion, and in which currency. */
+  avgCostNative: number; currency: "USD" | "TZS";
 };
 
 export type CustodialAccount = {

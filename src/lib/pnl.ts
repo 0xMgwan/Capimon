@@ -14,17 +14,27 @@ import { db, migrate } from "./db";
  * amounts, so lot tracking would add real complexity for a number that differs
  * only in how a gain is split between realised and unrealised — and average
  * cost is what a customer means by "what I paid".
+ *
+ * Cost stays in the currency it was paid in. A CRDB share costs shillings and a
+ * NVDA share costs dollars, and 2,980 of one is not 2,980 of the other — read
+ * as dollars, a third of a CRDB share booked a $998 basis and showed the holder
+ * down 99%. Converting here would be worse than wrong in a different way: a
+ * cost basis that moves with the exchange rate is not a cost. The figure is
+ * tagged with its currency and converted once, at the point something has to
+ * put two markets in the same column.
  */
 
 export type PositionCost = {
   asset: string;
   /** Shares still held, from the same entries the balance is built from. */
   qty: number;
-  /** Weighted average price paid for the shares still held, in USD. */
+  /** What the money below is denominated in. */
+  currency: "USD" | "TZS";
+  /** Weighted average price paid for the shares still held, in `currency`. */
   avgCost: number;
-  /** What those remaining shares cost — qty × avgCost. */
+  /** What those remaining shares cost — qty × avgCost, in `currency`. */
   costBasis: number;
-  /** Gains already banked by selling, in USD. */
+  /** Gains already banked by selling, in `currency`. */
   realised: number;
 };
 
@@ -32,7 +42,7 @@ type Row = {
   kind: string;
   asset: string;
   amount: string;
-  metadata: { orderId?: string; price?: number } | null;
+  metadata: { orderId?: string; price?: number; currency?: string } | null;
 };
 
 export async function positionCosts(userId: string): Promise<Map<string, PositionCost>> {
@@ -52,10 +62,14 @@ export async function positionCosts(userId: string): Promise<Map<string, Positio
    * are collected first and looked up by order when replaying.
    */
   const priceByOrder = new Map<string, number>();
+  // The currency travels with the order for the same reason the price does:
+  // the share leg carries one and the cash leg the other.
+  const currencyByOrder = new Map<string, "USD" | "TZS">();
   for (const r of rows) {
     const orderId = r.metadata?.orderId;
     const price = Number(r.metadata?.price ?? 0);
     if (orderId && price > 0) priceByOrder.set(orderId, price);
+    if (orderId && r.metadata?.currency === "TZS") currencyByOrder.set(orderId, "TZS");
   }
 
   const out = new Map<string, PositionCost>();
@@ -70,7 +84,15 @@ export async function positionCosts(userId: string): Promise<Map<string, Positio
     const price = Number(r.metadata?.price ?? 0)
       || (r.metadata?.orderId ? priceByOrder.get(r.metadata.orderId) ?? 0 : 0);
 
-    const p = out.get(r.asset) ?? { asset: r.asset, qty: 0, avgCost: 0, costBasis: 0, realised: 0 };
+    const currency: "USD" | "TZS" =
+      r.metadata?.currency === "TZS" ? "TZS"
+      : (r.metadata?.orderId && currencyByOrder.get(r.metadata.orderId)) || "USD";
+
+    const p = out.get(r.asset)
+      ?? { asset: r.asset, qty: 0, currency, avgCost: 0, costBasis: 0, realised: 0 };
+    // A security is bought in one currency throughout; the first entry settles
+    // it rather than letting a later one silently redenominate the basis.
+    if (p.qty === 0 && p.costBasis === 0) p.currency = currency;
 
     if (qty > 0) {
       // A buy, or an adjustment crediting shares. Without a price — a manual

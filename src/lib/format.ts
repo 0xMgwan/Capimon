@@ -60,3 +60,17 @@ export function marketSession(now = new Date()) {
   if (mins >= 960 && mins < 1200) return { open: false, label: "After hours · marks held" as const };
   return { open: false, label: "Overnight · marks held" as const };
 }
+
+/**
+ * A cost price in the currency it was actually paid in.
+ *
+ * Shillings are not dollars and 2,980 of one is not 2,980 of the other, so a
+ * position bought on the DSE says so rather than being silently converted into
+ * a dollar figure its holder never saw.
+ */
+export function costLabel(amount: number, currency: "USD" | "TZS" = "USD") {
+  if (!(amount > 0)) return "—";
+  return currency === "TZS"
+    ? `${amount.toLocaleString("en-TZ", { maximumFractionDigits: 0 })} TZS`
+    : usd(amount);
+}

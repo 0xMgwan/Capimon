@@ -60,7 +60,16 @@ export async function GET() {
         // What it cost against what it is worth — the question a holdings
         // list on its own cannot answer.
         const cost = costs.get(b.asset);
-        const costBasis = cost && cost.qty > 0 ? cost.avgCost * b.amount : 0;
+        /*
+         * Cost is held in the currency it was paid in, so it is converted here
+         * — the one place two markets have to share a column. Using today's
+         * rate is an approximation of a historical one, but the alternative was
+         * reading 2,980 shillings as 2,980 dollars, which showed a holder of a
+         * third of a share down ninety-nine per cent.
+         */
+        const toUsd = cost?.currency === "TZS" ? tzsRate : 1;
+        const avgCostUsd = (cost?.avgCost ?? 0) * toUsd;
+        const costBasis = cost && cost.qty > 0 ? avgCostUsd * b.amount : 0;
         const value = b.amount * price;
         return {
           symbol: b.asset,
@@ -69,11 +78,15 @@ export async function GET() {
           color: isCrdb ? "#0B7D3E" : m?.color ?? "#888",
           logo: isCrdb ? "/crdb.jpg" : m?.logo ?? null,
           qty: b.amount, price, value, change: m?.change ?? 0,
-          avgCost: cost?.avgCost ?? 0,
+          avgCost: avgCostUsd,
+          // Also in what was actually paid, so a shilling account can be shown
+          // the number it recognises instead of a conversion of it.
+          avgCostNative: cost?.avgCost ?? 0,
+          currency: cost?.currency ?? "USD",
           costBasis,
           pnl: costBasis > 0 ? value - costBasis : 0,
           pnlPct: costBasis > 0 ? ((value - costBasis) / costBasis) * 100 : 0,
-          realised: cost?.realised ?? 0,
+          realised: (cost?.realised ?? 0) * toUsd,
         };
       })
       .sort((a, b) => b.value - a.value);
@@ -83,7 +96,8 @@ export async function GET() {
     const unrealised = positions.reduce((s, p) => s + p.pnl, 0);
     // Realised gains persist after a position is closed, so they are summed
     // from the cost record rather than from what is currently held.
-    const realised = [...costs.values()].reduce((s, c) => s + c.realised, 0);
+    const realised = [...costs.values()].reduce(
+      (s, c) => s + c.realised * (c.currency === "TZS" ? tzsRate : 1), 0);
 
     // Indicative shilling rate, so a Tanzanian account can be shown in the
     // currency it thinks in. The ledger still holds whatever actually arrived.

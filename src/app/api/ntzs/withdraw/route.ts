@@ -195,18 +195,39 @@ export async function POST(req: Request) {
 
     let result: { id?: string; status?: string };
     try {
+      /*
+       * Fund first, quote second, spend immediately.
+       *
+       * A ramp quote is locked for about a minute. Funding the float is a chain
+       * transfer that takes seconds to tens of seconds, and it used to run
+       * between the quote being priced and the payout being requested — so the
+       * quote the customer had read was routinely dead by the time it was
+       * spent, and the payout came back "expired, already used, or not an
+       * off-ramp quote". The quote shown in the panel is indicative; the one
+       * that actually pays is fetched here, moments before it is used.
+       *
+       * The customer's original quote id still keys the ledger entries, so a
+       * retry after an uncertain response cannot debit the same person twice.
+       */
       if (viaRamp) {
-        // The float pays the shillings, so put the USDC there first. The
-        // treasury signs that transfer itself and funding is confirmed before
-        // the payout is requested.
         const { fundRampFloat } = await import("@/lib/ntzsFunding");
         await fundRampFloat(amountTzs, phoneNumber);
-        result = await rampOfframp({ quoteId, phoneNumber });
+
+        const fresh = await rampQuote({ direction: "offramp", amount: amountTzs, phoneNumber });
+        const freshId = String(fresh.quoteId ?? fresh.id ?? fresh.quote_id ?? fresh.reference ?? "");
+        if (!freshId) throw new NtzsError("quote_unavailable", "Could not price the payout just before sending it.", 502);
+
+        result = await rampOfframp({ quoteId: freshId, phoneNumber });
       } else {
         const { ensureNtzsHasTzs } = await import("@/lib/ntzsFunding");
         await ensureNtzsHasTzs(amountTzs);
+
+        const omnibus = await omnibusUserId();
+        const fresh = await withdrawalQuote({ userId: omnibus, amountTzs, phoneNumber });
+        const freshId = fresh.quoteId ?? quoteId;
+
         result = await createWithdrawal({
-          userId: await omnibusUserId(), quoteId, amountTzs, phoneNumber,
+          userId: omnibus, quoteId: freshId, amountTzs, phoneNumber,
         });
       }
     } catch (payoutError) {

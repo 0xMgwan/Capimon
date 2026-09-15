@@ -21,12 +21,15 @@ export async function notify(input: {
   title: string;
   body?: string;
   ref?: string;
+  /** The holding this concerns, when it concerns one. */
+  asset?: string | null;
 }) {
   try {
     await migrate();
     await db()`
-      insert into capx.notifications (user_id, kind, title, body, ref)
-      values (${input.userId}, ${input.kind}, ${input.title}, ${input.body ?? null}, ${input.ref ?? null})
+      insert into capx.notifications (user_id, kind, title, body, ref, asset)
+      values (${input.userId}, ${input.kind}, ${input.title}, ${input.body ?? null},
+              ${input.ref ?? null}, ${input.asset ?? null})
       on conflict (ref) where ref is not null do nothing`;
   } catch {
     /*
@@ -39,8 +42,8 @@ export async function notify(input: {
 export async function listNotifications(userId: string, limit = 30) {
   await migrate();
   return db()<{ id: string; kind: string; title: string; body: string | null;
-                read_at: string | null; created_at: string }[]>`
-    select id::text, kind, title, body, read_at, created_at
+                asset: string | null; read_at: string | null; created_at: string }[]>`
+    select id::text, kind, title, body, asset, read_at, created_at
       from capx.notifications
      where user_id = ${userId}
      -- Sort by the timestamp the list actually displays. Ordering by id sorts

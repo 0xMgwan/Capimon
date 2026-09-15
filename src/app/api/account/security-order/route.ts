@@ -131,7 +131,7 @@ export async function POST(req: Request) {
          where id = ${orderId}`;
 
       await notify({
-        userId: user.id, kind: "trade", ref: `order:${orderId}`,
+        userId: user.id, kind: "trade", ref: `order:${orderId}`, asset: CRDBT_SECURITY,
         title: `${side === "buy" ? "Bought" : "Sold"} ${quote.qty} CRDB`,
         body: `${side === "buy" ? "Cost" : "Proceeds"} ${quote.tzs.toLocaleString()} TZS at ${quote.price.toLocaleString()} TZS a share.`,
       });

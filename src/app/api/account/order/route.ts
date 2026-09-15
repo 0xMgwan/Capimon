@@ -148,7 +148,7 @@ export async function POST(req: Request) {
          where id = ${orderId}`;
 
       await notify({
-        userId: user.id, kind: "trade", ref: `order:${orderId}`,
+        userId: user.id, kind: "trade", ref: `order:${orderId}`, asset: asset.symbol,
         title: side === "buy"
           ? `Bought ${exec.qty.toFixed(6)} ${asset.ticker}`
           : `Sold ${exec.qty.toFixed(6)} ${asset.ticker}`,

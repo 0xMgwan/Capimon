@@ -438,7 +438,7 @@ export function WalletSection({ holdings }: {
                     </button>
                   )}
                   <p className="mt-2 text-[11px] text-[var(--muted)]">
-                    Minimum {MIN_WITHDRAW.toLocaleString()} TZS. The fee is quoted by the network, not by CAPX.
+                    Minimum {MIN_WITHDRAW.toLocaleString()} TZS. The fee is quoted by the network, not by CAPX, and confirmed the moment it is sent.
                   </p>
                 </div>
               </motion.div>

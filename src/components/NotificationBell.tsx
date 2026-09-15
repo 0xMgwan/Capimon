@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { useT } from "@/lib/i18n";
+import { AssetLogo } from "./AssetLogo";
+import { useMarkets } from "@/lib/useMarkets";
 
 type Item = {
-  id: string; kind: string; title: string; body: string | null;
+  id: string; kind: string; title: string; body: string | null; asset: string | null;
   read_at: string | null; created_at: string;
 };
 
@@ -17,24 +19,26 @@ type Item = {
  * Colour carries direction, the glyph carries the kind.
  */
 /**
- * A drawn mark per kind, not a generic arrow.
+ * What a row shows instead of a dot.
  *
- * Money arriving, money leaving and a trade are three different events, and a
- * column of near-identical strokes makes the reader parse the sentence to find
- * out which one they are looking at. Each mark says what happened in its own
- * shape — into a tray, out of a tray, two prices crossing — and colour carries
- * the direction on top of that rather than instead of it.
+ * A trade shows the company, because "Bought 0.066 CRDB" with a grey arrow
+ * beside it makes the reader work out which holding moved from the sentence.
+ * The logo is the fastest thing on the row to recognise and it is already
+ * loaded elsewhere in the app.
+ *
+ * Money in and money out get drawn marks rather than arrows on a circle: a
+ * banknote going into a tray, and one coming out of it. They share the app's
+ * up and down colours, so direction reads before the glyph does.
  */
-type Mark = { className: string; draw: React.ReactNode };
-
-const KIND_MARK: Record<string, Mark> = {
+const MONEY_MARK: Record<string, { className: string; draw: React.ReactNode }> = {
   deposit: {
     className: "bg-[var(--color-up)]/12 text-[var(--color-up)]",
     draw: (
       <>
-        <path d="M8 2.5v6.2" />
-        <path d="M5.3 6.3 8 9l2.7-2.7" />
-        <path d="M2.8 10.2v1.9a1.4 1.4 0 0 0 1.4 1.4h7.6a1.4 1.4 0 0 0 1.4-1.4v-1.9" />
+        <rect x="3.2" y="2.6" width="9.6" height="6" rx="1.2" />
+        <circle cx="8" cy="5.6" r="1.4" />
+        <path d="M8 9.4v2.6m0 0 1.6-1.6M8 12l-1.6-1.6" />
+        <path d="M1.8 12.4v.6a1.4 1.4 0 0 0 1.4 1.4h9.6a1.4 1.4 0 0 0 1.4-1.4v-.6" />
       </>
     ),
   },
@@ -42,19 +46,10 @@ const KIND_MARK: Record<string, Mark> = {
     className: "bg-[var(--color-down)]/12 text-[var(--color-down)]",
     draw: (
       <>
-        <path d="M8 9.2V3" />
-        <path d="M5.3 5.7 8 3l2.7 2.7" />
-        <path d="M2.8 10.2v1.9a1.4 1.4 0 0 0 1.4 1.4h7.6a1.4 1.4 0 0 0 1.4-1.4v-1.9" />
-      </>
-    ),
-  },
-  trade: {
-    // Two prices crossing — the shape of an exchange rather than a direction.
-    className: "bg-[var(--color-accent)]/14 text-[var(--color-accent)]",
-    draw: (
-      <>
-        <path d="M2.6 11.6 6 8.2l2.3 2.3 5.1-6.1" />
-        <path d="M10.4 4.4h3v3" />
+        <rect x="3.2" y="7.4" width="9.6" height="6" rx="1.2" />
+        <circle cx="8" cy="10.4" r="1.4" />
+        <path d="M8 6.6V4m0 0L6.4 5.6M8 4l1.6 1.6" />
+        <path d="M1.8 3.6V3a1.4 1.4 0 0 1 1.4-1.4h9.6A1.4 1.4 0 0 1 14.2 3v.6" />
       </>
     ),
   },
@@ -70,19 +65,32 @@ const KIND_MARK: Record<string, Mark> = {
   },
 };
 
-function KindIcon({ kind }: { kind: string }) {
-  const m = KIND_MARK[kind] ?? {
+function KindIcon({ kind, asset }: { kind: string; asset: string | null }) {
+  const { data } = useMarkets();
+
+  if (kind === "trade" && asset) {
+    const m = data?.markets.find((x) => x.symbol === asset || x.ticker === asset);
+    return (
+      <span className="mt-0.5 shrink-0">
+        <AssetLogo
+          logo={asset === "CRDB" ? "/crdb.jpg" : m?.logo ?? null}
+          ticker={m?.ticker ?? asset}
+          color={asset === "CRDB" ? "#0B7D3E" : m?.color ?? "var(--color-accent)"}
+          size={32}
+        />
+      </span>
+    );
+  }
+
+  const mark = MONEY_MARK[kind] ?? {
     className: "surface text-[var(--muted)]",
     draw: <><path d="M8 4.6v6.8" /><path d="M4.6 8h6.8" /></>,
   };
   return (
-    <span
-      className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full ${m.className}`}
-      aria-hidden
-    >
+    <span className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full ${mark.className}`} aria-hidden>
       <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor"
-        strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        {m.draw}
+        strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+        {mark.draw}
       </svg>
     </span>
   );
@@ -204,7 +212,7 @@ export function NotificationBell() {
             <div className="scroll-thin max-h-[60vh] divide-y divide-[var(--border)] overflow-y-auto">
               {items.map((n) => (
                 <div key={n.id} className="flex gap-3 px-4 py-3">
-                  <KindIcon kind={n.kind} />
+                  <KindIcon kind={n.kind} asset={n.asset} />
                   <span className="min-w-0 flex-1">
                     <span className="block text-[13px] font-medium leading-snug">{n.title}</span>
                     {n.body && (

@@ -309,6 +309,12 @@ export async function migrate() {
           "ntzs_status text", "ntzs_reference text", "swap_ref text", "transfer_tx text",
           "rate_tzs_usdc numeric(38,8)", "metadata jsonb not null default '{}'::jsonb",
         ],
+        notifications: [
+          /* Which holding a trade notification concerns, so the row can show
+             the company rather than a generic arrow. Null on deposits and
+             withdrawals, which are about money rather than a share. */
+          "asset text",
+        ],
       };
       for (const [table, columns] of Object.entries(lateColumns)) {
         for (const col of columns) {

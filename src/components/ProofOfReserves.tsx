@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 type Backing = {
   security: string; custodian: string | null;
-  underlying: number; locked: number; issued: number;
+  underlying: number; locked: number; issued: number; clientHeld: number; unallocated: number;
   ratioPct: number | null; headroom: number;
   fresh: boolean; expiresAt: string | null; lastVerified: string | null;
 };
@@ -94,11 +94,15 @@ export function ProofOfReserves() {
                   </div>
                 </div>
 
-                <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-4">
+                <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-3 lg:grid-cols-6">
                   <Cell label="Underlying shares" value={b.underlying.toLocaleString()} />
                   <Cell label="Locked in custody" value={b.locked.toLocaleString()} />
                   <Cell label="Tokens outstanding" value={b.issued.toLocaleString()} />
-                  <Cell label="Room to issue" value={b.headroom.toLocaleString()} />
+                  {/* Buying does not mint and selling does not burn, so this is
+                      the figure that explains why tokens outstanding sits still
+                      while the tradable pool moves. */}
+                  <Cell label="Held by customers" value={b.clientHeld.toLocaleString()} />
+                  <Cell label="Available to buy" value={b.unallocated.toLocaleString()} />
                 </div>
 
                 <dl className="mt-4 grid gap-1.5 text-[13px] sm:grid-cols-2">

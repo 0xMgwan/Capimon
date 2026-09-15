@@ -51,7 +51,7 @@ export async function GET(req: Request) {
                  (select coalesce(sum(amount),0)::text from capx.ledger_entries l
                    where l.user_id = u.id and l.asset = 'USDC') as usdc_balance
             from capx.users u order by created_at desc limit 100`,
-      sql`select o.id::text, o.side, o.symbol, o.usdc_amount::text, o.qty::text, o.status,
+      sql`select o.id::text, o.side, o.symbol, o.usdc_amount::text, o.qty::text, o.price::text, o.status,
                  o.tx_hash, o.error, o.created_at, u.email
             from capx.orders o join capx.users u on u.id = o.user_id
            order by o.created_at desc limit 50`,

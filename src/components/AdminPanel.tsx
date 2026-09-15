@@ -27,7 +27,7 @@ type Admin = {
               swap_ref: string | null; transfer_tx: string | null; rate_tzs_usdc: string | null }[];
   users: { id: string; email: string; name: string | null; phone: string | null; nida_number: string | null;
            deposits: number; settled_tzs: number; usdc_balance: string | null; created_at: string }[];
-  orders: { id: string; email: string; side: string; symbol: string; usdc_amount: string | null;
+  orders: { id: string; email: string; side: string; symbol: string; price: string | null; usdc_amount: string | null;
             qty: string | null; status: string; tx_hash: string | null; created_at: string }[];
 };
 
@@ -439,8 +439,17 @@ export function AdminPanel() {
                 <td className="px-3 py-3">{o.email}</td>
                 <td className="px-3 py-3 text-right capitalize">{o.side}</td>
                 <td className="px-3 py-3 text-right">{o.symbol}</td>
+                {/*
+                  * A shilling-settled order has no dollar amount, so reading
+                  * this column as USDC printed $0.00 against a real trade. The
+                  * value is shown in whatever the order actually settled in.
+                  */}
                 <td className="tnum px-3 py-3 text-right">
-                  {o.side === "buy" ? usd(Number(o.usdc_amount ?? 0)) : Number(o.qty ?? 0).toFixed(6)}
+                  {o.usdc_amount != null
+                    ? (o.side === "buy" ? usd(Number(o.usdc_amount)) : Number(o.qty ?? 0).toFixed(6))
+                    : o.price != null
+                      ? `${Number(o.qty ?? 0)} @ ${Number(o.price).toLocaleString()} TZS`
+                      : Number(o.qty ?? 0).toFixed(6)}
                 </td>
                 <td className="px-3 py-3 text-right text-[var(--muted)]">{o.status}</td>
                 <td className="px-3 py-3 text-right">

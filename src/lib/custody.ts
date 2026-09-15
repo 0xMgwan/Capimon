@@ -39,6 +39,10 @@ export type Backing = {
   locked: number;
   /** Tokens outstanding. The chain's figure once the security has a token. */
   issued: number;
+  /** Of those, the ones customers have a claim on. */
+  clientHeld: number;
+  /** Issued but not yet sold to anyone — what is left to sell. */
+  unallocated: number;
   /** What the issuance log says was minted. Equal to `issued` when all is well. */
   recorded: number;
   /** issued − recorded. Non-zero means the log and the chain disagree. */
@@ -99,11 +103,23 @@ export async function issuedQuantity(security: string): Promise<number> {
 }
 
 export async function backing(security: string): Promise<Backing> {
-  const [att, onchain, chain, recorded] = await Promise.all([
+  const [att, onchain, chain, recorded, clientHeld] = await Promise.all([
     activeAttestation(security),
     onchainCustody(security).catch(() => null),
     onchainSupply(security).catch(() => null),
     recordedQuantity(security),
+    /*
+     * What customers between them are owed.
+     *
+     * Reported because its absence was the one thing making the public page and
+     * the trading page look like they disagreed: buying does not mint and
+     * selling does not burn, so tokens outstanding stays flat at a hundred
+     * while what is left to sell falls. Both figures were right and neither
+     * explained the other.
+     */
+    import("./ledger").then((m) => m.totalLiabilities())
+      .then((ls) => ls.find((l) => l.asset === security)?.amount ?? 0)
+      .catch(() => 0),
   ]);
 
   /*
@@ -151,6 +167,8 @@ export async function backing(security: string): Promise<Backing> {
     underlying,
     locked,
     issued,
+    clientHeld,
+    unallocated: Math.max(0, issued - clientHeld),
     recorded,
     drift: issued - recorded,
     source: chain ? "chain" : "ledger",

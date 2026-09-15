@@ -234,3 +234,49 @@ export async function recordIssuance(input: {
     returning id::text`;
   return rows[0].id;
 }
+
+/**
+ * Makes the issuance log agree with the chain.
+ *
+ * Needed because the two legitimately diverge: minting uses the issuing key and
+ * happens outside this app, so a mint is real before anything writes it down.
+ * The ordinary mint path cannot close that gap — it asks `canIssue` first, and
+ * the tokens it is trying to record are already counted against the ceiling, so
+ * recording a mint that has happened is refused for having no headroom.
+ *
+ * This is not a way around the ceiling. The quantity is read from the chain and
+ * never taken from the caller, so the most it can do is write down tokens that
+ * demonstrably exist. It cannot create room to issue and it cannot invent a
+ * number.
+ *
+ * Only the direction where the chain leads is repaired. A log claiming more
+ * than the chain holds means a mint was recorded and never executed, and which
+ * of those two is wrong is a question for a person, not a default.
+ */
+export async function reconcileIssuance(
+  security: string,
+  input: { txHash?: string | null; actor?: string | null } = {},
+): Promise<{ recorded: number; issued: number; added: number }> {
+  const chain = await onchainSupply(security);
+  if (!chain) {
+    throw new Error(`${security} has no token address registered, so there is no chain figure to reconcile against.`);
+  }
+  const recorded = await recordedQuantity(security);
+  const drift = chain.quantity - recorded;
+
+  if (drift === 0) return { recorded, issued: chain.quantity, added: 0 };
+  if (drift < 0) {
+    throw new Error(
+      `The log records ${recorded} but only ${chain.quantity} exist on-chain. ` +
+      `That is a mint written down and never executed — it needs a decision, not a reconciliation.`,
+    );
+  }
+
+  await migrate();
+  await db()`
+    insert into capx.issuance_events (security, kind, quantity, tx_hash, actor)
+    values (${security}, 'mint', ${drift}, ${input.txHash ?? null},
+            ${input.actor ? `${input.actor} (reconciled to chain)` : "reconciled to chain"})`;
+
+  return { recorded, issued: chain.quantity, added: drift };
+}

@@ -173,6 +173,23 @@ export function SecuritiesDesk() {
                     ? `${b.drift.toLocaleString()} more on-chain than the issuance log records — a mint happened that was never written down.`
                     : `${Math.abs(b.drift).toLocaleString()} recorded in the issuance log but not on-chain — a mint was logged and never executed.`}
                   {" "}Issuance is measured against the larger of the two until this is resolved.
+                  {/*
+                    * Only the direction the chain leads can be repaired here.
+                    * The quantity comes from the chain, never from this button,
+                    * so the most it can do is write down tokens that already
+                    * exist. The other direction — logged but never minted — is
+                    * a question about which record is wrong, and that needs a
+                    * person rather than a default.
+                    */}
+                  {b.drift > 0 && (
+                    <button
+                      onClick={() => void act({ action: "reconcile", security: s.symbol })}
+                      disabled={busy}
+                      className="ml-2 rounded-full border border-current px-3 py-1 text-[11px] font-medium hover:opacity-70 disabled:opacity-40"
+                    >
+                      Record it
+                    </button>
+                  )}
                 </p>
               )}
 

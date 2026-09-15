@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { db, migrate, dbConfigured } from "@/lib/db";
-import { backing, canIssue, recordIssuance } from "@/lib/custody";
+import { backing, canIssue, recordIssuance, reconcileIssuance } from "@/lib/custody";
 
 export const dynamic = "force-dynamic";
 
@@ -179,6 +179,22 @@ export async function POST(req: Request) {
         // A refusal here is the invariant doing its job, not a server fault.
         return NextResponse.json(
           { ok: false, error: e instanceof Error ? e.message : "issuance refused" },
+          { status: 409 },
+        );
+      }
+    }
+
+    if (action === "reconcile") {
+      const security = String(body.security ?? "").trim().toUpperCase();
+      try {
+        const r = await reconcileIssuance(security, {
+          txHash: body.txHash ?? null,
+          actor: String(body.actor ?? "admin"),
+        });
+        return NextResponse.json({ ok: true, ...r, backing: await backing(security) });
+      } catch (e) {
+        return NextResponse.json(
+          { ok: false, error: e instanceof Error ? e.message : "reconciliation refused" },
           { status: 409 },
         );
       }

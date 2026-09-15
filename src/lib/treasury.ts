@@ -208,6 +208,32 @@ function signer() {
   };
 }
 
+/**
+ * One contract write from the treasury, queued behind every other.
+ *
+ * Exported so callers outside this file can send without each building their
+ * own wallet client — two signers on one key pick nonces independently, which
+ * is what produced the "nonce too low" failures on USDC buys.
+ */
+export async function treasuryWrite(args: {
+  address: `0x${string}`;
+  abi: readonly unknown[];
+  functionName: string;
+  args: readonly unknown[];
+}): Promise<`0x${string}`> {
+  const { wallet } = signer();
+  return signedSend((nonce) =>
+    wallet.writeContract({
+      address: args.address,
+      // viem's generics want a literal ABI; this one is chosen by the caller.
+      abi: args.abi as never,
+      functionName: args.functionName as never,
+      args: args.args as never,
+      nonce,
+    }),
+  ) as Promise<`0x${string}`>;
+}
+
 export function treasuryAddress(): `0x${string}` | null {
   return treasuryConfigured ? signer().account.address : null;
 }

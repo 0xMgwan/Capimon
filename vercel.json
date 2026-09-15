@@ -3,6 +3,10 @@
     {
       "path": "/api/ntzs/settle",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/oracle/sync",
+      "schedule": "0 * * * 1-5"
     }
   ]
 }

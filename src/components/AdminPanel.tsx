@@ -10,6 +10,12 @@ type Admin = {
               assets: { asset: string; owed: number; held: number; covered: boolean }[];
               unavailable?: string } | null;
   totalsExtra: { settledOrders: number; failedOrders: number; feesTzs: number };
+  fees?: {
+    position: { charged: number; swept: number; unswept: number; destination: string | null;
+                minimum: number; sweepable: boolean; reason: string | null } | null;
+    sweeps: { id: string; amount_tzs: number; destination: string; status: string;
+              tx_hash: string | null; error: string | null; created_at: string }[];
+  };
   ntzs: { available: true; source: string; tzs: number; usdc: number; walletAddress: string | null }
       | { available: false; reason: string } | null;
   onchain: { address: string; usdc: number; holdings: { asset: string; qty: number }[] } | null;
@@ -80,6 +86,32 @@ export function AdminPanel() {
   // the amount and the account from the failed order, so there is nothing to
   // mistype here — this only decides when to run it.
   const [note, setNote] = useState<string | null>(null);
+
+  /*
+   * Sweeping takes no amount. The figure is the difference between what the
+   * trades charged and what has already been moved, so there is nothing here to
+   * mistype — this button only decides when.
+   */
+  const sweep = async () => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "sweep-fees" }),
+      });
+      const j = await r.json();
+      setNote(j.ok
+        ? `Swept ${Number(j.amount).toLocaleString()} TZS in fees.`
+        : j.error ?? "Sweep failed.");
+      if (j.ok) await load(token);
+    } catch {
+      setNote("Could not reach the server.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const reconcile = async () => {
     setBusy(true); setNote(null);
     try {
@@ -226,6 +258,51 @@ export function AdminPanel() {
           </>
         )}
       </div>
+
+      {/*
+        * Fees earned, and how much of it is still sitting in customer float.
+        *
+        * Charged and swept are shown separately rather than as one "revenue"
+        * figure: the gap between them is money the business has earned but has
+        * not taken out, and that gap is the thing worth acting on.
+        */}
+      {data.fees?.position && (
+        <div className="mt-4 rounded-2xl border hairline px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="tnum grid flex-1 grid-cols-3 gap-4 text-sm">
+              <div><div className="eyebrow">Fees charged</div><div className="mt-1">{TZS(data.fees.position.charged)}</div></div>
+              <div><div className="eyebrow">Swept out</div><div className="mt-1">{TZS(data.fees.position.swept)}</div></div>
+              <div><div className="eyebrow">In float</div>
+                <div className="mt-1">{TZS(data.fees.position.unswept)}</div></div>
+            </div>
+            <button
+              onClick={() => void sweep()}
+              disabled={busy || !data.fees.position.sweepable}
+              title={data.fees.position.reason ?? undefined}
+              className="shrink-0 rounded-full border hairline px-4 py-2 text-[13px] font-medium hover:surface disabled:opacity-40"
+            >
+              Sweep fees
+            </button>
+          </div>
+          <p className="mt-2 text-[11px] text-[var(--muted)]">
+            {data.fees.position.reason
+              ?? `Ready to sweep to ${data.fees.position.destination?.slice(0, 10)}…${data.fees.position.destination?.slice(-6)}.`}
+          </p>
+          {data.fees.sweeps.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+              {data.fees.sweeps.map((w) => (
+                <span key={w.id} className={`tnum rounded-full px-2.5 py-1 ${
+                  w.status === "settled" ? "surface text-[var(--muted)]"
+                  : w.status === "failed" ? "bg-[var(--color-down)]/15 text-[var(--color-down)]"
+                  : "bg-[#b45309]/15 text-[#b45309]"}`}
+                  title={w.error ?? undefined}>
+                  {TZS(w.amount_tzs)} · {w.status}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {(() => {
         const r = data.reconciliation?.[0];

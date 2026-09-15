@@ -219,6 +219,29 @@ export async function migrate() {
         )`;
 
       /*
+       * Fees moved out of the omnibus.
+       *
+       * Fees are charged inside a trade and stay where the trade left them, so
+       * without a record of what has been taken out, "how much is still owed to
+       * the business" is the difference between two things that are never
+       * written down together. A sweep is recorded before the transfer is
+       * attempted and marked after, so a crash mid-flight leaves a row to
+       * reconcile rather than money moved with nothing to show for it.
+       */
+      await sql`
+        create table if not exists capx.fee_sweeps (
+          id           bigserial primary key,
+          amount_tzs   numeric(38,2) not null,
+          destination  text not null,
+          status       text not null default 'pending',
+          transfer_id  text,
+          tx_hash      text,
+          error        text,
+          created_at   timestamptz not null default now(),
+          settled_at   timestamptz
+        )`;
+
+      /*
        * Columns added after a table first shipped.
        *
        * `create table if not exists` is a no-op on an existing table, so a new
@@ -262,6 +285,7 @@ export async function migrate() {
       await sql`create unique index if not exists notif_ref_idx on capx.notifications(ref) where ref is not null`;
       await sql`create index if not exists custody_sec_idx on capx.custody_attestations(security, created_at desc)`;
       await sql`create index if not exists issuance_sec_idx on capx.issuance_events(security, created_at desc)`;
+      await sql`create index if not exists fee_sweeps_status_idx on capx.fee_sweeps(status, created_at desc)`;
       await sql`create index if not exists orders_user_idx on capx.orders(user_id, created_at desc)`;
       await sql`create index if not exists deposits_user_idx on capx.deposits(user_id, created_at desc)`;
       await sql`create index if not exists deposits_status_idx on capx.deposits(status)`;

@@ -7,7 +7,7 @@ import "server-only";
  * receiver inside the swap the user already signs — no extra approval, no extra
  * transaction, and CAPX never holds the funds.
  *
- * Live at 20 bps. Set FEE_BPS to change it, or FEE_BPS=0 to switch it off
+ * Live at 100 bps. Set FEE_BPS to change it, or FEE_BPS=0 to switch it off
  * without a deploy. Charging a fee on securities transactions carries licensing
  * obligations — that is a business decision, taken deliberately, not a default
  * that drifted in.
@@ -16,10 +16,17 @@ import "server-only";
 export const FEE_RECEIVER =
   (process.env.FEE_RECEIVER ?? "0xc7cC8B3169a3e17981D8429E1D0Cef8CCcD6104e") as `0x${string}`;
 
-/** Hard ceiling so a mistyped env var cannot charge a user 20%. */
-const MAX_FEE_BPS = 100;
+/**
+ * Hard ceiling so a mistyped env var cannot charge a user 20%.
+ *
+ * Kept above the configured rate rather than equal to it. Pinned at the same
+ * value, the clamp stops being a guard: every typo above it lands on exactly
+ * the number that was wanted, so a wrong one is indistinguishable from a right
+ * one until someone reads the config.
+ */
+const MAX_FEE_BPS = 200;
 
-const DEFAULT_FEE_BPS = 20;
+const DEFAULT_FEE_BPS = 100;
 
 // An explicit FEE_BPS wins, including "0" to disable. An unset or unparseable
 // value falls back to the default rather than silently charging nothing.
@@ -41,8 +48,8 @@ export type FeeParams = {
 };
 
 /**
- * Always take the fee on whichever leg is USDC — charging the equity leg would
- * accrue fractional shares in thirteen different tokens.
+ * Always take the fee on whichever leg is cash — charging the equity leg would
+ * accrue fractional shares in fourteen different tokens.
  */
 export function feeParams(side: "buy" | "sell"): FeeParams | null {
   if (!feeEnabled) return null;
@@ -66,3 +73,22 @@ export function feeDisclosure(side: "buy" | "sell", amountUsd: number) {
     amountUsd: (amountUsd * FEE_BPS) / 10_000,
   };
 }
+
+/**
+ * Where swept fees are sent.
+ *
+ * Deliberately has no default. Everything else here can fall back to something
+ * sensible because getting it wrong charges a slightly wrong amount; getting
+ * this wrong sends money to the wrong address. An unset value disables sweeping
+ * rather than picking a destination on the operator's behalf.
+ */
+export const FEE_SWEEP_ADDRESS = (process.env.FEE_SWEEP_ADDRESS ?? "").trim().toLowerCase();
+export const feeSweepConfigured = /^0x[0-9a-f]{40}$/.test(FEE_SWEEP_ADDRESS);
+
+/**
+ * Below this, a sweep costs more attention than it moves.
+ *
+ * Fees accrue a few shillings at a time, and a transfer per trade would be a
+ * lot of moving parts for money that is not going anywhere.
+ */
+export const FEE_SWEEP_MIN_TZS = Number(process.env.FEE_SWEEP_MIN_TZS ?? 5_000);

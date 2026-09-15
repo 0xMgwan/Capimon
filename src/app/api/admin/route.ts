@@ -93,13 +93,16 @@ export async function GET(req: Request) {
     ]);
 
     // Reported separately: an unreachable dependency is not a shortfall.
-    const [solvency, ntzs, onchain, caps, route] = await Promise.all([
+    const [solvency, ntzs, onchain, caps, route, feePos, sweeps] = await Promise.all([
       treasuryConfigured ? checkSolvency().catch(() => null) : null,
       ntzsConfigured ? ntzsTreasury().catch(() => null) : null,
       treasuryConfigured ? treasuryHoldings().catch(() => null) : null,
       ntzsConfigured ? capabilities().catch(() => null) : null,
       ntzsConfigured ? collectionRoute().catch(() => null) : null,
+      import("@/lib/feeSweep").then((m) => m.feePosition()).catch(() => null),
+      import("@/lib/feeSweep").then((m) => m.recentSweeps(10)).catch(() => []),
     ]);
+    const fees = { position: feePos, sweeps };
 
     return NextResponse.json({
       ok: true,
@@ -120,6 +123,7 @@ export async function GET(req: Request) {
         failedOrders: totals[0]?.failed_orders ?? 0,
         feesTzs: Number(totals[0]?.fees_tzs ?? 0),
       },
+      fees,
       solvency,
       // The two sides of custody: shillings held at nTZS, shares and USDC held onchain.
       ntzs,
@@ -165,6 +169,28 @@ export async function POST(req: Request) {
      * solvency check and the account from the failed order that caused it, so
      * an operator cannot fat-finger a balance. Idempotent on the order id.
      */
+    /*
+     * Move accrued trade fees out of the customer float.
+     *
+     * The amount is never taken from the request — it is the difference between
+     * what the trades charged and what has already been moved, so an operator
+     * cannot sweep a number they typed. The destination is an env var for the
+     * same reason.
+     */
+    if (body.action === "sweep-fees") {
+      const { sweepFees, feePosition } = await import("@/lib/feeSweep");
+      try {
+        const { id, amount, txHash } = await sweepFees({ force: body.force === true });
+        return NextResponse.json({ ok: true, id, amount, txHash, position: await feePosition() });
+      } catch (e) {
+        return NextResponse.json(
+          { ok: false, error: e instanceof Error ? e.message : "sweep failed",
+            position: await feePosition() },
+          { status: 409 },
+        );
+      }
+    }
+
     if (body.action === "reconcile-shortfall") {
       const { reconcileSwapDrift, reconcileShortfall } = await import("@/lib/reconcile");
       // The precise repair first — an interrupted order explains itself — then

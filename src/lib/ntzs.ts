@@ -383,6 +383,35 @@ export async function transferUsdc(input: {
   });
 }
 
+/**
+ * Moves shillings out of a wallet, on the same endpoint USDC uses.
+ *
+ * nTZS carries eighteen decimals but the API is given a human amount, so the
+ * figure sent is shillings — rounding to two places, since the ledger does not
+ * track fractions finer than that and a value the omnibus cannot actually hold
+ * would be refused rather than truncated.
+ */
+export async function transferNtzs(input: {
+  fromUserId: string;
+  toAddress: string;
+  amountTzs: number;
+  purpose: string;
+  /** Makes a retry the same request rather than a second transfer. */
+  reference?: string;
+}) {
+  return call<{ id?: string; txHash?: string; [k: string]: unknown }>("/api/v1/transfers", {
+    method: "POST",
+    body: {
+      fromUserId: input.fromUserId,
+      toAddress: input.toAddress,
+      token: "NTZS",
+      amount: Number(input.amountTzs.toFixed(2)),
+      metadata: { source: "capx", purpose: input.purpose, reference: input.reference ?? null },
+    },
+    idempotent: true,
+  });
+}
+
 /* ------------------------------------------------------------------ ramp -- */
 
 /**

@@ -5,6 +5,7 @@ import { motion, useScroll, useTransform, useReducedMotion } from "motion/react"
 import { useEffect, useRef, useState } from "react";
 import { useMarkets } from "@/lib/useMarkets";
 import { Counter } from "./Counter";
+import { QuickBuy } from "./QuickBuy";
 import { RevealWords } from "./Reveal";
 import { compactUsd } from "@/lib/format";
 import { Sparkline } from "./Sparkline";
@@ -89,48 +90,68 @@ export function Hero() {
         <div className="absolute inset-0 bg-gradient-to-b from-[var(--bg)]/10 via-transparent to-[var(--bg)]" />
       </motion.div>
 
-      <motion.div style={reduced ? undefined : { y, opacity }} className="mx-auto w-full max-w-[1400px] px-5 pb-10 pt-10 sm:px-8 sm:pb-16 sm:pt-20">
-        <h1 className="display text-center text-[clamp(2.4rem,9vw,8.5rem)] sm:text-left">
-          <RevealWords text="Own the open" />
-          <br />
-          <span className="italic font-light tracking-[-0.02em]">
-            <RevealWords text="market." delay={0.16} />
-          </span>
-        </h1>
+      {/*
+        * Headline and ticket side by side.
+        *
+        * The hero used to run the full width with nothing to the right of the
+        * headline, and the ticket — the one thing a visitor came to do — sat a
+        * scroll below it. The empty half was the right size for it, and the
+        * type is large enough that it loses nothing by giving up the space.
+        */}
+      <motion.div style={reduced ? undefined : { y, opacity }} className="mx-auto w-full max-w-[1400px] px-5 pb-8 pt-8 sm:px-8 sm:pb-12 sm:pt-12">
+        <div className="grid items-center gap-8 lg:grid-cols-[1.15fr_minmax(360px,420px)] lg:gap-12">
+          <div>
+            <h1 className="display text-[clamp(2.2rem,7.5vw,6.5rem)]">
+              <RevealWords text="Own the open" />
+              <br />
+              <span className="contra">
+                <RevealWords text="market." delay={0.16} />
+              </span>
+            </h1>
 
-        <motion.div
-          initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.45, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-7 flex flex-col gap-7 sm:mt-8 sm:gap-8 lg:flex-row lg:items-end lg:justify-between"
-        >
-          <p className="mx-auto max-w-xl text-center text-[17px] leading-relaxed text-[var(--muted)] sm:mx-0 sm:text-left sm:text-xl">
-            CAPX puts public equities onchain — Wall Street and Dar es Salaam on
-            the same rails. Buy US shares in dollars or CRDB Bank in shillings,
-            priced by live marks, settled against custody published on Base.
-          </p>
+            <motion.div
+              initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.45, ease: [0.16, 1, 0.3, 1] }}
+              className="mt-6 flex flex-col gap-5 sm:mt-7"
+            >
+              {/* Three lines said what one does. A hero is a claim, not a
+                  summary — the detail has a whole page of its own. */}
+              <p className="max-w-md text-[17px] leading-snug text-[var(--muted)] sm:text-lg">
+                US shares in dollars. Tanzanian shares in shillings.
+                Settled against custody published on Base.
+              </p>
 
-          <div className="flex w-full flex-col gap-2.5 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-            <Link
-              href="/markets"
-              className="group inline-flex items-center justify-center gap-2 rounded-full bg-[var(--fg)] px-6 py-4 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95 sm:py-3.5"
-            >
-              Explore markets
-              <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
-            </Link>
-            <Link
-              href="/how-it-works"
-              className="rounded-full border hairline bg-[var(--bg)] px-6 py-4 text-center text-sm font-medium sm:bg-[var(--bg)]/60 sm:backdrop-blur transition-colors hover:surface sm:py-3.5"
-            >
-              How it works
-            </Link>
+              <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+                <Link
+                  href="/markets"
+                  className="group inline-flex items-center justify-center gap-2 rounded-full bg-[var(--fg)] px-6 py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95"
+                >
+                  Explore markets
+                  <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
+                </Link>
+                <Link
+                  href="/how-it-works"
+                  className="rounded-full border hairline bg-[var(--bg)]/60 px-6 py-3.5 text-center text-sm font-medium backdrop-blur transition-colors hover:surface"
+                >
+                  How it works
+                </Link>
+              </div>
+            </motion.div>
           </div>
-        </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.55, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <QuickBuy />
+          </motion.div>
+        </div>
 
         {/* Live proof-of-life strip: real TVL, real movers, no placeholders. */}
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.62, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-10 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border hairline bg-[var(--border)] sm:mt-14 lg:grid-cols-4"
+          className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border hairline bg-[var(--border)] sm:mt-10 lg:grid-cols-4"
         >
           <div className="bg-[var(--bg)] p-4 sm:bg-[var(--bg)]/80 sm:p-5 sm:backdrop-blur">
             <div className="eyebrow">Onchain value</div>

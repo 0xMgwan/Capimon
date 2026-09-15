@@ -167,12 +167,14 @@ export function WalletSection() {
     }
   };
 
+  // A section heading, not a second hero. At the old size it took a third of a
+  // screen to introduce a balance and a list.
   return (
-    <section className="mt-10">
+    <section className="mt-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="eyebrow">Wallet</div>
-          <h2 className="display mt-2 text-[clamp(1.35rem,3.6vw,2.4rem)]">Cash and activity.</h2>
+          <h2 className="display mt-1.5 text-[clamp(1.25rem,2.6vw,1.75rem)]">Cash and activity.</h2>
         </div>
       </div>
 

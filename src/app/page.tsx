@@ -1,5 +1,4 @@
 import { Hero } from "@/components/Hero";
-import { QuickBuy } from "@/components/QuickBuy";
 import {
   StackStrip, ProductsSection, LiveBoard, StatsBand, BeliefSection, PillarsSection, ClosingCTA,
 } from "@/components/HomeSections";
@@ -9,8 +8,8 @@ export default function Home() {
     <>
       {/*
        * The phone gets the short version: arrive, see it is real, buy, leave.
-       * Hero, the trust strip, the ticket, what CAPX is, and the closing call —
-       * about five screens.
+       * The ticket is inside the hero now, so buying is the first screen
+       * rather than the third.
        *
        * The four narrative sections below are the argument rather than the
        * offer, and on a phone they turned the page into thirteen swipes that
@@ -20,7 +19,6 @@ export default function Home() {
        */}
       <Hero />
       <StackStrip />
-      <QuickBuy />
       <ProductsSection />
 
       <div className="hidden md:block">

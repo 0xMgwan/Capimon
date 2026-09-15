@@ -8,7 +8,6 @@ import { useMarkets } from "@/lib/useMarkets";
 import { useVenues } from "@/lib/useVenues";
 import { AssetPicker } from "./AssetPicker";
 import { AssetLogo } from "./AssetLogo";
-import { Reveal, RevealWords } from "./Reveal";
 import { UsdcIcon } from "./icons/Usdc";
 import { NtzsIcon } from "./icons/Ntzs";
 import { usd } from "@/lib/format";
@@ -20,6 +19,11 @@ const PRESETS_TZS = [25_000, 100_000, 250_000, 500_000];
  * A single order ticket: how much, what, what you get. The company selector is
  * a picker rather than a second panel, so amount and asset stay one decision
  * instead of reading as two separate tabs.
+ *
+ * It lives in the hero rather than in a section of its own a scroll further
+ * down. The wide hero had a headline on the left and nothing beside it, while
+ * the one thing a visitor came to do sat below the fold — the empty half was
+ * exactly the right size for it.
  */
 export function QuickBuy() {
   const { data, ticks } = useMarkets();
@@ -88,41 +92,7 @@ export function QuickBuy() {
   };
 
   return (
-    <section className="border-y hairline">
-      <div className="mx-auto max-w-[1400px] px-5 py-12 sm:px-8 sm:py-20 lg:py-28">
-        <div className="grid gap-10 lg:grid-cols-[1fr_minmax(380px,460px)] lg:gap-16">
-          <Reveal>
-            <div className="lg:sticky lg:top-36">
-              <div className="eyebrow">Quick buy</div>
-              <h2 className="display mt-4 text-[clamp(1.65rem,4.6vw,3.6rem)]">
-                <RevealWords text="One ticket." />
-                <br />
-                <span className="contra text-[var(--muted)]">
-                  <RevealWords text="Thirteen companies." delay={0.1} />
-                </span>
-              </h2>
-              <p className="mt-5 max-w-sm text-[15px] leading-relaxed text-[var(--muted)]">
-                Everything settles in USDC on Base. Set a size, pick a company, and CAPX shows the
-                live oracle-implied position before you go anywhere near a signature.
-              </p>
-
-              <dl className="mt-8 grid max-w-sm grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)]">
-                <div className="bg-[var(--bg)] p-4">
-                  <dt className="eyebrow">Settles in</dt>
-                  <dd className="mt-1.5 flex items-center gap-1.5 text-lg font-medium">
-                    <UsdcIcon className="h-4 w-4" /> USDC
-                  </dd>
-                </div>
-                <div className="bg-[var(--bg)] p-4">
-                  <dt className="eyebrow">Custody</dt>
-                  <dd className="mt-1.5 text-lg font-medium">Yours</dd>
-                </div>
-              </dl>
-            </div>
-          </Reveal>
-
-          <Reveal delay={0.08}>
-            <div className="rounded-3xl border hairline p-5 shadow-sm sm:p-6">
+            <div className="rounded-3xl border hairline bg-[var(--bg)]/70 p-4 shadow-sm backdrop-blur-sm sm:p-5">
               {/* 1 — size */}
               <div className="flex items-center justify-between gap-2">
                 <div className="eyebrow flex items-center gap-1.5">
@@ -214,23 +184,21 @@ export function QuickBuy() {
               <button
                 onClick={go}
                 disabled={!selected}
-                className="group mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--fg)] py-4 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
+                className="group mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--fg)] py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
               >
                 Review {selected?.ticker ?? ""} order
                 <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
               </button>
 
-              <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
-                An oracle-implied figure. The asset page aggregates every venue on Base for a real
-                executable quote, and says plainly when an asset has no secondary market yet.{" "}
+              {/* The long version of this lived here and nobody read it. The
+                  asset page gives a real executable quote; this line only has
+                  to say that this one is not. */}
+              <p className="mt-3 text-[11px] text-[var(--muted)]">
+                Indicative. Real quote on the{" "}
                 <Link href="/how-it-works" className="underline underline-offset-2 hover:text-[var(--fg)]">
-                  How it works
-                </Link>
+                  asset page
+                </Link>.
               </p>
             </div>
-          </Reveal>
-        </div>
-      </div>
-    </section>
   );
 }

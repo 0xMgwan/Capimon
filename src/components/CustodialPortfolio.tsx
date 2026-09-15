@@ -29,13 +29,13 @@ export function CustodialPortfolio() {
   const sign = (n: number) => `${n >= 0 ? "+" : "−"}${money(Math.abs(n))}`;
 
   return (
-    <div className="mx-auto max-w-[1400px] px-5 pb-24 pt-12 sm:px-8">
+    <div className="mx-auto max-w-[1400px] px-5 pb-16 pt-7 sm:px-8 sm:pt-9">
       <Reveal>
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             <div className="eyebrow">Portfolio</div>
-            <h1 className="display mt-3 text-[clamp(1.65rem,5vw,3.6rem)]">Your book.</h1>
-            <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
+            <h1 className="display mt-2 text-[clamp(1.6rem,4vw,2.9rem)]">Your book.</h1>
+            <p className="mt-2.5 flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
               {account.user.username ? `@${account.user.username}` : account.user.email}
               <span className="rounded-full surface px-2 py-0.5 text-[11px]">held by CAPX</span>
               {canShowTzs && (
@@ -56,61 +56,61 @@ export function CustodialPortfolio() {
               <button onClick={signOut} className="underline underline-offset-2 hover:text-[var(--fg)]">Sign out</button>
             </p>
           </div>
-          <div className="grid w-full grid-cols-3 gap-px overflow-hidden rounded-2xl bg-[var(--border)] lg:w-auto">
+          {/*
+            * Return sits with the other totals rather than in a card below them.
+            *
+            * It was a full-width block carrying one number, which pushed the
+            * holdings — the thing the page is for — off the first screen. It is
+            * the most important figure here, so it belongs beside the others,
+            * not in a room of its own.
+            */}
+          <div className="grid w-full grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-4 lg:w-auto">
             <Cell label="Shares" value={<Counter value={equity} format={money} />} />
             <Cell label="Cash" value={<Counter value={shillings} format={(n) => `${Math.round(n).toLocaleString()} TZS`} />} />
             <Cell label="Total value" value={<Counter value={total} format={money} />} />
+            {pnl && pnl.invested > 0 ? (
+              <Cell
+                label="Return"
+                value={
+                  <span className={up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}>
+                    {sign(pnl.unrealised)}
+                    <span className="ml-1.5 text-[11px]">
+                      {pnl.unrealisedPct >= 0 ? "+" : ""}{pnl.unrealisedPct.toFixed(1)}%
+                    </span>
+                  </span>
+                }
+                note={
+                  Math.abs(pnl.realised) > 0.005
+                    ? `${money(pnl.invested)} in · ${sign(pnl.realised)} banked`
+                    : `${money(pnl.invested)} invested`
+                }
+              />
+            ) : (
+              <Cell label="Return" value="—" note="after your first buy" />
+            )}
           </div>
         </div>
       </Reveal>
 
-      {/*
-        Only when it says something the rows do not. With a single holding the
-        strip repeats that row's return verbatim, and a figure shown twice reads
-        as two facts — worse than not showing it. Banked gains from a position
-        already closed have nowhere else to appear, so they bring it back.
-      */}
-      {pnl && pnl.invested > 0 && (positions.length > 1 || Math.abs(pnl.realised) > 0.005) && (
-        <Reveal delay={0.04}>
-          <div className="mt-6 flex flex-wrap items-baseline gap-x-6 gap-y-2 rounded-2xl border hairline p-4">
-            <div>
-              <div className="eyebrow">Return</div>
-              <div className={`tnum mt-1 text-2xl font-medium ${up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
-                {sign(pnl.unrealised)}
-                <span className="ml-2 text-sm">
-                  {pnl.unrealisedPct >= 0 ? "+" : ""}{pnl.unrealisedPct.toFixed(2)}%
-                </span>
-              </div>
-            </div>
-            <div className="tnum text-xs text-[var(--muted)]">
-              {money(pnl.invested)} invested
-              {/* Banked gains do not vanish when a position is closed, so they
-                  are shown beside the open ones rather than folded into them. */}
-              {Math.abs(pnl.realised) > 0.005 && <> · {sign(pnl.realised)} realised</>}
-            </div>
-          </div>
-        </Reveal>
-      )}
-
       {positions.length > 0 && (
-        <Reveal delay={0.06} className="mt-6">
-          <div id="holdings" className="grid gap-2 scroll-mt-24">
+        <Reveal delay={0.06} className="mt-4">
+          <div id="holdings" className="grid gap-1.5 scroll-mt-24">
             {positions.map((p) => (
               <Link
                 key={p.symbol}
                 href={`/markets/${p.ticker.toLowerCase()}`}
-                className="flex items-center gap-3 rounded-2xl border hairline p-4 transition-colors hover:surface"
+                className="flex items-center gap-3 rounded-2xl border hairline px-4 py-3 transition-colors hover:surface"
               >
-                <AssetLogo logo={p.logo} ticker={p.ticker} color={p.color} size={40} />
+                <AssetLogo logo={p.logo} ticker={p.ticker} color={p.color} size={34} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[15px] font-medium">{p.ticker}</div>
+                  <div className="text-[14px] font-medium leading-tight">{p.ticker}</div>
                   <div className="tnum text-xs text-[var(--muted)]">
                     {p.qty.toFixed(6)}
                     {p.avgCostNative > 0 ? <> · avg {costLabel(p.avgCostNative, p.currency)}</> : <> @ {usd(p.price)}</>}
                   </div>
                 </div>
                 <div className="shrink-0 text-right">
-                  <div className="tnum text-[15px] font-medium">{money(p.value)}</div>
+                  <div className="tnum text-[14px] font-medium leading-tight">{money(p.value)}</div>
                   {/* Return on what this position cost, not the day's move —
                       the day's move is on the market page; this is the money. */}
                   {p.costBasis > 0 ? (
@@ -140,11 +140,16 @@ export function CustodialPortfolio() {
   );
 }
 
-function Cell({ label, value }: { label: React.ReactNode; value: React.ReactNode }) {
+function Cell({ label, value, note }: {
+  label: React.ReactNode; value: React.ReactNode;
+  /** Context the figure needs, where a second card used to carry it. */
+  note?: string;
+}) {
   return (
-    <div className="bg-[var(--bg)] px-3 py-3 sm:px-5 sm:py-4">
+    <div className="bg-[var(--bg)] px-3 py-3 sm:px-4 sm:py-3.5">
       <div className="eyebrow truncate">{label}</div>
-      <div className="tnum mt-1.5 text-base font-medium sm:text-lg">{value}</div>
+      <div className="tnum mt-1 text-base font-medium sm:text-lg">{value}</div>
+      {note && <div className="tnum mt-0.5 truncate text-[10px] text-[var(--muted)]">{note}</div>}
     </div>
   );
 }

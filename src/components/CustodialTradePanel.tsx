@@ -14,6 +14,7 @@ import { AssetPicker } from "./AssetPicker";
 import { useMarkets } from "@/lib/useMarkets";
 import { useVenues } from "@/lib/useVenues";
 import { usd } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 
 type Quote = {
   ok: boolean; executable?: boolean; amountOut?: number; oracleOut: number; oraclePrice: number;
@@ -33,6 +34,7 @@ const PRESETS_TZS = [25_000, 100_000, 250_000, 500_000];
  * letting it feel like magic.
  */
 export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; market?: Market }) {
+  const { t } = useT();
   const { account, refresh } = useCapimonAccount();
   const router = useRouter();
   // The same searchable list the landing page uses, so switching company from
@@ -277,7 +279,7 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
       </div>
 
       <div className="mt-3 rounded-2xl surface px-4 py-3">
-        <div className="eyebrow">You receive (est.)</div>
+        <div className="eyebrow">{t("You receive (est.)")}</div>
         <div className="tnum mt-1 flex items-baseline gap-2 text-2xl">
           {quoting ? (
             <span className="inline-block h-7 w-28 animate-pulse rounded bg-[var(--border)]" />
@@ -311,7 +313,7 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
       <div className="mt-5">
         {!canTrade ? (
           <p className="rounded-2xl border border-dashed hairline p-4 text-xs leading-relaxed text-[var(--muted)]">
-            Custodial trading is not enabled on this deployment yet.
+            {t("Custodial trading is not enabled on this deployment yet.")}
           </p>
         ) : noRoute ? (
           <p className="rounded-2xl border border-dashed hairline p-4 text-xs leading-relaxed text-[var(--muted)]">
@@ -338,7 +340,7 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
             </Link>
           ) : (
             <button disabled className="w-full rounded-full surface py-3.5 text-sm text-[var(--muted)]">
-              More than you hold
+              {t("More than you hold")}
             </button>
           )
         ) : (
@@ -382,7 +384,7 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
       <p className="mt-4 text-[11px] leading-relaxed text-[var(--muted)]">
         CAPX executes this trade from its treasury and credits your account. There is no wallet
         and nothing to sign, and CAPX holds the shares on your behalf.{" "}
-        <Link href="/join" className="underline underline-offset-2 hover:text-[var(--fg)]">What that means</Link>.
+        <Link href="/join" className="underline underline-offset-2 hover:text-[var(--fg)]">{t("What that means")}</Link>.
         Not available to US persons. Nothing here is investment advice.
       </p>
     </div>

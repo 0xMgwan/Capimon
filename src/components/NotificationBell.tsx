@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
+import { useT } from "@/lib/i18n";
 
 type Item = {
   id: string; kind: string; title: string; body: string | null;
@@ -96,6 +97,7 @@ function KindIcon({ kind }: { kind: string }) {
  * checking their money should not also have to file it.
  */
 export function NotificationBell() {
+  const { t } = useT();
   const { account } = useCapimonAccount();
   const [items, setItems] = useState<Item[]>([]);
   const [unread, setUnread] = useState(0);
@@ -165,11 +167,11 @@ export function NotificationBell() {
       {open && (
         <div className="absolute right-0 top-full z-50 mt-2.5 w-[min(21rem,calc(100vw-1.75rem))] origin-top-right overflow-hidden rounded-2xl border hairline bg-[var(--bg)] shadow-2xl shadow-black/20">
           <div className="border-b hairline px-4 py-3">
-            <span className="eyebrow">Activity</span>
+            <span className="eyebrow">{t("Activity")}</span>
           </div>
           {items.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-[var(--muted)]">
-              Nothing yet. Deposits and trades show up here.
+              {t("Nothing yet. Deposits and trades show up here.")}
             </p>
           ) : (
             <div className="scroll-thin max-h-[60vh] divide-y divide-[var(--border)] overflow-y-auto">

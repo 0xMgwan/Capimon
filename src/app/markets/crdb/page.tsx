@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CrdbPanel } from "@/components/CrdbPanel";
 import { CrdbChart } from "@/components/CrdbChart";
+import { CrdbIntro } from "@/components/CrdbIntro";
 
 export const metadata: Metadata = {
   title: "CRDB Bank Plc",
@@ -17,13 +18,7 @@ export const metadata: Metadata = {
 export default function CrdbPage() {
   return (
     <main className="mx-auto w-full max-w-3xl px-4 pb-24 pt-8 sm:px-6 sm:pt-12">
-      <div className="mb-6">
-        <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">CRDB Bank Plc</h1>
-        <p className="mt-2 max-w-xl text-sm leading-relaxed text-[var(--muted)]">
-          Tanzania&rsquo;s largest bank by assets, listed on the Dar es Salaam Stock Exchange.
-          One CRDBt is one share, held in custody and settled in shillings.
-        </p>
-      </div>
+      <CrdbIntro />
       <CrdbChart />
       <div className="mt-6" />
       <CrdbPanel />

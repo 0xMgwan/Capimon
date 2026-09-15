@@ -12,6 +12,7 @@ import { Sparkline } from "./Sparkline";
 import { usd } from "@/lib/format";
 import { useBodyLock } from "@/lib/useBodyLock";
 import { useCrdb, matchesCrdb } from "@/lib/useCrdb";
+import { useT } from "@/lib/i18n";
 
 /**
  * Company selector for the order ticket. A popover on desktop, a bottom sheet
@@ -33,6 +34,7 @@ export function AssetPicker({
    */
   trigger?: (open: () => void) => React.ReactNode;
 }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const crdb = useCrdb();
@@ -101,7 +103,7 @@ export function AssetPicker({
             <span className="flex items-center gap-1.5">
               <span className="text-sm font-medium">CRDB</span>
               <span className="rounded-full bg-[var(--color-up)]/12 px-1.5 py-0.5 text-[10px] text-[var(--color-up)]">
-                Shillings
+                {t("Shillings")}
               </span>
             </span>
             <span className="block truncate text-[11px] text-[var(--muted)]">
@@ -172,7 +174,7 @@ export function AssetPicker({
         ref={inputRef}
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Search company or ticker"
+        placeholder={t("Search company or ticker")}
         className="w-full rounded-xl bg-transparent px-3 py-2.5 text-sm outline-none placeholder:text-[var(--muted)]"
       />
     </div>

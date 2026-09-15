@@ -203,7 +203,7 @@ export function Hero() {
         className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2"
       >
         <div className="flex items-center gap-2 text-[11px] text-[var(--muted)]">
-          Scroll to explore
+          {t("Scroll to explore")}
           <motion.span animate={{ y: [0, 5, 0] }} transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}>↓</motion.span>
         </div>
       </motion.div>

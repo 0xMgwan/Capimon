@@ -12,8 +12,10 @@ import { AssetLogo } from "./AssetLogo";
 import { Counter } from "./Counter";
 import { Reveal } from "./Reveal";
 import { compactUsd, ago } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 
 export function MarketsView() {
+  const { t } = useT();
   const { data, error } = useMarkets();
   /** Shared with the table below, so one search filters both lists. */
   const [query, setQuery] = useState("");
@@ -51,9 +53,9 @@ export function MarketsView() {
           </div>
 
           <div className="grid w-full grid-cols-3 gap-px overflow-hidden rounded-2xl bg-[var(--border)] lg:w-auto">
-            <Cell label="Onchain value" value={<Counter value={data?.totals.tvl ?? 0} format={compactUsd} />} />
-            <Cell label="Assets" value={<Counter value={markets.length} format={(n) => Math.round(n).toString()} />} />
-            <Cell label="Snapshot" value={data ? ago(data.asOf) : "—"} />
+            <Cell label={t("Onchain value")} value={<Counter value={data?.totals.tvl ?? 0} format={compactUsd} />} />
+            <Cell label={t("Assets")} value={<Counter value={markets.length} format={(n) => Math.round(n).toString()} />} />
+            <Cell label={t("Snapshot")} value={data ? ago(data.asOf) : "—"} />
           </div>
         </div>
       </Reveal>
@@ -89,10 +91,10 @@ export function MarketsView() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2">
               <span className="font-medium">CRDB Bank Plc</span>
-              <span className="eyebrow">Dar es Salaam</span>
+              <span className="eyebrow">{t("Dar es Salaam")}</span>
             </div>
             <p className="mt-0.5 truncate text-[12px] text-[var(--muted)]">
-              Buy Tanzanian shares in shillings, settled in nTZS
+              {t("Buy Tanzanian shares in shillings, settled in nTZS")}
             </p>
           </div>
           <CrdbTag />
@@ -102,11 +104,11 @@ export function MarketsView() {
 
       <Reveal delay={0.06} className="mt-10">
         <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
-          <MoverCard title="Top movers" rows={gainers} />
-          <MoverCard title="Biggest drawdowns" rows={losers} />
+          <MoverCard title={t("Top movers")} rows={gainers} />
+          <MoverCard title={t("Biggest drawdowns")} rows={losers} />
           <div className="rounded-2xl border hairline p-5">
             <div className="flex items-baseline justify-between">
-              <span className="eyebrow">By sector</span>
+              <span className="eyebrow">{t("By sector")}</span>
               <span className="eyebrow">avg move</span>
             </div>
             <div className="mt-4 space-y-3">

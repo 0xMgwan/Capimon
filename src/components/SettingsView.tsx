@@ -49,12 +49,12 @@ export function SettingsView() {
     return (
       <div className="mx-auto max-w-md px-5 py-16 sm:py-24">
         <div className="eyebrow">Settings</div>
-        <h1 className="display mt-2 text-2xl">Sign in first.</h1>
+        <h1 className="display mt-2 text-2xl">{t("Sign in first.")}</h1>
         <p className="mt-3 text-sm text-[var(--muted)]">
-          Your details live behind your account.
+          {t("Your details live behind your account.")}
         </p>
         <Link href="/join" className="mt-6 inline-block rounded-full bg-[var(--fg)] px-5 py-3 text-sm font-medium text-[var(--bg)]">
-          Open an account
+          {t("Open an account")}
         </Link>
       </div>
     );
@@ -169,7 +169,7 @@ export function SettingsView() {
           <input
             value={val(name, u.name)}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Your name"
+            placeholder={t("Your name")}
             className="w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
           />
         </Field>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "@/lib/i18n";
 
 type Backing = {
   security: string; custodian: string | null;
@@ -26,6 +27,7 @@ const dt = (s: string | null) =>
  * transparency page that only looks good when the news is good is marketing.
  */
 export function ProofOfReserves() {
+  const { t } = useT();
   const [securities, setSecurities] = useState<Security[] | null>(null);
 
   useEffect(() => {
@@ -42,8 +44,8 @@ export function ProofOfReserves() {
 
   return (
     <div className="mx-auto max-w-[1100px] px-5 pb-16 pt-6 sm:px-8 sm:pb-24 sm:pt-12">
-      <div className="eyebrow">Transparency</div>
-      <h1 className="display mt-2 text-[clamp(1.8rem,5vw,3.2rem)]">Every share, accounted for.</h1>
+      <div className="eyebrow">{t("Transparency")}</div>
+      <h1 className="display mt-2 text-[clamp(1.8rem,5vw,3.2rem)]">{t("Every share, accounted for.")}</h1>
       <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-[var(--muted)]">
         Each tokenised security here is backed one-for-one by shares held with a licensed
         custodian. This page shows what is held, what has been issued against it, and when
@@ -56,7 +58,7 @@ export function ProofOfReserves() {
         </div>
       ) : securities.length === 0 ? (
         <p className="mt-10 rounded-3xl border hairline p-8 text-center text-sm text-[var(--muted)]">
-          No securities have been issued yet.
+          {t("No securities have been issued yet.")}
         </p>
       ) : (
         <div className="mt-10 grid gap-4">
@@ -95,14 +97,14 @@ export function ProofOfReserves() {
                 </div>
 
                 <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-3 lg:grid-cols-6">
-                  <Cell label="Underlying shares" value={b.underlying.toLocaleString()} />
-                  <Cell label="Locked in custody" value={b.locked.toLocaleString()} />
-                  <Cell label="Tokens outstanding" value={b.issued.toLocaleString()} />
+                  <Cell label={t("Underlying shares")} value={b.underlying.toLocaleString()} />
+                  <Cell label={t("Locked in custody")} value={b.locked.toLocaleString()} />
+                  <Cell label={t("Tokens outstanding")} value={b.issued.toLocaleString()} />
                   {/* Buying does not mint and selling does not burn, so this is
                       the figure that explains why tokens outstanding sits still
                       while the tradable pool moves. */}
-                  <Cell label="Held by customers" value={b.clientHeld.toLocaleString()} />
-                  <Cell label="Available to buy" value={b.unallocated.toLocaleString()} />
+                  <Cell label={t("Held by customers")} value={b.clientHeld.toLocaleString()} />
+                  <Cell label={t("Available to buy")} value={b.unallocated.toLocaleString()} />
                 </div>
 
                 <dl className="mt-4 grid gap-1.5 text-[13px] sm:grid-cols-2">

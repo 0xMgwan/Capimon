@@ -7,6 +7,7 @@ import { useVenues } from "@/lib/useVenues";
 import { Sparkline } from "./Sparkline";
 import { AssetLogo } from "./AssetLogo";
 import { compact, compactUsd, ago } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 
 type SortKey = "ticker" | "price" | "change" | "tvl" | "supply";
 
@@ -22,6 +23,7 @@ export function MarketTable({ limit, showSearch = true, onQuery }: {
    */
   onQuery?: (q: string) => void;
 }) {
+  const { t } = useT();
   const { data, ticks, loading, error } = useMarkets();
   const { venues } = useVenues();
   const [q, setQ] = useState("");
@@ -64,7 +66,7 @@ export function MarketTable({ limit, showSearch = true, onQuery }: {
             <input
               value={q}
               onChange={(e) => { setQ(e.target.value); onQuery?.(e.target.value); }}
-              placeholder="Search ticker, company or sector"
+              placeholder={t("Search ticker, company or sector")}
               className="w-full rounded-full border hairline bg-transparent py-2.5 pl-10 pr-4 text-sm outline-none transition-colors placeholder:text-[var(--muted)] focus:border-[var(--color-accent)]"
             />
           </div>
@@ -104,7 +106,7 @@ export function MarketTable({ limit, showSearch = true, onQuery }: {
                     <span className="text-[15px] font-semibold tracking-tight">{m.ticker}</span>
                     {v && !v.tradeable && (
                       <span className="rounded-full surface px-1.5 py-0.5 text-[9px] font-medium text-[var(--muted)]">
-                        Mint only
+                        {t("Mint only")}
                       </span>
                     )}
                   </span>
@@ -187,11 +189,11 @@ export function MarketTable({ limit, showSearch = true, onQuery }: {
                           title={v.venues.join(" + ")}
                           className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-up)]/10 px-2.5 py-1 text-[11px] font-medium text-[var(--color-up)]"
                         >
-                          Tradeable
+                          {t("Tradeable")}
                         </span>
                       ) : (
                         <span className="inline-flex items-center rounded-full surface px-2.5 py-1 text-[11px] text-[var(--muted)]">
-                          Mint only
+                          {t("Mint only")}
                         </span>
                       );
                     })()}

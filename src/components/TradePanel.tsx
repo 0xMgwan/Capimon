@@ -14,6 +14,7 @@ import { UsdcIcon } from "./icons/Usdc";
 import { AssetPicker } from "./AssetPicker";
 import { useMarkets } from "@/lib/useMarkets";
 import { useVenues } from "@/lib/useVenues";
+import { useT } from "@/lib/i18n";
 
 type Severity = "ok" | "elevated" | "severe" | "unusable" | "none";
 
@@ -34,6 +35,7 @@ type Quote = {
 const SLIPPAGE_BPS = 100; // 1%
 
 export function TradePanel({ asset, market }: { asset: AssetMeta; market?: Market }) {
+  const { t } = useT();
   const nav = useRouter();
   // Same picker as the custodial ticket and the landing page: someone browsing
   // before they sign up should not have to leave the ticket to change company.
@@ -187,7 +189,7 @@ export function TradePanel({ asset, market }: { asset: AssetMeta; market?: Marke
 
       <div className="mt-4">
         <div className="flex items-center justify-between">
-          <label className="eyebrow">You pay</label>
+          <label className="eyebrow">{t("You pay")}</label>
           {bal !== undefined && (
             <button onClick={() => setAmount(String(bal))} className="tnum text-[11px] text-[var(--muted)] hover:text-[var(--fg)]">
               Balance {bal.toFixed(side === "buy" ? 2 : 4)} {inSymbol}
@@ -293,7 +295,7 @@ export function TradePanel({ asset, market }: { asset: AssetMeta; market?: Marke
             </p>
             {severity === "unusable" ? (
               <p className="mt-3 text-xs font-medium">
-                CAPX will not route this trade. Use issuer mint and redeem instead.
+                {t("CAPX will not route this trade. Use issuer mint and redeem instead.")}
               </p>
             ) : (
               <label className="mt-3 flex cursor-pointer items-start gap-2.5 text-xs">
@@ -322,7 +324,7 @@ export function TradePanel({ asset, market }: { asset: AssetMeta; market?: Marke
           <div className="rounded-2xl border border-dashed hairline p-4">
             <div className="flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-muted)]" />
-              <span className="text-sm font-medium">No secondary market yet</span>
+              <span className="text-sm font-medium">{t("No secondary market yet")}</span>
             </div>
             <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">
               {quote.note ??
@@ -350,10 +352,10 @@ export function TradePanel({ asset, market }: { asset: AssetMeta; market?: Marke
           <div className="[&>div>button]:w-full"><WalletButton /></div>
         ) : wrongChain ? (
           <button disabled className="w-full rounded-full bg-[var(--color-down)] py-3.5 text-sm font-medium text-white">
-            Switch to Base to trade
+            {t("Switch to Base to trade")}
           </button>
         ) : !quote ? (
-          <button disabled className="w-full rounded-full surface py-3.5 text-sm text-[var(--muted)]">Enter an amount</button>
+          <button disabled className="w-full rounded-full surface py-3.5 text-sm text-[var(--muted)]">{t("Enter an amount")}</button>
         ) : !cleared ? null : insufficient ? (
           <button disabled className="w-full rounded-full surface py-3.5 text-sm text-[var(--muted)]">
             Insufficient {inSymbol}

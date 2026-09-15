@@ -11,6 +11,7 @@ import { CoinbaseIcon, MetaMaskIcon, PhantomIcon } from "./icons/Wallets";
 import { Logo } from "./Logo";
 import { useBodyLock } from "@/lib/useBodyLock";
 import { AccountForm, type AccountMode } from "./AccountForm";
+import { useT } from "@/lib/i18n";
 
 const ICONS: Record<string, (p: { className?: string }) => React.ReactElement> = {
   coinbaseWalletSDK: CoinbaseIcon,
@@ -26,6 +27,7 @@ const ICONS: Record<string, (p: { className?: string }) => React.ReactElement> =
  * than burying it — it decides who holds the assets.
  */
 export function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useT();
   const { connectors, connect, isPending } = useConnect();
   const { enabled: custodialEnabled, refresh } = useCapimonAccount();
   const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
@@ -53,7 +55,7 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
             className="fixed inset-0 z-[80] bg-black/60"
           />
           <motion.div
-            role="dialog" aria-modal="true" aria-label="Sign in to CAPX"
+            role="dialog" aria-modal="true" aria-label={t("Sign in to CAPX")}
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 16 }}
@@ -70,7 +72,7 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
               <div className="flex items-center gap-2.5">
                 <Logo className="h-7 w-7" />
                 <h2 className="font-[family-name:var(--font-display)] text-lg font-medium tracking-[-0.03em]">
-                  Welcome to CAPX
+                  {t("Welcome to CAPX")}
                 </h2>
               </div>
               <button onClick={onClose} aria-label="Close"

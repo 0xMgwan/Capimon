@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { PriceChart } from "./PriceChart";
 import type { Candle } from "@/lib/markets";
+import { useT } from "@/lib/i18n";
 
 /**
  * CRDB's price history, one point per session the exchange printed.
@@ -17,6 +18,7 @@ const fmt = (n: number) =>
   `${Math.round(n).toLocaleString("en-TZ")} TZS`;
 
 export function CrdbChart() {
+  const { t } = useT();
   const [candles, setCandles] = useState<Candle[] | null>(null);
 
   useEffect(() => {
@@ -34,7 +36,7 @@ export function CrdbChart() {
   if (candles.length < 2) {
     return (
       <div className="rounded-3xl border hairline p-6 text-sm text-[var(--muted)]">
-        No price history available from the exchange right now.
+        {t("No price history available from the exchange right now.")}
       </div>
     );
   }

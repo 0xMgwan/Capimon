@@ -14,8 +14,10 @@ import { Sparkline } from "./Sparkline";
 import { AssetLogo } from "./AssetLogo";
 import { Reveal } from "./Reveal";
 import { compact, compactUsd, usd, short, ago } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 
 export function AssetView({ asset }: { asset: AssetMeta }) {
+  const { t } = useT();
   const { market, tick } = useMarket(asset.symbol);
   const { account } = useCapimonAccount();
   const { isConnected } = useAccount();
@@ -85,26 +87,26 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
           </div>
 
           <div className="mt-6 grid gap-px overflow-hidden rounded-3xl bg-[var(--border)] sm:grid-cols-2 lg:grid-cols-4">
-            <Stat label="Onchain supply" value={market && market.supply > 0 ? compact(market.supply, 2) : "0"} sub="share-equivalents" />
-            <Stat label="Onchain value" value={market && market.tvl > 0 ? compactUsd(market.tvl) : "$0"} sub="supply × mark" />
-            <Stat label="Multiplier" value={market ? `${market.multiplier.toFixed(6)}×` : "—"} sub="corporate actions" />
-            <Stat label="Token decimals" value={market ? String(market.decimals) : "—"} sub="B20 precision" />
+            <Stat label={t("Onchain supply")} value={market && market.supply > 0 ? compact(market.supply, 2) : "0"} sub="share-equivalents" />
+            <Stat label={t("Onchain value")} value={market && market.tvl > 0 ? compactUsd(market.tvl) : "$0"} sub="supply × mark" />
+            <Stat label={t("Multiplier")} value={market ? `${market.multiplier.toFixed(6)}×` : "—"} sub="corporate actions" />
+            <Stat label={t("Token decimals")} value={market ? String(market.decimals) : "—"} sub={t("B20 precision")} />
           </div>
 
           <Reveal delay={0.06}>
             <div className="mt-6 rounded-3xl border hairline p-6">
-              <div className="eyebrow">Onchain references</div>
+              <div className="eyebrow">{t("Onchain references")}</div>
               <dl className="mt-4 space-y-3 text-sm">
                 <RefRow k="B20 token" v={asset.token} />
                 <RefRow k="Chainlink feed" v={asset.feed} />
                 {market && (
                   <div className="flex items-center justify-between gap-3">
-                    <dt className="text-[var(--muted)]">Latest round</dt>
+                    <dt className="text-[var(--muted)]">{t("Latest round")}</dt>
                     <dd className="tnum truncate text-xs">{market.roundId}</dd>
                   </div>
                 )}
                 <div className="flex items-center justify-between gap-3">
-                  <dt className="text-[var(--muted)]">Feed status</dt>
+                  <dt className="text-[var(--muted)]">{t("Feed status")}</dt>
                   <dd className={`tnum text-xs ${market?.stale ? "text-[var(--muted)]" : "text-[var(--color-up)]"}`}>
                     {market ? (market.stale ? "cold — missed a session" : "live · 24/5") : "—"}
                   </dd>
@@ -121,7 +123,7 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
 
         <div id="ticket" className="scroll-mt-24 lg:sticky lg:top-32 lg:self-start">
           <Reveal delay={0.08}>
-            <PanelBoundary label="Order ticket">
+            <PanelBoundary label={t("Order ticket")}>
               {custodial
                 ? <CustodialTradePanel asset={asset} market={market} />
                 : <TradePanel asset={asset} market={market} />}

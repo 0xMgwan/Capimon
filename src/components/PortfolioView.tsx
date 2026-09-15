@@ -16,6 +16,7 @@ import { CostBasis } from "./CostBasis";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { CustodialPortfolio } from "./CustodialPortfolio";
 import { usd, compactUsd, short } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 
 type Position = {
   symbol: string; ticker: string; name: string; color: string; token: string;
@@ -24,6 +25,7 @@ type Position = {
 type Portfolio = { ok: boolean; positions: Position[]; equity: number; cash: number; total: number; gas: number; error?: string };
 
 export function PortfolioView() {
+  const { t } = useT();
   const { address: connected, isConnected } = useAccount();
   const { account: custodial } = useCapimonAccount();
   const params = useSearchParams();
@@ -70,8 +72,8 @@ export function PortfolioView() {
     return (
       <div className="mx-auto max-w-[1400px] px-5 py-10 sm:px-8 sm:py-16 lg:py-24">
         <div className="mx-auto max-w-lg rounded-3xl border hairline p-10 text-center">
-          <div className="eyebrow">Portfolio</div>
-          <h1 className="display mt-4 text-4xl">Read your positions off Base.</h1>
+          <div className="eyebrow">{t("Portfolio")}</div>
+          <h1 className="display mt-4 text-4xl">{t("Read your positions off Base.")}</h1>
           <p className="mt-4 text-[15px] leading-relaxed text-[var(--muted)]">
             CAPX holds nothing. Connect a wallet and we query the B20 contracts on Base directly,
             then mark every balance against the live Chainlink feed.
@@ -92,8 +94,8 @@ export function PortfolioView() {
       <Reveal>
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
-            <div className="eyebrow">Portfolio</div>
-            <h1 className="display mt-3 text-[clamp(1.65rem,5vw,3.6rem)]">Your onchain book.</h1>
+            <div className="eyebrow">{t("Portfolio")}</div>
+            <h1 className="display mt-3 text-[clamp(1.65rem,5vw,3.6rem)]">{t("Your onchain book.")}</h1>
             <p className="tnum mt-3 flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
               <a href={`https://basescan.org/address/${address}`} target="_blank" rel="noreferrer" className="hover:text-[var(--fg)]">
                 {short(address)} ↗
@@ -104,14 +106,14 @@ export function PortfolioView() {
             </p>
           </div>
           <div className="grid w-full grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-4 lg:w-auto">
-            <Cell label="Total value" value={<Counter value={pf?.total ?? 0} format={(n) => usd(n)} />} />
+            <Cell label={t("Total value")} value={<Counter value={pf?.total ?? 0} format={(n) => usd(n)} />} />
             <Cell label="Equities" value={<Counter value={pf?.equity ?? 0} format={(n) => usd(n)} />} />
             <Cell
               label={<span className="inline-flex items-center gap-1.5"><UsdcIcon className="h-3.5 w-3.5" />USDC</span>}
               value={<Counter value={pf?.cash ?? 0} format={(n) => usd(n)} />}
             />
             <Cell
-              label="Session P&L"
+              label={t("Session P&L")}
               value={<span className={dayPnl >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}>{dayPnl >= 0 ? "+" : ""}{usd(dayPnl)}</span>}
             />
           </div>
@@ -127,13 +129,13 @@ export function PortfolioView() {
       <Reveal delay={0.06} className="mt-10">
         {positions.length === 0 ? (
           <div className="rounded-3xl border border-dashed hairline p-12 text-center">
-            <h2 className="font-[family-name:var(--font-display)] text-2xl font-medium tracking-[-0.04em]">No B20 positions yet</h2>
+            <h2 className="font-[family-name:var(--font-display)] text-2xl font-medium tracking-[-0.04em]">{t("No B20 positions yet")}</h2>
             <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-[var(--muted)]">
               This wallet holds none of the {markets?.totals.assets ?? 13} tokenized equities CAPX tracks
               on Base.{" "}
               {pf && pf.cash > 0 && (
                 <span className="inline-flex items-center gap-1.5">
-                  It does hold {usd(pf.cash)} <UsdcIcon className="h-3.5 w-3.5" /> USDC, ready to deploy.
+                  It does hold {usd(pf.cash)} <UsdcIcon className="h-3.5 w-3.5" /> {t("USDC, ready to deploy.")}
                 </span>
               )}
             </p>

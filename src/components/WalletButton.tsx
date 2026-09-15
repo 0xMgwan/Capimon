@@ -8,6 +8,7 @@ import { formatUnits } from "viem";
 import { short, usd } from "@/lib/format";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { AuthModal } from "./AuthModal";
+import { useT } from "@/lib/i18n";
 
 /**
  * The single entry point: signed out it opens the auth modal, signed in it
@@ -15,6 +16,7 @@ import { AuthModal } from "./AuthModal";
  * self-custody, an email for a custodial account.
  */
 export function WalletButton() {
+  const { t } = useT();
   const { address, isConnected } = useAccount();
   const { account, signOut } = useCapimonAccount();
   const [authOpen, setAuthOpen] = useState(false);
@@ -68,7 +70,7 @@ export function WalletButton() {
               onClick={() => { disconnect(); setOpen(false); }}
               className="w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--color-down)] transition-colors hover:surface"
             >
-              Disconnect
+              {t("Disconnect")}
             </button>
           </div>
         )}
@@ -94,19 +96,19 @@ export function WalletButton() {
         {open && (
           <div className="absolute right-0 z-50 mt-2 w-60 rounded-2xl border hairline bg-[var(--bg)] p-2 shadow-2xl shadow-black/10">
             <div className="rounded-xl surface p-3">
-              <div className="eyebrow">Signed in</div>
+              <div className="eyebrow">{t("Signed in")}</div>
               <div className="mt-1 truncate text-sm">{account.user.email}</div>
               <div className="tnum mt-2 text-sm">{usd(account.total)}</div>
               <div className="mt-0.5 text-[11px] text-[var(--muted)]">held by CAPX for you</div>
             </div>
-            <a href="/portfolio" className="mt-1 block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">Portfolio</a>
-            <a href="/settings" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">Settings</a>
-            <a href="/join" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">Fund with shillings</a>
+            <a href="/portfolio" className="mt-1 block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">{t("Portfolio")}</a>
+            <a href="/settings" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">{t("Settings")}</a>
+            <a href="/join" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">{t("Fund with shillings")}</a>
             <button
               onClick={() => { void signOut(); setOpen(false); }}
               className="w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--color-down)] transition-colors hover:surface"
             >
-              Sign out
+              {t("Sign out")}
             </button>
           </div>
         )}
@@ -120,7 +122,7 @@ export function WalletButton() {
         onClick={() => setAuthOpen(true)}
         className="rounded-full bg-[var(--fg)] px-5 py-2 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95"
       >
-        Sign in
+        {t("Sign in")}
       </button>
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
     </>

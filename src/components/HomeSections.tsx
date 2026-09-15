@@ -11,6 +11,7 @@ import { MarketTable } from "./MarketTable";
 import { Sparkline } from "./Sparkline";
 import { AssetLogo } from "./AssetLogo";
 import { compactUsd, compact } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 
 /* ------------------------------------------------------------------ */
 
@@ -29,6 +30,7 @@ const STACK = [
 ];
 
 export function StackStrip() {
+  const { t } = useT();
   return (
     <section className="border-y hairline py-7">
       <div className="mx-auto mb-5 max-w-[1400px] px-5 sm:px-8">
@@ -41,7 +43,7 @@ export function StackStrip() {
             <span className="font-[family-name:var(--font-display)] text-xl font-medium tracking-[-0.03em] sm:text-2xl">
               {p.name}
             </span>
-            <span className="text-[11px] text-[var(--muted)]">{p.role}</span>
+            <span className="text-[11px] text-[var(--muted)]">{t(p.role)}</span>
           </span>
         ))}
       />
@@ -52,6 +54,7 @@ export function StackStrip() {
 /* ------------------------------------------------------------------ */
 
 export function ProductsSection() {
+  const { t } = useT();
   const { data } = useMarkets();
   const markets = data?.markets ?? [];
   const tvl = data?.totals.tvl ?? 0;
@@ -87,21 +90,21 @@ export function ProductsSection() {
                   </svg>
                 </div>
                 <h3 className="mt-4 sm:mt-6 font-[family-name:var(--font-display)] text-2xl font-medium tracking-[-0.04em] sm:text-3xl lg:text-4xl">
-                  CAPX Equities
+                  {t("CAPX Equities")}
                 </h3>
                 <p className="mt-3 text-[17px] leading-relaxed text-[var(--muted)]">
                   Public companies as B20 tokens. Freely transferable, composable in DeFi,
                   and marked continuously by Chainlink total-return feeds.
                 </p>
                 <span className="mt-4 inline-block rounded-full surface px-3 py-1 text-[11px] text-[var(--muted)]">
-                  Not available to US persons
+                  {t("Not available to US persons")}
                 </span>
               </div>
 
               <div className="grid flex-1 grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:min-w-[280px]">
-                <Stat label="Onchain value" value={<Counter value={tvl} format={compactUsd} />} />
+                <Stat label={t("Onchain value")} value={<Counter value={tvl} format={compactUsd} />} />
                 <Stat label="Assets" value={<Counter value={equities} format={(n) => Math.round(n).toString()} />} />
-                <Stat label="Live feeds" value={<Counter value={feeds} format={(n) => `${Math.round(n)}/${equities}`} />} />
+                <Stat label={t("Live feeds")} value={<Counter value={feeds} format={(n) => `${Math.round(n)}/${equities}`} />} />
                 <Stat label="Settlement" value="~2s" />
               </div>
             </div>
@@ -124,7 +127,7 @@ export function ProductsSection() {
             </div>
 
             <Link href="/markets" className="mt-6 sm:mt-8 inline-flex items-center gap-2 rounded-full bg-[var(--fg)] px-5 py-3 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03]">
-              Discover CAPX Equities <span>→</span>
+              {t("Discover CAPX Equities")} <span>→</span>
             </Link>
           </div>
         </Reveal>
@@ -132,7 +135,7 @@ export function ProductsSection() {
         <div className="grid gap-4">
           <Reveal delay={0.08}>
             <SideCard
-              title="CAPX Vault"
+              title={t("CAPX Vault")}
               tag="Self-custody"
               body="Your positions live in your own wallet. CAPX reads the chain directly, so every balance on the portfolio page is an onchain read rather than our ledger."
               stat={<Counter value={equities} format={(n) => `${Math.round(n)} assets`} />}
@@ -143,7 +146,7 @@ export function ProductsSection() {
           </Reveal>
           <Reveal delay={0.16}>
             <SideCard
-              title="CAPX Feeds"
+              title={t("CAPX Feeds")}
               tag="Oracle"
               body="Total-return Chainlink feeds, running 24/5 and freezing through corporate actions. Every chart on this site is drawn from onchain rounds."
               stat={<span className="tnum">8 dp</span>}
@@ -191,6 +194,7 @@ function SideCard({
 /* ------------------------------------------------------------------ */
 
 export function LiveBoard() {
+  const { t } = useT();
   const { data } = useMarkets();
   return (
     <section className="border-y hairline">
@@ -198,8 +202,8 @@ export function LiveBoard() {
         <Reveal>
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
-              <div className="eyebrow">Live board</div>
-              <h2 className="display mt-3 text-[clamp(1.65rem,4.6vw,3.6rem)]">Everything, marked to the chain.</h2>
+              <div className="eyebrow">{t("Live board")}</div>
+              <h2 className="display mt-3 text-[clamp(1.65rem,4.6vw,3.6rem)]">{t("Everything, marked to the chain.")}</h2>
             </div>
             <Link href="/markets" className="rounded-full border hairline px-5 py-2.5 text-sm transition-colors hover:surface">
               View all {data?.totals.assets ?? ""} markets →
@@ -218,6 +222,7 @@ export function LiveBoard() {
 
 /** Scroll-pinned numbers pulled from the same live snapshot as everything else. */
 export function StatsBand() {
+  const { t } = useT();
   const ref = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
   const x = useTransform(scrollYProgress, [0, 1], ["4%", "-4%"]);
@@ -242,16 +247,16 @@ export function StatsBand() {
       {/* Phones: stacked figures with rules, which reads far better than a
           horizontal rail you cannot see the end of. */}
       <div className="mt-10 px-5 sm:hidden">
-        <StackedStat label="Onchain value" value={<Counter value={data?.totals.tvl ?? 0} format={compactUsd} />} sub="supply × Chainlink mark" />
+        <StackedStat label={t("Onchain value")} value={<Counter value={data?.totals.tvl ?? 0} format={compactUsd} />} sub="supply × Chainlink mark" />
         <StackedStat label="Share-equivalents" value={<Counter value={totalSupply} format={(n) => compact(n, 1)} />} sub="multiplier-adjusted" />
-        <StackedStat label="Oracle rounds read" value={<Counter value={rounds} format={(n) => Math.round(n).toLocaleString()} />} sub="this snapshot" />
+        <StackedStat label={t("Oracle rounds read")} value={<Counter value={rounds} format={(n) => Math.round(n).toLocaleString()} />} sub="this snapshot" />
         <StackedStat label="Settlement" value="~2s" sub="block time" />
       </div>
 
       <motion.div style={{ x }} className="mt-16 hidden gap-4 px-5 sm:flex sm:px-8">
-        <BigStat label="Onchain value" value={<Counter value={data?.totals.tvl ?? 0} format={compactUsd} />} sub="supply × Chainlink mark" />
+        <BigStat label={t("Onchain value")} value={<Counter value={data?.totals.tvl ?? 0} format={compactUsd} />} sub="supply × Chainlink mark" />
         <BigStat label="Share-equivalents" value={<Counter value={totalSupply} format={(n) => compact(n, 1)} />} sub="multiplier-adjusted" />
-        <BigStat label="Oracle rounds read" value={<Counter value={rounds} format={(n) => Math.round(n).toLocaleString()} />} sub="this snapshot" />
+        <BigStat label={t("Oracle rounds read")} value={<Counter value={rounds} format={(n) => Math.round(n).toLocaleString()} />} sub="this snapshot" />
         <BigStat label="Settlement" value="~2s" sub="block time" />
       </motion.div>
     </section>
@@ -298,11 +303,12 @@ const BELIEFS = [
 ];
 
 export function BeliefSection() {
+  const { t } = useT();
   return (
     <section className="border-y hairline">
       <div className="mx-auto max-w-[1400px] px-5 py-14 sm:px-8 sm:py-24 lg:py-32">
         <Reveal>
-          <div className="eyebrow">A message from CAPX</div>
+          <div className="eyebrow">{t("A message from CAPX")}</div>
           <h2 className="display mt-4 text-[clamp(1.65rem,5vw,4rem)]">We believe in</h2>
         </Reveal>
         <div className="mt-8 sm:mt-14 grid gap-px overflow-hidden rounded-3xl bg-[var(--border)] md:grid-cols-3">
@@ -310,8 +316,8 @@ export function BeliefSection() {
             <Reveal key={b.title} delay={i * 0.1}>
               <div className="h-full bg-[var(--bg)] p-8">
                 <div className="tnum text-xs text-[var(--muted)]">0{i + 1}</div>
-                <h3 className="mt-6 font-[family-name:var(--font-display)] text-2xl font-medium tracking-[-0.04em]">{b.title}</h3>
-                <p className="mt-3 text-[17px] leading-relaxed text-[var(--muted)]">{b.body}</p>
+                <h3 className="mt-6 font-[family-name:var(--font-display)] text-2xl font-medium tracking-[-0.04em]">{t(b.title)}</h3>
+                <p className="mt-3 text-[17px] leading-relaxed text-[var(--muted)]">{t(b.body)}</p>
               </div>
             </Reveal>
           ))}
@@ -332,18 +338,19 @@ const PILLARS = [
 ];
 
 export function PillarsSection() {
+  const { t } = useT();
   return (
     <section className="mx-auto max-w-[1400px] px-5 py-14 sm:px-8 sm:py-24 lg:py-32">
       <div className="grid gap-8 sm:gap-12 lg:grid-cols-[0.9fr_1.1fr]">
         <Reveal>
           <div className="lg:sticky lg:top-32">
-            <div className="eyebrow">Institutional grade</div>
+            <div className="eyebrow">{t("Institutional grade")}</div>
             <h2 className="display mt-4 text-[clamp(1.65rem,4.6vw,3.6rem)]">
               Serious plumbing,{" "}
               <span className="contra text-[var(--muted)]">visible to everyone.</span>
             </h2>
             <p className="mt-6 max-w-sm text-[15px] leading-relaxed text-[var(--muted)]">
-              Every claim on this page resolves to an onchain address you can check yourself.
+              {t("Every claim on this page resolves to an onchain address you can check yourself.")}
             </p>
           </div>
         </Reveal>
@@ -356,9 +363,9 @@ export function PillarsSection() {
                   <span className="tnum text-xs text-[var(--muted)]">0{i + 1}</span>
                   <div>
                     <h3 className="font-[family-name:var(--font-display)] text-xl font-medium tracking-[-0.03em] transition-colors group-hover:text-[var(--color-accent)]">
-                      {p.t}
+                      {t(p.t)}
                     </h3>
-                    <p className="mt-2 text-[15px] leading-relaxed text-[var(--muted)]">{p.b}</p>
+                    <p className="mt-2 text-[15px] leading-relaxed text-[var(--muted)]">{t(p.b)}</p>
                   </div>
                 </div>
               </div>
@@ -373,6 +380,7 @@ export function PillarsSection() {
 /* ------------------------------------------------------------------ */
 
 export function ClosingCTA() {
+  const { t } = useT();
   const { data } = useMarkets();
   const spark = data?.markets.find((m) => m.history.length > 4);
 
@@ -402,7 +410,7 @@ export function ClosingCTA() {
               Explore markets →
             </Link>
             <Link href="/portfolio" className="rounded-full border hairline px-7 py-4 text-sm font-medium transition-colors hover:surface">
-              Open portfolio
+              {t("Open portfolio")}
             </Link>
           </div>
         </Reveal>

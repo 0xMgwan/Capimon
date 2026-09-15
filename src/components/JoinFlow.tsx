@@ -7,6 +7,7 @@ import { Reveal, RevealWords } from "@/components/Reveal";
 import { UsdcIcon } from "@/components/icons/Usdc";
 import { AccountForm, type AccountMode } from "@/components/AccountForm";
 import { usd } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 
 const TZS = (n: number) => `${Math.round(n).toLocaleString()} TZS`;
 
@@ -39,6 +40,7 @@ async function api<T>(url: string, body?: unknown): Promise<T> {
  * connect a wallet instead, and the copy says so plainly.
  */
 export function JoinFlow() {
+  const { t } = useT();
   const [account, setAccount] = useState<Account | null>(null);
   const [mode, setMode] = useState<AccountMode>("signup");
   const [busy, setBusy] = useState(false);
@@ -73,7 +75,7 @@ export function JoinFlow() {
   return (
     <div className="mx-auto max-w-[1400px] px-5 pb-24 pt-12 sm:px-8">
       <Reveal>
-        <div className="eyebrow">Open an account</div>
+        <div className="eyebrow">{t("Open an account")}</div>
         <h1 className="display mt-3 max-w-3xl text-[clamp(1.8rem,6vw,4.5rem)]">
           <RevealWords text="Shillings in." />{" "}
           <span className="contra text-[var(--muted)]">
@@ -101,15 +103,15 @@ export function JoinFlow() {
           </Step>
 
           {/* 2 — deposit */}
-          <Step n={2} active={step === 2} done={(account?.cash ?? 0) > 0 || (account?.equity ?? 0) > 0} title="Fund with mobile money">
+          <Step n={2} active={step === 2} done={(account?.cash ?? 0) > 0 || (account?.equity ?? 0) > 0} title={t("Fund with mobile money")}>
             <p className="text-sm leading-relaxed text-[var(--muted)]">
               You&rsquo;ll get a prompt on your phone. Approve it and your balance appears here,
               CAPX handles the conversion.
             </p>
             <div className="mt-4 grid gap-2.5">
-              <Field label="Amount (TZS)" value={String(amountTzs)} onChange={(v) => setAmountTzs(Number(v.replace(/\D/g, "")) || 0)} inputMode="numeric" hint="min 500" />
+              <Field label={t("Amount (TZS)")} value={String(amountTzs)} onChange={(v) => setAmountTzs(Number(v.replace(/\D/g, "")) || 0)} inputMode="numeric" hint="min 500" />
               <Field
-                label="Mobile money number"
+                label={t("Mobile money number")}
                 value={form.phone || account?.user.phone || ""}
                 onChange={(v) => setForm({ ...form, phone: v })}
                 inputMode="numeric" placeholder="255712345678"
@@ -136,14 +138,14 @@ export function JoinFlow() {
           </Step>
 
           {/* 3 — trade */}
-          <Step n={3} active={step === 3} done={false} title="Buy shares" last>
+          <Step n={3} active={step === 3} done={false} title={t("Buy shares")} last>
             <div className="rounded-2xl surface p-4">
               <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-1.5 text-[var(--muted)]"><UsdcIcon className="h-3.5 w-3.5" /> Available</span>
+                <span className="flex items-center gap-1.5 text-[var(--muted)]"><UsdcIcon className="h-3.5 w-3.5" /> {t("Available")}</span>
                 <span className="tnum">{usd(account?.cash ?? 0)}</span>
               </div>
               <div className="mt-2 flex items-center justify-between text-sm">
-                <span className="text-[var(--muted)]">Shares held</span>
+                <span className="text-[var(--muted)]">{t("Shares held")}</span>
                 <span className="tnum">{usd(account?.equity ?? 0)}</span>
               </div>
             </div>
@@ -170,15 +172,15 @@ export function JoinFlow() {
             </AnimatePresence>
 
             <div className="rounded-3xl border hairline p-6">
-              <div className="eyebrow">How a deposit works</div>
+              <div className="eyebrow">{t("How a deposit works")}</div>
               <ol className="mt-4 space-y-4 text-sm leading-relaxed text-[var(--muted)]">
-                <li><span className="text-[var(--fg)]">You send shillings.</span> Approve the prompt on your phone. No card, no bank transfer.</li>
-                <li><span className="text-[var(--fg)]">They convert automatically.</span> Your shillings become USDC at the live rate.</li>
-                <li><span className="text-[var(--fg)]">Your balance appears.</span> Usually within a minute, ready to invest.</li>
-                <li><span className="text-[var(--fg)]">You buy shares.</span> CAPX places the trade onchain and records your holding.</li>
+                <li><span className="text-[var(--fg)]">You send shillings.</span> {t("Approve the prompt on your phone. No card, no bank transfer.")}</li>
+                <li><span className="text-[var(--fg)]">{t("They convert automatically.")}</span> Your shillings become USDC at the live rate.</li>
+                <li><span className="text-[var(--fg)]">Your balance appears.</span> {t("Usually within a minute, ready to invest.")}</li>
+                <li><span className="text-[var(--fg)]">{t("You buy shares.")}</span> {t("CAPX places the trade onchain and records your holding.")}</li>
               </ol>
               <p className="mt-5 border-t hairline pt-4 text-[11px] leading-relaxed text-[var(--muted)]">
-                Tokenized equities are not available to US persons. Nothing here is investment advice.
+                {t("Tokenized equities are not available to US persons. Nothing here is investment advice.")}
               </p>
             </div>
           </aside>

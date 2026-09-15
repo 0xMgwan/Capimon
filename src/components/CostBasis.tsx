@@ -5,12 +5,14 @@ import { useHistory, activityCsv, type Activity } from "@/lib/useHistory";
 import { AssetLogo } from "./AssetLogo";
 import { Reveal } from "./Reveal";
 import { usd, short } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 
 const KIND_LABEL: Record<Activity["kind"], string> = {
   buy: "Buy", sell: "Sell", receive: "Received", send: "Sent",
 };
 
 export function CostBasis({ address }: { address: string }) {
+  const { t: tr } = useT();
   const { data, loading, error } = useHistory(address);
   const [showAll, setShowAll] = useState(false);
 
@@ -36,7 +38,7 @@ export function CostBasis({ address }: { address: string }) {
   if (loading && !data) {
     return (
       <div className="mt-10 rounded-3xl border hairline p-6">
-        <div className="eyebrow">Cost basis</div>
+        <div className="eyebrow">{tr("Cost basis")}</div>
         <p className="mt-2 text-sm text-[var(--muted)]">
           Rebuilding your history from onchain transfers…
         </p>
@@ -57,7 +59,7 @@ export function CostBasis({ address }: { address: string }) {
     if (data.complete) return null;
     return (
       <div className="mt-10 rounded-2xl border border-[#b45309]/40 bg-[#b45309]/[0.06] p-5">
-        <div className="text-sm font-medium text-[#b45309]">Could not rebuild your cost basis</div>
+        <div className="text-sm font-medium text-[#b45309]">{tr("Could not rebuild your cost basis")}</div>
         <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">
           {data.missedRanges} of {data.totalRanges} block ranges could not be read, so no history is
           shown rather than a wrong one. This is RPC rate limiting. Try again shortly, or point the
@@ -75,13 +77,13 @@ export function CostBasis({ address }: { address: string }) {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="eyebrow">Cost basis &amp; performance</div>
-          <h2 className="display mt-2 text-[clamp(1.35rem,3.6vw,2.4rem)]">What you actually paid.</h2>
+          <h2 className="display mt-2 text-[clamp(1.35rem,3.6vw,2.4rem)]">{tr("What you actually paid.")}</h2>
         </div>
         <button
           onClick={download}
           className="rounded-full border hairline px-4 py-2.5 text-sm transition-colors hover:surface"
         >
-          Export CSV
+          {tr("Export CSV")}
         </button>
       </div>
 
@@ -94,10 +96,10 @@ export function CostBasis({ address }: { address: string }) {
       )}
 
       <div className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-4">
-        <Cell label="Cost basis" value={usd(t.costBasis)} />
-        <Cell label="Market value" value={usd(t.marketValue)} />
+        <Cell label={tr("Cost basis")} value={usd(t.costBasis)} />
+        <Cell label={tr("Market value")} value={usd(t.marketValue)} />
         <Cell
-          label="Unrealised"
+          label={tr("Unrealised")}
           value={<span className={t.unrealised >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}>
             {t.unrealised >= 0 ? "+" : ""}{usd(t.unrealised)}
           </span>}

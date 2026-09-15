@@ -159,4 +159,23 @@ export const SECURITIES_CONTRACTS = {
   investorRegistry: "0x7ff9a98b0769647213e5599ddc805317b1b402fa",
   custodyRegistry: "0x6aaabcd0083e0ee91deeb6a6bb06414cceb97901",
   priceOracle: "0x28d5f0b47cdb502ea5f0f8be2cfa9461afe3a440",
+  settlementEngine: "0x175dbe2391b1f3ce7bb96ca51e714f54c3e6dbc7",
 } as const;
+
+/**
+ * CRDBt — one token, one CRDB Bank Plc share.
+ *
+ * A B20 asset token created through the factory precompile, so there is no
+ * deployed bytecode to audit: the behaviour is the node's. The address is
+ * derived from the issuer and a salt fixed to the symbol, which is why it
+ * cannot be re-created or moved.
+ *
+ * The eight decimals are divisibility, not value — a holder of 0.5 CRDBt owns
+ * half a share. Custody is counted in whole shares, so every comparison between
+ * the two crosses a unit boundary; convert there rather than letting a share
+ * count and a base-unit count drift into each other.
+ */
+export const CRDBT = "0xb200000000000000000000dffcb628b299b8e60f" as const;
+export const CRDBT_DECIMALS = 8;
+/** The custody registry's key for the same asset, which counts whole shares. */
+export const CRDBT_SECURITY = "CRDB" as const;

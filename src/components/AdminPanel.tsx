@@ -12,7 +12,8 @@ type Admin = {
   totalsExtra: { settledOrders: number; failedOrders: number; feesTzs: number };
   fees?: {
     position: { charged: number; swept: number; unswept: number; destination: string | null;
-                minimum: number; sweepable: boolean; reason: string | null } | null;
+                minimum: number; sweepable: boolean; reason: string | null;
+                belowMinimum: boolean } | null;
     sweeps: { id: string; amount_tzs: number; destination: string; status: string;
               tx_hash: string | null; error: string | null; created_at: string }[];
   };
@@ -92,13 +93,13 @@ export function AdminPanel() {
    * trades charged and what has already been moved, so there is nothing here to
    * mistype — this button only decides when.
    */
-  const sweep = async () => {
+  const sweep = async (force = false) => {
     setBusy(true); setNote(null);
     try {
       const r = await fetch("/api/admin", {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: "sweep-fees" }),
+        body: JSON.stringify({ action: "sweep-fees", force }),
       });
       const j = await r.json();
       setNote(j.ok
@@ -275,13 +276,16 @@ export function AdminPanel() {
               <div><div className="eyebrow">In float</div>
                 <div className="mt-1">{TZS(data.fees.position.unswept)}</div></div>
             </div>
+            {/* Forcing is offered only for the minimum — the one refusal an
+                operator may reasonably overrule, and what makes it possible to
+                test the path before it carries anything worth losing. */}
             <button
-              onClick={() => void sweep()}
-              disabled={busy || !data.fees.position.sweepable}
+              onClick={() => void sweep(data.fees!.position!.belowMinimum)}
+              disabled={busy || !(data.fees.position.sweepable || data.fees.position.belowMinimum)}
               title={data.fees.position.reason ?? undefined}
               className="shrink-0 rounded-full border hairline px-4 py-2 text-[13px] font-medium hover:surface disabled:opacity-40"
             >
-              Sweep fees
+              {data.fees.position.belowMinimum ? "Sweep anyway" : "Sweep fees"}
             </button>
           </div>
           <p className="mt-2 text-[11px] text-[var(--muted)]">

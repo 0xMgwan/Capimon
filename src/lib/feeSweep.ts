@@ -67,6 +67,15 @@ export type FeePosition = {
   /** Whether a sweep would run right now, and why not when it would not. */
   sweepable: boolean;
   reason: string | null;
+  /**
+   * Held back only by the minimum.
+   *
+   * Distinguished from the other refusals because it is the one an operator may
+   * legitimately overrule — there is money and somewhere to send it, the amount
+   * is just small. Being able to force it is also what lets the path be tested
+   * before it is carrying anything worth losing.
+   */
+  belowMinimum: boolean;
 };
 
 export async function feePosition(): Promise<FeePosition> {
@@ -86,6 +95,7 @@ export async function feePosition(): Promise<FeePosition> {
     minimum: FEE_SWEEP_MIN_TZS,
     sweepable: reason === null,
     reason,
+    belowMinimum: feeSweepConfigured && unswept > 0 && unswept < FEE_SWEEP_MIN_TZS,
   };
 }
 
@@ -114,6 +124,24 @@ export async function sweepFees(opts: { force?: boolean; actor?: string } = {}) 
   if (!feeSweepConfigured) throw new Error(position.reason ?? "No sweep destination is configured.");
   if (position.unswept <= 0) throw new Error("Nothing to sweep.");
   if (!position.sweepable && !opts.force) throw new Error(position.reason ?? "Not sweepable.");
+
+  /*
+   * The destination must not be the omnibus itself.
+   *
+   * A transfer to your own wallet succeeds and moves nothing, but the sweep
+   * would be recorded as settled — so the fees would be marked taken while
+   * still sitting in customer float, and the figure that tells you what is owed
+   * to the business would silently start lying. Cheaper to check than to
+   * unpick.
+   */
+  const { omnibusBalances } = await import("./omnibus");
+  const omnibusWallet = (await omnibusBalances().catch(() => null))?.walletAddress;
+  if (omnibusWallet && omnibusWallet.toLowerCase() === FEE_SWEEP_ADDRESS) {
+    throw new Error(
+      "The sweep destination is the omnibus wallet itself. That would move nothing " +
+      "while recording the fees as taken — set FEE_SWEEP_ADDRESS to a different address.",
+    );
+  }
 
   const amount = position.unswept;
   const sql = db();

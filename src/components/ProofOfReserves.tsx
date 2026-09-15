@@ -131,11 +131,6 @@ export function ProofOfReserves() {
         </div>
       )}
 
-      <p className="mt-8 rounded-2xl border border-dashed hairline p-4 text-xs leading-relaxed text-[var(--muted)]">
-        <strong className="font-medium text-[var(--fg)]">Demonstration.</strong> This prototype shows
-        blockchain tokenisation and T+0 settlement. It is not an offer or sale of securities, and a
-        token here is not a legally recognised share unless a regulated integration establishes that.
-      </p>
     </div>
   );
 }

@@ -2,48 +2,75 @@
 
 /* ---------------------------------------------------------------
    CAPX design tokens
-   Type: Outfit (display, geometric — stands in for OndoSans),
-         Figtree (UI/body — stands in for Gellix),
-         Newsreader (editorial serif — stands in for Arizona),
-         JetBrains Mono (tabular market data — stands in for A2 Mono)
+
+   Type is one superfamily. Archivo is variable on weight and width,
+   so display runs wide and heavy while accents run condensed and
+   italic — the contrast comes out of one skeleton rather than three
+   unrelated faces, and the page reads as a set. JetBrains Mono keeps
+   the figures, because prices in columns must not jitter as they tick.
+
+   The neutrals carry a faint green-grey bias rather than sitting on
+   pure grey, so the ground looks chosen next to the accent.
    --------------------------------------------------------------- */
-@theme {
-  --font-display: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
-  --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-newsreader), Georgia, serif;
+/*
+ * Font stacks live here, not only in `@theme`.
+ *
+ * A theme key whose value references another variable is dropped rather than
+ * emitted unless it is declared `inline`, so `var(--font-display)` resolved to
+ * nothing and every heading silently fell back to the system stack — the width
+ * axis still applied, to a font that has no width axis. Declaring them at
+ * `:root` is what makes them readable from our own CSS; the `@theme inline`
+ * block below is what keeps the `font-display` utility working in markup.
+ */
+:root {
+  --font-display: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  /* No separate serif any more — the width axis does that job. Kept as a name
+     so any remaining call site resolves to something sensible. */
+  --font-serif: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jbmono), ui-monospace, SFMono-Regular, monospace;
+}
 
-  --color-ink: #0a0a0b;
-  --color-paper: #ffffff;
-  --color-mist: #f5f5f4;
-  --color-line: #e6e6e3;
-  --color-muted: #6b6b6b;
+@theme inline {
+  --font-display: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jbmono), ui-monospace, SFMono-Regular, monospace;
+}
 
-  --color-accent: #6247F5;
-  --color-accent-soft: #a99bff;
-  --color-up: #12a150;
-  --color-down: #e5484d;
+@theme {
+  --color-ink: #0c0d0c;
+  --color-paper: #fcfcfb;
+  --color-mist: #f2f3f0;
+  --color-line: #e3e4de;
+  --color-muted: #6e716b;
+
+  /* Boldness is spent on the type, so the accent stays confident rather
+     than loud — and it is neither green nor red, which are spoken for. */
+  --color-accent: #1b41ff;
+  --color-accent-soft: #93a4ff;
+  --color-up: #0e9f52;
+  --color-down: #df3b40;
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 :root {
-  --bg: #ffffff;
-  --fg: #0a0a0b;
-  --surface: #fafaf9;
-  --border: #e6e6e3;
-  --muted: #6b6b6b;
-  --nav: rgba(255, 255, 255, 0.72);
+  --bg: #fcfcfb;
+  --fg: #0c0d0c;
+  --surface: #f3f4f1;
+  --border: #e3e4de;
+  --muted: #6e716b;
+  --nav: rgba(252, 252, 251, 0.76);
   color-scheme: light;
 }
 
 html.dark {
-  --bg: #0a0a0b;
-  --fg: #f7f7f5;
-  --surface: #141416;
-  --border: #26262a;
-  --muted: #8f8f96;
-  --nav: rgba(12, 12, 14, 0.72);
+  --bg: #0b0c0b;
+  --fg: #f3f4f0;
+  --surface: #161815;
+  --border: #272a26;
+  --muted: #8b8e86;
+  --nav: rgba(11, 12, 11, 0.74);
   color-scheme: dark;
 }
 
@@ -84,21 +111,46 @@ body {
 .hairline { border-color: var(--border); }
 .surface { background: var(--surface); }
 
-/* Big display type: tight, optically balanced, never bold-blobby. */
+/*
+ * Display type runs wide and heavy.
+ *
+ * The width axis is what makes this the page's voice rather than another
+ * geometric sans set large — and a wide face needs its tracking pulled in and
+ * its leading dropped or it falls apart at headline sizes.
+ */
 .display {
   font-family: var(--font-display);
-  font-weight: 300;
-  letter-spacing: -0.035em;
-  line-height: 0.94;
+  font-variation-settings: "wdth" 118;
+  font-weight: 700;
+  letter-spacing: -0.028em;
+  line-height: 0.9;
+}
+
+/*
+ * The counterweight: condensed, italic, light.
+ *
+ * Every dimension runs opposite to the display it sits inside, which is what
+ * makes one typeface read as two. Used for the phrase inside a headline that
+ * carries the turn.
+ */
+.contra {
+  font-variation-settings: "wdth" 78;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.005em;
 }
 
 .eyebrow {
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  letter-spacing: 0.18em;
+  font-weight: 500;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--muted);
 }
+
+/* UI text sits at normal width; only display and accents leave it. */
+body { font-variation-settings: "wdth" 100; }
 
 /* --- motion ------------------------------------------------------ */
 @keyframes marquee { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }

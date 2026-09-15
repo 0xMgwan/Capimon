@@ -97,7 +97,7 @@ export function QuickBuy() {
               <h2 className="display mt-4 text-[clamp(1.65rem,4.6vw,3.6rem)]">
                 <RevealWords text="One ticket." />
                 <br />
-                <span className="font-[family-name:var(--font-serif)] font-light italic text-[var(--muted)]">
+                <span className="contra text-[var(--muted)]">
                   <RevealWords text="Thirteen companies." delay={0.1} />
                 </span>
               </h2>

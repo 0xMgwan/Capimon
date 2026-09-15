@@ -76,7 +76,7 @@ export function JoinFlow() {
         <div className="eyebrow">Open an account</div>
         <h1 className="display mt-3 max-w-3xl text-[clamp(1.8rem,6vw,4.5rem)]">
           <RevealWords text="Shillings in." />{" "}
-          <span className="font-[family-name:var(--font-serif)] font-light italic text-[var(--muted)]">
+          <span className="contra text-[var(--muted)]">
             <RevealWords text="Shares out." delay={0.1} />
           </span>
         </h1>

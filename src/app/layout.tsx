@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Outfit, Figtree, Newsreader, JetBrains_Mono } from "next/font/google";
+import { Archivo, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 import { Nav } from "@/components/Nav";
@@ -8,9 +8,21 @@ import { TickerTape } from "@/components/TickerTape";
 import { DseTape } from "@/components/DseTape";
 import { MobileTabs } from "@/components/MobileTabs";
 
-const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit", weight: ["200", "300", "400", "500", "600"] });
-const figtree = Figtree({ subsets: ["latin"], variable: "--font-figtree", weight: ["300", "400", "500", "600", "700"] });
-const newsreader = Newsreader({ subsets: ["latin"], variable: "--font-newsreader", weight: ["300", "400", "500"], style: ["normal", "italic"] });
+/*
+ * One superfamily, carrying the whole page.
+ *
+ * Archivo is variable on both weight and width, so the display type can run
+ * wide and heavy while an accent runs condensed and italic — the contrast that
+ * used to need a second and third typeface now comes out of one skeleton, and
+ * the page reads as a set rather than a pairing that happens to sit together.
+ * It also means one font file instead of three.
+ */
+const archivo = Archivo({
+  subsets: ["latin"],
+  variable: "--font-archivo",
+  axes: ["wdth"],
+  style: ["normal", "italic"],
+});
 const jbmono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jbmono", weight: ["400", "500", "600"] });
 
 // Set NEXT_PUBLIC_SITE_URL once a custom domain is live; VERCEL_PROJECT_PRODUCTION_URL
@@ -65,7 +77,19 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    /*
+      * The font variables go on <html>, not <body>.
+      *
+      * `--font-sans` and friends are declared at :root and reference
+      * `--font-archivo`. A custom property that references an undefined
+      * variable is invalid at computed-value time, so with the font class on
+      * <body> the reference failed at :root and every one of those tokens
+      * computed to nothing — the whole site rendered in the system stack and
+      * had been doing so the entire time, through three different typefaces.
+      * Defining the variable at the same level the tokens are read from is
+      * what makes any of them apply.
+      */
+    <html lang="en" className={`${archivo.variable} ${jbmono.variable}`} suppressHydrationWarning>
       <head>
         {/* Light is the default. Dark is opt-in and remembered, applied before
             paint so the first frame never flashes the wrong theme. */}
@@ -79,7 +103,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <style>{`[style*="opacity:0"],[style*="opacity: 0"]{opacity:1!important;transform:none!important}`}</style>
         </noscript>
       </head>
-      <body className={`${outfit.variable} ${figtree.variable} ${newsreader.variable} ${jbmono.variable}`}>
+      <body>
         <Providers>
           <div className="sticky top-0 z-50">
             <DseTape />

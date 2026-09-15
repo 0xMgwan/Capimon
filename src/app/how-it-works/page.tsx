@@ -70,11 +70,11 @@ export default function HowItWorks() {
         <div className="eyebrow">How it works</div>
         <h1 className="display mt-4 max-w-4xl text-[clamp(2.2rem,6vw,5rem)]">
           <RevealWords text="No black box." />{" "}
-          <span className="font-[family-name:var(--font-serif)] font-light italic text-[var(--muted)]">
+          <span className="contra text-[var(--muted)]">
             <RevealWords text="Just addresses." delay={0.12} />
           </span>
         </h1>
-        <p className="mt-6 max-w-xl font-[family-name:var(--font-serif)] text-lg leading-relaxed text-[var(--muted)]">
+        <p className="mt-6 max-w-xl text-lg leading-relaxed text-[var(--muted)]">
           CAPX is a thin, honest interface over machinery that already exists on Base. Here is exactly
           what it reads, and where you can check it yourself.
         </p>

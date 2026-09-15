@@ -39,7 +39,7 @@ export function Footer() {
         <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(3,1fr)]">
           <div>
             <Lockup />
-            <p className="mt-4 max-w-xs font-[family-name:var(--font-serif)] text-[17px] leading-snug text-[var(--muted)]">
+            <p className="mt-4 max-w-xs text-[17px] leading-snug text-[var(--muted)]">
               Public markets, rebuilt as open infrastructure. Priced by live oracles,
               held in your own wallet.
             </p>

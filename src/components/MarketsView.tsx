@@ -38,7 +38,7 @@ export function MarketsView() {
           <div>
             <div className="eyebrow">Markets</div>
             <h1 className="display mt-3 text-[clamp(1.8rem,6vw,4.5rem)]">
-              Every asset, <span className="font-[family-name:var(--font-serif)] font-light italic text-[var(--muted)]">live.</span>
+              Every asset, <span className="contra text-[var(--muted)]">live.</span>
             </h1>
             <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-[var(--muted)]">
               Tokenized equities, priced by Chainlink total-return marks read straight

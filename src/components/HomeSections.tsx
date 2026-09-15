@@ -66,11 +66,11 @@ export function ProductsSection() {
         <h2 className="display mt-4 max-w-4xl text-[clamp(1.8rem,5.4vw,4.6rem)]">
           <RevealWords text="A new standard" />
           <br />
-          <span className="font-[family-name:var(--font-serif)] font-light italic text-[var(--muted)]">
+          <span className="contra text-[var(--muted)]">
             <RevealWords text="for tokenized finance." delay={0.1} />
           </span>
         </h2>
-        <p className="mt-6 max-w-lg font-[family-name:var(--font-serif)] text-lg text-[var(--muted)]">
+        <p className="mt-6 max-w-lg text-lg text-[var(--muted)]">
           Three onchain surfaces bridging public markets and DeFi — all reading the same live state.
         </p>
       </Reveal>
@@ -89,7 +89,7 @@ export function ProductsSection() {
                 <h3 className="mt-4 sm:mt-6 font-[family-name:var(--font-display)] text-2xl font-medium tracking-[-0.04em] sm:text-3xl lg:text-4xl">
                   CAPX Equities
                 </h3>
-                <p className="mt-3 font-[family-name:var(--font-serif)] text-[17px] leading-relaxed text-[var(--muted)]">
+                <p className="mt-3 text-[17px] leading-relaxed text-[var(--muted)]">
                   Public companies as B20 tokens — freely transferable, composable in DeFi,
                   and marked continuously by Chainlink total-return feeds.
                 </p>
@@ -232,7 +232,7 @@ export function StatsBand() {
         <Reveal>
           <h2 className="display max-w-3xl text-[clamp(1.65rem,5vw,4.2rem)]">
             <RevealWords text="CAPX is building the rails" />{" "}
-            <span className="font-[family-name:var(--font-serif)] font-light italic text-[var(--muted)]">
+            <span className="contra text-[var(--muted)]">
               <RevealWords text="for the next market." delay={0.12} />
             </span>
           </h2>
@@ -263,7 +263,7 @@ function StackedStat({ label, value, sub }: { label: string; value: React.ReactN
     <div className="flex items-baseline justify-between gap-4 border-b hairline py-6 first:border-t">
       <div className="tnum text-[clamp(2.2rem,13vw,3.4rem)] font-medium leading-none tracking-tight">{value}</div>
       <div className="max-w-[42%] text-right">
-        <div className="font-[family-name:var(--font-serif)] text-[15px] leading-tight">{label}</div>
+        <div className="text-[15px] leading-tight">{label}</div>
         <div className="mt-1 text-[11px] text-[var(--muted)]">{sub}</div>
       </div>
     </div>
@@ -311,7 +311,7 @@ export function BeliefSection() {
               <div className="h-full bg-[var(--bg)] p-8">
                 <div className="tnum text-xs text-[var(--muted)]">0{i + 1}</div>
                 <h3 className="mt-6 font-[family-name:var(--font-display)] text-2xl font-medium tracking-[-0.04em]">{b.title}</h3>
-                <p className="mt-3 font-[family-name:var(--font-serif)] text-[17px] leading-relaxed text-[var(--muted)]">{b.body}</p>
+                <p className="mt-3 text-[17px] leading-relaxed text-[var(--muted)]">{b.body}</p>
               </div>
             </Reveal>
           ))}
@@ -340,7 +340,7 @@ export function PillarsSection() {
             <div className="eyebrow">Institutional grade</div>
             <h2 className="display mt-4 text-[clamp(1.65rem,4.6vw,3.6rem)]">
               Serious plumbing,{" "}
-              <span className="font-[family-name:var(--font-serif)] font-light italic text-[var(--muted)]">visible to everyone.</span>
+              <span className="contra text-[var(--muted)]">visible to everyone.</span>
             </h2>
             <p className="mt-6 max-w-sm text-[15px] leading-relaxed text-[var(--muted)]">
               Every claim on this page resolves to an onchain address you can check yourself.
@@ -390,11 +390,11 @@ export function ClosingCTA() {
           <div className="eyebrow">The future of markets</div>
           <h2 className="display mx-auto mt-5 max-w-4xl text-[clamp(1.95rem,6.5vw,5.5rem)]">
             <RevealWords text="Markets that never" />{" "}
-            <span className="font-[family-name:var(--font-serif)] font-light italic">
+            <span className="contra">
               <RevealWords text="close on you." delay={0.12} />
             </span>
           </h2>
-          <p className="mx-auto mt-7 max-w-xl font-[family-name:var(--font-serif)] text-lg text-[var(--muted)]">
+          <p className="mx-auto mt-7 max-w-xl text-lg text-[var(--muted)]">
             Connect a wallet and read your positions straight off the chain — or open an account and fund it with shillings.
           </p>
           <div className="mt-9 flex flex-wrap justify-center gap-3">

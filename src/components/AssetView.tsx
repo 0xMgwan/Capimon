@@ -74,7 +74,7 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
         </div>
       </Reveal>
 
-      <p className="mt-6 max-w-2xl font-[family-name:var(--font-serif)] text-lg leading-relaxed text-[var(--muted)]">
+      <p className="mt-6 max-w-2xl text-lg leading-relaxed text-[var(--muted)]">
         {asset.blurb}
       </p>
 

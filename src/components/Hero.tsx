@@ -71,7 +71,7 @@ export function Hero() {
         {backdrop && (
           <div
             className="pointer-events-none absolute inset-x-0 bottom-0 opacity-[0.10]
-                       [&>svg]:h-[38vh] [&>svg]:w-full"
+ [&>svg]:h-[38vh] [&>svg]:w-full"
             /* The svg carries a viewBox, so overriding its width lets the curve
                span whatever the screen is instead of being drawn at a fixed
                1400px and cut off on a phone. */
@@ -93,7 +93,7 @@ export function Hero() {
         <h1 className="display text-center text-[clamp(2.4rem,9vw,8.5rem)] sm:text-left">
           <RevealWords text="Own the open" />
           <br />
-          <span className="italic font-[family-name:var(--font-serif)] font-light tracking-[-0.02em]">
+          <span className="italic font-light tracking-[-0.02em]">
             <RevealWords text="market." delay={0.16} />
           </span>
         </h1>
@@ -103,7 +103,7 @@ export function Hero() {
           transition={{ duration: 0.8, delay: 0.45, ease: [0.16, 1, 0.3, 1] }}
           className="mt-7 flex flex-col gap-7 sm:mt-8 sm:gap-8 lg:flex-row lg:items-end lg:justify-between"
         >
-          <p className="mx-auto max-w-xl text-center font-[family-name:var(--font-serif)] text-[17px] leading-relaxed text-[var(--muted)] sm:mx-0 sm:text-left sm:text-xl">
+          <p className="mx-auto max-w-xl text-center text-[17px] leading-relaxed text-[var(--muted)] sm:mx-0 sm:text-left sm:text-xl">
             CAPX puts public equities onchain — Wall Street and Dar es Salaam on
             the same rails. Buy US shares in dollars or CRDB Bank in shillings,
             priced by live marks, settled against custody published on Base.

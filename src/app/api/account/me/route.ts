@@ -23,12 +23,30 @@ export async function GET() {
     await settlePending().catch(() => null);
 
     const { positionCosts } = await import("@/lib/pnl");
-    const [bal, markets, entries, costs] = await Promise.all([
+    /*
+     * CRDB is priced separately from the rest.
+     *
+     * Everything else in this list comes from a Chainlink feed in dollars;
+     * CRDB comes from our own oracle in shillings. Without this it would fall
+     * through `markets.find` as an unpriced holding worth nothing — the
+     * customer would see the shares they just bought valued at zero, and the
+     * portfolio total would quietly omit them.
+     */
+    const [bal, markets, entries, costs, crdbTzs, tzsRate] = await Promise.all([
       balances(user.id),
       getMarkets({ depth: 2 }),
       history(user.id, 50),
       positionCosts(user.id),
+      import("@/lib/oracle").then((m) => m.readOraclePrice("CRDB")).then((q) => q?.price ?? 0).catch(() => 0),
+      ntzsConfigured
+        ? getSwapRate("NTZS", "USDC", 100_000)
+            .then((r) => { const o = Number(r.expectedOutput ?? 0); return o > 0 ? o / 100_000 : 0; })
+            .catch(() => 0)
+        : Promise.resolve(0),
     ]);
+
+    /** CRDB in dollars, so one equity total can hold both markets. */
+    const crdbUsd = crdbTzs > 0 && tzsRate > 0 ? crdbTzs * tzsRate : 0;
 
     // Shilling accounts hold TZS; a legacy USDC balance is still shown.
     const tzs = bal.find((b) => b.asset === "TZS")?.amount ?? 0;
@@ -37,15 +55,19 @@ export async function GET() {
       .filter((b) => b.asset !== "USDC" && b.asset !== "TZS")
       .map((b) => {
         const m = markets.find((x) => x.symbol === b.asset);
-        const price = m?.price ?? 0;
+        const isCrdb = b.asset === "CRDB";
+        const price = isCrdb ? crdbUsd : m?.price ?? 0;
         // What it cost against what it is worth — the question a holdings
         // list on its own cannot answer.
         const cost = costs.get(b.asset);
         const costBasis = cost && cost.qty > 0 ? cost.avgCost * b.amount : 0;
         const value = b.amount * price;
         return {
-          symbol: b.asset, ticker: m?.ticker ?? b.asset, name: m?.name ?? b.asset,
-          color: m?.color ?? "#888", logo: m?.logo ?? null,
+          symbol: b.asset,
+          ticker: isCrdb ? "CRDB" : m?.ticker ?? b.asset,
+          name: isCrdb ? "CRDB Bank Plc" : m?.name ?? b.asset,
+          color: isCrdb ? "#0B7D3E" : m?.color ?? "#888",
+          logo: isCrdb ? "/crdb.jpg" : m?.logo ?? null,
           qty: b.amount, price, value, change: m?.change ?? 0,
           avgCost: cost?.avgCost ?? 0,
           costBasis,
@@ -80,8 +102,8 @@ export async function GET() {
     // to display, or a USDC balance to show in shillings. A shilling account
     // has cash === 0, so gating on cash alone would hide TZS from exactly the
     // users who hold it.
-    let usdcPerTzs: number | null = null;
-    if (ntzsConfigured && (cash > 0 || tzs > 0 || depositRoute === "treasury" || depositRoute === "omnibus-wallet")) {
+    let usdcPerTzs: number | null = tzsRate > 0 ? tzsRate : null;
+    if (usdcPerTzs === null && ntzsConfigured && (cash > 0 || tzs > 0 || depositRoute === "treasury" || depositRoute === "omnibus-wallet")) {
       try {
         const probe = 100_000;
         const r = await getSwapRate("NTZS", "USDC", probe);

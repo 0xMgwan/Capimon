@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import Image from "next/image";
+import { useEffect, useMemo, useState } from "react";
 import { useMarkets } from "@/lib/useMarkets";
 import { MarketTable } from "./MarketTable";
 import { Sparkline } from "./Sparkline";
@@ -58,6 +59,33 @@ export function MarketsView() {
           {error}
         </div>
       )}
+
+      {/*
+        * The local market gets its own card rather than a row in the table.
+        *
+        * That table is Chainlink marks in dollars; CRDB is a DSE print in
+        * shillings against a custody position, and dropping it in as a
+        * fourteenth row would have meant a column of dollar prices with one
+        * shilling figure in it.
+        */}
+      <Reveal delay={0.04} className="mt-8">
+        <Link
+          href="/markets/crdb"
+          className="flex items-center gap-4 rounded-2xl border hairline p-4 transition-colors hover:surface sm:p-5"
+        >
+          <Image src="/crdb.jpg" alt="" width={44} height={44} className="shrink-0 rounded-full object-cover" />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2">
+              <span className="font-medium">CRDB Bank Plc</span>
+              <span className="eyebrow">Dar es Salaam</span>
+            </div>
+            <p className="mt-0.5 truncate text-[12px] text-[var(--muted)]">
+              Buy Tanzanian shares in shillings, settled in nTZS
+            </p>
+          </div>
+          <CrdbTag />
+        </Link>
+      </Reveal>
 
       <Reveal delay={0.06} className="mt-10">
         <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
@@ -134,6 +162,35 @@ function MoverCard({ title, rows }: { title: string; rows: ReturnType<typeof use
             </span>
           </Link>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/** The live CRDB mark, so the card is not just a link to find out. */
+function CrdbTag() {
+  const [d, setD] = useState<{ price: number; changePct: number } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/securities/crdb")
+      .then((r) => r.json())
+      .then((j) => {
+        if (alive && j.ok) setD({ price: j.market.price, changePct: j.dse?.changePct ?? 0 });
+      })
+      .catch(() => { /* the card still links through */ });
+    return () => { alive = false; };
+  }, []);
+
+  if (!d) return <div className="h-8 w-20 shrink-0 animate-pulse rounded surface" />;
+  const up = d.changePct >= 0;
+  return (
+    <div className="shrink-0 text-right">
+      <div className="tnum text-base font-medium">
+        {d.price.toLocaleString("en-TZ", { maximumFractionDigits: 0 })}
+        <span className="ml-1 text-[10px] font-normal text-[var(--muted)]">TZS</span>
+      </div>
+      <div className={`tnum text-[11px] ${up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+        {up ? "▲" : "▼"} {Math.abs(d.changePct).toFixed(2)}%
       </div>
     </div>
   );

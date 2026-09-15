@@ -34,8 +34,6 @@ export type Solvency = {
   totals: { owedUsd: number; heldUsd: number; shortfallUsd: number };
   /** Where the USDC actually sits, since it backs balances from two places. */
   usdc: { treasury: number; rampFloat: number; omnibus: number };
-  /** Tokenised local securities, held as tokens rather than in the treasury's asset list. */
-  securities?: Record<string, number>;
   /** Present when solvency could not be established, which is not the same as insolvent. */
   unavailable?: string;
 };
@@ -186,7 +184,6 @@ export async function checkSolvency(): Promise<Solvency> {
     checkedAt, assets,
     totals: { owedUsd, heldUsd, shortfallUsd },
     usdc: { treasury: holdings.usdc, rampFloat: float, omnibus: omnibus.usdc },
-    securities: { CRDB: crdbShares },
   };
 }
 

@@ -11,6 +11,7 @@ import { AssetLogo } from "./AssetLogo";
 import { UsdcIcon } from "./icons/Usdc";
 import { NtzsIcon } from "./icons/Ntzs";
 import { usd } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 
 const PRESETS = [50, 100, 500, 1000];
 const PRESETS_TZS = [25_000, 100_000, 250_000, 500_000];
@@ -26,6 +27,7 @@ const PRESETS_TZS = [25_000, 100_000, 250_000, 500_000];
  * exactly the right size for it.
  */
 export function QuickBuy() {
+  const { t } = useT();
   const { data, ticks } = useMarkets();
   const { venues } = useVenues();
   const router = useRouter();
@@ -115,7 +117,7 @@ export function QuickBuy() {
               <div className="flex items-center justify-between gap-2">
                 <div className="eyebrow flex items-center gap-1.5">
                   {inTzs ? <NtzsIcon className="h-3.5 w-3.5" /> : <UsdcIcon className="h-3.5 w-3.5" />}
-                  You pay · {inTzs ? "TZS" : "USDC"}
+                  {t("You pay")} · {inTzs ? "TZS" : "USDC"}
                 </div>
                 {canShowTzs && (
                   <div className="flex rounded-full surface p-0.5">
@@ -165,14 +167,14 @@ export function QuickBuy() {
               </div>
 
               {/* 2 — company */}
-              <div className="eyebrow mt-6">Buy</div>
+              <div className="eyebrow mt-6">{t("Buy")}</div>
               <div className="mt-3">
                 <AssetPicker markets={markets} venues={venues} selected={selected} onSelect={setPicked} />
               </div>
 
               {/* 3 — receipt */}
               <div className="mt-4 rounded-2xl surface p-4">
-                <div className="eyebrow">You receive · oracle-implied</div>
+                <div className="eyebrow">{t("You receive")} · {t("oracle-implied")}</div>
                 <AnimatePresence mode="popLayout">
                   <motion.div
                     key={`${selected?.ticker}-${units.toFixed(6)}`}
@@ -204,7 +206,7 @@ export function QuickBuy() {
                 disabled={!selected}
                 className="group mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--fg)] py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
               >
-                Review {selected?.ticker ?? ""} order
+                {t("Review")} {selected?.ticker ?? ""} {t("order")}
                 <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
               </button>
 
@@ -212,9 +214,9 @@ export function QuickBuy() {
                   asset page gives a real executable quote; this line only has
                   to say that this one is not. */}
               <p className="mt-3 text-[11px] text-[var(--muted)]">
-                Indicative. Real quote on the{" "}
+                {t("Indicative. Real quote on the")}{" "}
                 <Link href="/how-it-works" className="underline underline-offset-2 hover:text-[var(--fg)]">
-                  asset page
+                  {t("asset page")}
                 </Link>.
               </p>
             </div>

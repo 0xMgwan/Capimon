@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { useCrdb, matchesCrdb } from "@/lib/useCrdb";
+import { KycPrompt } from "./KycPrompt";
 import { useMarkets } from "@/lib/useMarkets";
 import { MarketTable } from "./MarketTable";
 import { Sparkline } from "./Sparkline";
@@ -56,6 +57,10 @@ export function MarketsView() {
           </div>
         </div>
       </Reveal>
+
+      {/* Above the markets, because browsing is where someone decides to buy
+          and being unverified is a limit they should meet before, not after. */}
+      <div className="mt-5"><KycPrompt /></div>
 
       {error && (
         <div className="mt-6 rounded-xl border border-[var(--color-down)]/40 bg-[var(--color-down)]/5 px-4 py-3 text-sm text-[var(--color-down)]">

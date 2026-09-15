@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
+import { useT } from "@/lib/i18n";
 
 /**
  * Tells a signed-in customer their account still needs verifying.
@@ -15,6 +16,7 @@ import { useCapimonAccount } from "@/lib/useCapimonAccount";
 type Kyc = { status: string; reason: string | null };
 
 export function KycPrompt() {
+  const { t } = useT();
   const { account } = useCapimonAccount();
   const [kyc, setKyc] = useState<Kyc | null>(null);
 
@@ -36,7 +38,7 @@ export function KycPrompt() {
       <div className="flex items-center gap-3 rounded-2xl border hairline px-4 py-3">
         <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-[#b45309]" />
         <p className="text-[13px] text-[var(--muted)]">
-          Your verification is being reviewed. Nothing to do.
+          {t("Your verification is being reviewed. Nothing to do.")}
         </p>
       </div>
     );
@@ -52,14 +54,14 @@ export function KycPrompt() {
         {rejected
           ? kyc.reason
             ? `Verification was not accepted: ${kyc.reason}`
-            : "Verification was not accepted. Please submit again."
-          : "Verify your identity to keep using your account."}
+            : t("Verification was not accepted. Please submit again.")
+          : t("Verify your identity to keep using your account.")}
       </p>
       <Link
         href="/verify"
         className="shrink-0 rounded-full bg-[var(--fg)] px-4 py-2 text-[13px] font-medium text-[var(--bg)]"
       >
-        {rejected ? "Try again" : "Verify now"}
+        {t(rejected ? "Try again" : "Verify now")}
       </Link>
     </div>
   );

@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { KycPrompt } from "./KycPrompt";
 import { useRef, useState } from "react";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { Avatar } from "./Avatar";
+import { useT } from "@/lib/i18n";
 
 /** Shrink to this before sending; an avatar never needs more. */
 const AVATAR_PX = 128;
@@ -34,6 +36,7 @@ async function toSquareDataUrl(file: File): Promise<string> {
 export function SettingsView() {
   const { account, refresh, signOut } = useCapimonAccount();
   const fileRef = useRef<HTMLInputElement>(null);
+  const { t, lang, setLang } = useT();
   const [username, setUsername] = useState<string | null>(null);
   const [name, setName] = useState<string | null>(null);
   const [phone, setPhone] = useState<string | null>(null);
@@ -94,7 +97,8 @@ export function SettingsView() {
   return (
     <div className="mx-auto max-w-2xl px-5 pb-16 pt-6 sm:px-8 sm:pt-9">
       <div className="eyebrow">Settings</div>
-      <h1 className="display mt-1.5 text-[clamp(1.5rem,3.4vw,2.1rem)]">Your account.</h1>
+      <h1 className="display mt-1.5 text-[clamp(1.5rem,3.4vw,2.1rem)]">{t("Your account.")}</h1>
+      <div className="mt-4"><KycPrompt /></div>
 
       {/* Identity */}
       <section className="mt-8 rounded-3xl border hairline p-5">
@@ -144,7 +148,24 @@ export function SettingsView() {
             className="w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
           />
         </Field>
-        <Field label="Display name">
+        {/* A language choice is an account preference, so it lives with the
+            others rather than hidden in a corner of the nav. */}
+        <Field label={t("Language")}>
+          <div className="flex gap-2">
+            {([["en", "English"], ["sw", "Kiswahili"]] as const).map(([code, label]) => (
+              <button
+                key={code}
+                onClick={() => setLang(code)}
+                className={`flex-1 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
+                  lang === code ? "border-[var(--fg)] bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Field label={t("Display name")}>
           <input
             value={val(name, u.name)}
             onChange={(e) => setName(e.target.value)}
@@ -153,10 +174,10 @@ export function SettingsView() {
           />
         </Field>
         <Field
-          label="National ID (NIDA)"
-          hint={u.kycStatus === "approved"
+          label={t("National ID (NIDA)")}
+          hint={t(u.kycStatus === "approved"
             ? "Verified and locked to the document we checked."
-            : "Twenty digits. Must match the document you submit for verification."}
+            : "Twenty digits. Must match the document you submit for verification.")}
         >
           <input
             value={val(nida, u.nidaNumber)}
@@ -167,7 +188,7 @@ export function SettingsView() {
             className="tnum w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)] disabled:opacity-50"
           />
         </Field>
-        <Field label="Mobile money number" hint="Used for deposits and withdrawals.">
+        <Field label={t("Mobile money number")} hint={t("Used for deposits and withdrawals.")}>
           <input
             value={val(phone, u.phone)}
             onChange={(e) => setPhone(e.target.value)}
@@ -186,7 +207,7 @@ export function SettingsView() {
           disabled={busy || (username === null && name === null && phone === null && nida === null)}
           className="mt-2 w-full rounded-full bg-[var(--fg)] py-3 text-sm font-medium text-[var(--bg)] transition-transform active:scale-95 disabled:opacity-40"
         >
-          {busy ? "Saving…" : "Save changes"}
+          {t(busy ? "Saving…" : "Save changes")}
         </button>
         {(note || error) && (
           <p className={`mt-3 break-words text-xs ${error ? "text-[var(--color-down)]" : "text-[var(--muted)]"}`}>
@@ -197,23 +218,23 @@ export function SettingsView() {
 
       {/* Fixed details. Shown because people need to check them, not edit them. */}
       <section className="mt-4 rounded-3xl border hairline p-5">
-        <Row label="Email" value={u.email} />
+        <Row label={t("Email")} value={u.email} />
         <Row
-          label="Verification"
+          label={t("Verification")}
           value={
-            u.kycStatus === "approved" ? "Verified"
-            : u.kycStatus === "pending" ? "Under review"
-            : u.kycStatus === "rejected" ? "Not accepted"
-            : "Not started"
+            t(u.kycStatus === "approved" ? "Verified"
+              : u.kycStatus === "pending" ? "Under review"
+              : u.kycStatus === "rejected" ? "Not accepted"
+              : "Not started")
           }
         />
-        <Row label="Country" value="Tanzania" />
+        <Row label={t("Country")} value="Tanzania" />
         {u.kycStatus !== "approved" && (
           <Link
             href="/verify"
             className="mt-3 inline-flex rounded-full bg-[var(--fg)] px-4 py-2 text-[13px] font-medium text-[var(--bg)]"
           >
-            {u.kycStatus === "rejected" ? "Submit again" : u.kycStatus === "pending" ? "View status" : "Verify your account"}
+            {t(u.kycStatus === "rejected" ? "Submit again" : u.kycStatus === "pending" ? "View status" : "Verify your account")}
           </Link>
         )}
         <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
@@ -225,7 +246,7 @@ export function SettingsView() {
         onClick={() => void signOut()}
         className="mt-4 w-full rounded-full border border-[var(--color-down)]/40 py-3 text-sm font-medium text-[var(--color-down)] transition-colors hover:bg-[var(--color-down)]/[0.06]"
       >
-        Sign out
+        {t("Sign out")}
       </button>
     </div>
   );

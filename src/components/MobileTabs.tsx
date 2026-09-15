@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
 import { useAccount } from "wagmi";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
+import { useT } from "@/lib/i18n";
 
 /*
  * Filled glyphs rather than outline strokes.
@@ -73,6 +74,7 @@ const TABS = [
  */
 export function MobileTabs() {
   const path = usePathname();
+  const { t: translate } = useT();
   const { isConnected } = useAccount();
   const { account } = useCapimonAccount();
 
@@ -118,7 +120,7 @@ export function MobileTabs() {
                 </svg>
               </span>
               <span className={`text-[10px] tracking-tight ${active ? "font-semibold" : "font-medium"}`}>
-                {t.label}
+                {translate(t.label)}
               </span>
             </Link>
           );

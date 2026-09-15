@@ -6,6 +6,7 @@ import { useState } from "react";
 import { wagmiConfig } from "@/lib/wallets";
 import { MarketsProvider } from "@/lib/useMarkets";
 import { CapimonAccountProvider } from "@/lib/useCapimonAccount";
+import { LangProvider } from "@/lib/i18n";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
@@ -13,6 +14,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }));
 
   return (
+    // Outermost, so every tree below can read the language — including the
+    // wallet button and anything a provider renders before the page does.
+    <LangProvider>
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <CapimonAccountProvider>
@@ -20,5 +24,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
         </CapimonAccountProvider>
       </QueryClientProvider>
     </WagmiProvider>
+    </LangProvider>
   );
 }

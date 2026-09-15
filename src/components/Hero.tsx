@@ -10,6 +10,7 @@ import { RevealWords } from "./Reveal";
 import { compactUsd } from "@/lib/format";
 import { Sparkline } from "./Sparkline";
 import { AssetLogo } from "./AssetLogo";
+import { useT } from "@/lib/i18n";
 
 /** True when the backdrop should hold still: reduced motion, or a phone. */
 function useStillBackdrop() {
@@ -34,6 +35,7 @@ export function Hero() {
   const opacity = useTransform(scrollYProgress, [0, 0.75], [1, 0]);
   const scale = useTransform(scrollYProgress, [0, 1], [1, 1.12]);
 
+  const { t } = useT();
   const { data } = useMarkets();
   // Longest history available, so the curve has shape rather than a flat line.
   const backdrop = (data?.markets ?? [])
@@ -102,10 +104,10 @@ export function Hero() {
         <div className="grid items-center gap-8 lg:grid-cols-[1.15fr_minmax(360px,420px)] lg:gap-12">
           <div>
             <h1 className="display text-[clamp(2.2rem,7.5vw,6.5rem)]">
-              <RevealWords text="Own the open" />
+              <RevealWords text={t("Own the open")} />
               <br />
               <span className="contra">
-                <RevealWords text="market." delay={0.16} />
+                <RevealWords text={t("market.")} delay={0.16} />
               </span>
             </h1>
 
@@ -117,8 +119,7 @@ export function Hero() {
               {/* Three lines said what one does. A hero is a claim, not a
                   summary — the detail has a whole page of its own. */}
               <p className="max-w-md text-[17px] leading-snug text-[var(--muted)] sm:text-lg">
-                US shares in dollars. Tanzanian shares in shillings.
-                Settled against custody published on Base.
+                {t("US shares in dollars. Tanzanian shares in shillings. Settled against custody published on Base.")}
               </p>
 
               <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
@@ -126,14 +127,14 @@ export function Hero() {
                   href="/markets"
                   className="group inline-flex items-center justify-center gap-2 rounded-full bg-[var(--fg)] px-6 py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95"
                 >
-                  Explore markets
+                  {t("Explore markets")}
                   <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
                 </Link>
                 <Link
                   href="/how-it-works"
                   className="rounded-full border hairline bg-[var(--bg)]/60 px-6 py-3.5 text-center text-sm font-medium backdrop-blur transition-colors hover:surface"
                 >
-                  How it works
+                  {t("How it works")}
                 </Link>
               </div>
             </motion.div>
@@ -154,7 +155,7 @@ export function Hero() {
           className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border hairline bg-[var(--border)] sm:mt-10 lg:grid-cols-4"
         >
           <div className="bg-[var(--bg)] p-4 sm:bg-[var(--bg)]/80 sm:p-5 sm:backdrop-blur">
-            <div className="eyebrow">Onchain value</div>
+            <div className="eyebrow">{t("Onchain value")}</div>
             <div className="tnum mt-2 text-xl font-medium sm:text-2xl">
               <Counter value={tvl} format={(n) => compactUsd(n)} />
             </div>
@@ -172,10 +173,10 @@ export function Hero() {
             href="/markets/crdb"
             className="group bg-[var(--bg)] p-4 transition-colors sm:bg-[var(--bg)]/80 sm:p-5 sm:backdrop-blur"
           >
-            <div className="eyebrow">Dar es Salaam</div>
+            <div className="eyebrow">{t("Dar es Salaam")}</div>
             <div className="tnum mt-2 text-xl font-medium sm:text-2xl">CRDB</div>
             <div className="mt-1 text-[11px] text-[var(--muted)]">
-              buy in shillings{" "}
+              {t("buy in shillings")}{" "}
               <span className="inline-block transition-transform group-hover:translate-x-0.5">→</span>
             </div>
           </Link>

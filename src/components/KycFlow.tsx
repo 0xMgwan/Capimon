@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
+import { useT } from "@/lib/i18n";
 
 /**
  * Identity verification: a photograph of a document, and a selfie taken now.
@@ -35,6 +36,7 @@ async function shrink(file: Blob, maxEdge = 1600): Promise<string> {
 }
 
 export function KycFlow({ onDone }: { onDone?: () => void }) {
+  const { t } = useT();
   const { account, refresh } = useCapimonAccount();
   const [docType, setDocType] = useState<string>("nida");
   const [docNumber, setDocNumber] = useState("");
@@ -131,8 +133,8 @@ export function KycFlow({ onDone }: { onDone?: () => void }) {
   if (done) {
     return (
       <div className="rounded-3xl border hairline p-6 text-center">
-        <div className="eyebrow">Submitted</div>
-        <h2 className="display mt-2 text-2xl">Thanks. We&rsquo;ll take a look.</h2>
+        <div className="eyebrow">{t("Submitted")}</div>
+        <h2 className="display mt-2 text-2xl">{t("Thanks. We’ll take a look.")}</h2>
         <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-[var(--muted)]">
           Verification is usually same day. You can keep using your account while it is
           reviewed, and we&rsquo;ll let you know here either way.
@@ -144,7 +146,7 @@ export function KycFlow({ onDone }: { onDone?: () => void }) {
   return (
     <div className="rounded-3xl border hairline p-5 sm:p-6">
       <div className="eyebrow">Step 1 of 2</div>
-      <h2 className="display mt-1.5 text-xl">Your document.</h2>
+      <h2 className="display mt-1.5 text-xl">{t("Your document.")}</h2>
 
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {DOCS.map((d) => (
@@ -155,13 +157,13 @@ export function KycFlow({ onDone }: { onDone?: () => void }) {
               docType === d.id ? "border-[var(--fg)] bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"
             }`}
           >
-            {d.label}
+            {t(d.label)}
           </button>
         ))}
       </div>
 
       <label className="mt-3 block">
-        <span className="eyebrow">Document number (optional)</span>
+        <span className="eyebrow">{t("Document number (optional)")}</span>
         <input
           value={docNumber}
           onChange={(e) => setDocNumber(e.target.value)}
@@ -175,34 +177,34 @@ export function KycFlow({ onDone }: { onDone?: () => void }) {
             {/* A preview, not a gallery: enough to see the right page was photographed. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={doc} alt="" className="h-16 w-24 rounded-lg object-cover" />
-            <span className="flex-1 text-[13px] text-[var(--muted)]">Document attached.</span>
+            <span className="flex-1 text-[13px] text-[var(--muted)]">{t("Document attached.")}</span>
             <button onClick={() => setDoc(null)} className="text-[12px] underline underline-offset-2">
-              Replace
+              {t("Replace")}
             </button>
           </div>
         ) : (
           <label className="flex cursor-pointer items-center justify-center rounded-2xl border border-dashed hairline px-4 py-7 text-center text-[13px] text-[var(--muted)] transition-colors hover:surface">
             <input type="file" accept="image/*" capture="environment" onChange={pickDoc} className="hidden" />
-            Photograph or upload your document
+            {t("Photograph or upload your document")}
           </label>
         )}
       </div>
 
       <div className="mt-6 border-t hairline pt-5">
         <div className="eyebrow">Step 2 of 2</div>
-        <h2 className="display mt-1.5 text-xl">A photo of you, now.</h2>
+        <h2 className="display mt-1.5 text-xl">{t("A photo of you, now.")}</h2>
 
         <div className="mt-3">
           {selfie ? (
             <div className="flex items-center gap-3 rounded-2xl border hairline p-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={selfie} alt="" className="h-16 w-16 rounded-full object-cover" />
-              <span className="flex-1 text-[13px] text-[var(--muted)]">Photo taken.</span>
+              <span className="flex-1 text-[13px] text-[var(--muted)]">{t("Photo taken.")}</span>
               <button
                 onClick={() => { setSelfie(null); void startCamera(); }}
                 className="text-[12px] underline underline-offset-2"
               >
-                Retake
+                {t("Retake")}
               </button>
             </div>
           ) : camera === "live" ? (
@@ -218,10 +220,10 @@ export function KycFlow({ onDone }: { onDone?: () => void }) {
                   onClick={capture}
                   className="flex-1 rounded-full bg-[var(--fg)] py-3 text-sm font-medium text-[var(--bg)]"
                 >
-                  Take photo
+                  {t("Take photo")}
                 </button>
                 <button onClick={stopCamera} className="rounded-full border hairline px-5 text-sm">
-                  Cancel
+                  {t("Cancel")}
                 </button>
               </div>
             </div>
@@ -231,12 +233,12 @@ export function KycFlow({ onDone }: { onDone?: () => void }) {
                 onClick={() => void startCamera()}
                 className="rounded-full border hairline px-5 py-2.5 text-[13px] font-medium transition-colors hover:surface"
               >
-                Open camera
+                {t("Open camera")}
               </button>
               <p className="mt-2 text-[12px] text-[var(--muted)]">
                 {camera === "denied"
-                  ? "Camera access was refused. Allow it in your browser settings and try again."
-                  : "Taken here rather than uploaded, so it matches the document."}
+                  ? t("Camera access was refused. Allow it in your browser settings and try again.")
+                  : t("Taken here rather than uploaded, so it matches the document.")}
               </p>
             </div>
           )}
@@ -250,7 +252,7 @@ export function KycFlow({ onDone }: { onDone?: () => void }) {
         disabled={busy || !doc || !selfie}
         className="mt-5 w-full rounded-full bg-[var(--fg)] py-3.5 text-sm font-medium text-[var(--bg)] disabled:opacity-40"
       >
-        {busy ? "Submitting…" : "Submit for verification"}
+        {t(busy ? "Submitting…" : "Submit for verification")}
       </button>
 
       <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">

@@ -12,6 +12,7 @@ import { WalletButton } from "./WalletButton";
 import { NotificationBell } from "./NotificationBell";
 import { ThemeToggle } from "./ThemeToggle";
 import { useBodyLock } from "@/lib/useBodyLock";
+import { useT } from "@/lib/i18n";
 
 const LINKS = [
   { href: "/markets", label: "Markets" },
@@ -30,6 +31,7 @@ export function Nav() {
   const path = usePathname();
   const { isConnected } = useAccount();
   const { account } = useCapimonAccount();
+  const { t } = useT();
   const signedIn = !!account || isConnected;
   const links = LINKS.filter((l) => !(l.hideWhenSignedIn && signedIn));
   // The menu belongs to the route it was opened on, so navigating closes it.
@@ -82,7 +84,7 @@ export function Nav() {
                       transition={{ type: "spring", stiffness: 380, damping: 32 }}
                     />
                   )}
-                  <span className="relative z-10">{l.label}</span>
+                  <span className="relative z-10">{t(l.label)}</span>
                 </Link>
               );
             })}
@@ -160,7 +162,7 @@ export function Nav() {
                         href={l.href}
                         className="rounded-2xl px-3 py-3.5 text-lg tracking-tight transition-colors active:surface"
                       >
-                        {l.label}
+                        {t(l.label)}
                       </Link>
                     ))}
                   </div>

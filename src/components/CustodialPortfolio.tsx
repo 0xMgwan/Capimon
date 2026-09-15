@@ -8,9 +8,11 @@ import { Reveal } from "./Reveal";
 import { WalletSection } from "./WalletSection";
 import { KycPrompt } from "./KycPrompt";
 import { usd, costLabel } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 
 /** The book CAPX holds for a shilling-funded account. */
 export function CustodialPortfolio() {
+  const { t } = useT();
   const { account, signOut } = useCapimonAccount();
   /*
    * Most of the people using this earn, save and think in shillings, so the
@@ -34,11 +36,11 @@ export function CustodialPortfolio() {
       <Reveal>
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
-            <div className="eyebrow">Portfolio</div>
-            <h1 className="display mt-2 text-[clamp(1.6rem,4vw,2.9rem)]">Your book.</h1>
+            <div className="eyebrow">{t("Portfolio")}</div>
+            <h1 className="display mt-2 text-[clamp(1.6rem,4vw,2.9rem)]">{t("Your book.")}</h1>
             <p className="mt-2.5 flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
               {account.user.username ? `@${account.user.username}` : account.user.email}
-              <span className="rounded-full surface px-2 py-0.5 text-[11px]">held by CAPX</span>
+              <span className="rounded-full surface px-2 py-0.5 text-[11px]">{t("held by CAPX")}</span>
               {canShowTzs && (
                 <span className="inline-flex overflow-hidden rounded-full border hairline text-[11px]">
                   {(["TZS", "USDC"] as const).map((c) => (
@@ -54,7 +56,7 @@ export function CustodialPortfolio() {
                   ))}
                 </span>
               )}
-              <button onClick={signOut} className="underline underline-offset-2 hover:text-[var(--fg)]">Sign out</button>
+              <button onClick={signOut} className="underline underline-offset-2 hover:text-[var(--fg)]">{t("Sign out")}</button>
             </p>
           </div>
           {/*
@@ -66,12 +68,12 @@ export function CustodialPortfolio() {
             * not in a room of its own.
             */}
           <div className="grid w-full grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-4 lg:w-auto">
-            <Cell label="Shares" value={<Counter value={equity} format={money} />} />
-            <Cell label="Cash" value={<Counter value={shillings} format={(n) => `${Math.round(n).toLocaleString()} TZS`} />} />
-            <Cell label="Total value" value={<Counter value={total} format={money} />} />
+            <Cell label={t("Shares")} value={<Counter value={equity} format={money} />} />
+            <Cell label={t("Cash")} value={<Counter value={shillings} format={(n) => `${Math.round(n).toLocaleString()} TZS`} />} />
+            <Cell label={t("Total value")} value={<Counter value={total} format={money} />} />
             {pnl && pnl.invested > 0 ? (
               <Cell
-                label="Return"
+                label={t("Return")}
                 value={
                   <span className={up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}>
                     {sign(pnl.unrealised)}
@@ -83,11 +85,11 @@ export function CustodialPortfolio() {
                 note={
                   Math.abs(pnl.realised) > 0.005
                     ? `${money(pnl.invested)} in · ${sign(pnl.realised)} banked`
-                    : `${money(pnl.invested)} invested`
+                    : `${money(pnl.invested)} ${t("invested")}`
                 }
               />
             ) : (
-              <Cell label="Return" value="—" note="after your first buy" />
+              <Cell label={t("Return")} value="—" note={t("after your first buy")} />
             )}
           </div>
         </div>

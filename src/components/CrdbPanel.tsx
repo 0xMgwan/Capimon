@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
+import { useT } from "@/lib/i18n";
 
 /**
  * Buying and selling CRDB.
@@ -36,6 +37,7 @@ const fmtQty = (n: number) =>
   n.toLocaleString("en-US", { maximumFractionDigits: 8 });
 
 export function CrdbPanel() {
+  const { t } = useT();
   const { account, refresh } = useCapimonAccount();
   const [data, setData] = useState<{ market: Market; dse: Dse } | null>(null);
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -136,11 +138,11 @@ export function CrdbPanel() {
         <Image src="/crdb.jpg" alt="" width={40} height={40} className="rounded-full object-cover" />
         <div className="min-w-0">
           <div className="text-lg font-medium leading-tight">CRDB Bank Plc</div>
-          <div className="text-[11px] text-[var(--muted)]">Dar es Salaam Stock Exchange</div>
+          <div className="text-[11px] text-[var(--muted)]">{t("Dar es Salaam Stock Exchange")}</div>
         </div>
         <div className="ml-auto text-right">
           <div className="tnum text-2xl font-medium">{tzs.format(price)}</div>
-          <div className="text-[11px] text-[var(--muted)]">TZS a share</div>
+          <div className="text-[11px] text-[var(--muted)]">{t("TZS a share")}</div>
         </div>
       </div>
 
@@ -180,7 +182,7 @@ export function CrdbPanel() {
               side === s ? "bg-[var(--fg)] text-[var(--bg)]" : "text-[var(--muted)] hover:text-[var(--fg)]"
             }`}
           >
-            {s}
+            {t(s === "buy" ? "Buy" : "Sell")}
           </button>
         ))}
       </div>
@@ -195,7 +197,7 @@ export function CrdbPanel() {
                 sellIn === k ? "border-[var(--fg)]" : "hairline text-[var(--muted)]"
               }`}
             >
-              {k === "tzs" ? "By amount" : "By shares"}
+              {t(k === "tzs" ? "By amount" : "By shares")}
             </button>
           ))}
         </div>
@@ -203,7 +205,7 @@ export function CrdbPanel() {
 
       <label className="mt-3 block">
         <span className="eyebrow">
-          {side === "buy" ? "Spend (TZS)" : sellIn === "tzs" ? "Receive about (TZS)" : "Shares to sell"}
+          {t(side === "buy" ? "Spend (TZS)" : sellIn === "tzs" ? "Receive about (TZS)" : "Shares to sell")}
         </span>
         <input
           inputMode="decimal"
@@ -230,7 +232,7 @@ export function CrdbPanel() {
             disabled={!(tzsBalance > 0)}
             className="rounded-full border hairline px-3 py-1 text-[11px] hover:surface disabled:opacity-40"
           >
-            All
+            {t("All")}
           </button>
         </div>
       ) : (
@@ -246,7 +248,7 @@ export function CrdbPanel() {
               disabled={!(held > 0)}
               className="rounded-full border hairline px-3 py-1 text-[11px] hover:surface disabled:opacity-40"
             >
-              {f === 1 ? "All" : `${f * 100}%`}
+              {f === 1 ? t("All") : `${f * 100}%`}
             </button>
           ))}
         </div>
@@ -254,13 +256,13 @@ export function CrdbPanel() {
 
       {quote && quote.qty > 0 && (
         <dl className="mt-4 space-y-1.5 rounded-2xl surface px-4 py-3 text-[12px]">
-          <Row label={side === "buy" ? "Shares" : "Shares sold"} value={`${fmtQty(quote.qty)} CRDB`} />
-          <Row label="Price" value={`${tzs.format(price)} TZS`} />
+          <Row label={t(side === "buy" ? "Shares" : "Shares sold")} value={`${fmtQty(quote.qty)} CRDB`} />
+          <Row label={t("Price")} value={`${tzs.format(price)} TZS`} />
           {quote.fee > 0 && (
             <Row label={`Fee (${((m?.feeBps ?? 0) / 100).toFixed(2)}%)`} value={`${tzs2.format(quote.fee)} TZS`} />
           )}
           <Row
-            label={side === "buy" ? "Total cost" : "You receive"}
+            label={t(side === "buy" ? "Total cost" : "You receive")}
             value={`${tzs2.format(side === "buy" ? quote.spend : (quote as { proceeds: number }).proceeds)} TZS`}
             strong
           />
@@ -272,14 +274,14 @@ export function CrdbPanel() {
       {tooPoor && (
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <span className="text-[12px] text-[var(--color-down)]">
-            Your balance is {tzs.format(tzsBalance)} TZS. You need{" "}
-            {tzs.format(Math.max(0, quote!.spend - tzsBalance))} TZS more.
+            {t("Your balance is")} {tzs.format(tzsBalance)} TZS. {t("You need")}{" "}
+            {tzs.format(Math.max(0, quote!.spend - tzsBalance))} TZS {t("more.")}
           </span>
           <Link
             href="/portfolio#wallet"
             className="rounded-full border hairline px-3 py-1 text-[12px] font-medium transition-colors hover:surface"
           >
-            Add money
+            {t("Add money")}
           </Link>
         </div>
       )}
@@ -296,7 +298,7 @@ export function CrdbPanel() {
         disabled={blocked}
         className="mt-4 w-full rounded-full bg-[var(--fg)] py-3 text-[14px] font-medium text-[var(--bg)] disabled:opacity-40"
       >
-        {busy ? "Placing…" : side === "buy" ? "Buy CRDB" : "Sell CRDB"}
+        {t(busy ? "Placing…" : side === "buy" ? "Buy CRDB" : "Sell CRDB")}
       </button>
 
       {msg && (
@@ -310,7 +312,7 @@ export function CrdbPanel() {
           {m ? `${fmtQty(m.availableShares)} of ${fmtQty(m.custodyShares)} shares available` : "—"}
         </span>
         <Link href="/proof" className="underline underline-offset-2 hover:text-[var(--fg)]">
-          Proof of reserves
+          {t("Proof of reserves")}
         </Link>
       </div>
       <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">

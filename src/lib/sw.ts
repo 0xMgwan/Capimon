@@ -73,6 +73,15 @@ export const SW: Record<string, string> = {
   "Nothing yet. Add money to get started.": "Bado hakuna kitu. Weka pesa ili kuanza.",
   "after your first buy": "baada ya ununuzi wako wa kwanza",
   "Wallet": "Mkoba",
+  "How you are paying": "Unalipaje",
+  "Amount": "Kiasi",
+  "Amount in shillings": "Kiasi kwa shilingi",
+  "Amount to withdraw": "Kiasi cha kutoa",
+  "Send to mobile money": "Tuma kwenye simu ya pesa",
+  "Sending to": "Inatumwa kwa",
+  "They receive": "Watapokea",
+  "Bank account you are sending from": "Akaunti ya benki unayotumia kutuma",
+  "You have no shares to sell yet": "Bado huna hisa za kuuza",
   "Deposit": "Amana",
   "invested": "zimewekezwa",
 
@@ -143,6 +152,56 @@ export const SW: Record<string, string> = {
     "Imeshindwa kufikia seva. Hakuna agizo lililotumwa.",
   "Could not reach the server.": "Imeshindwa kufikia seva.",
   "Loading…": "Inapakia…",
+  // --- how it works ---
+  // Technical nouns stay in English where that is how they are actually said:
+  // Chainlink, B20, multiplier, oracle. Borrowing them is natural Swahili here,
+  // and inventing translations would make the page harder to read, not easier.
+  "No black box.": "Hakuna siri.",
+  "Just addresses.": "Ni anwani tu.",
+  "CAPX is a thin, honest interface over machinery that already exists on Base. Here is exactly what it reads, and where you can check it yourself.":
+    "CAPX ni kiolesura chepesi na cha kweli juu ya mfumo ambao tayari upo kwenye Base. Haya ndiyo hasa inayosoma, na mahali unapoweza kuthibitisha mwenyewe.",
+  "Contracts CAPX reads": "Mikataba ambayo CAPX inasoma",
+  "Straight answers": "Majibu ya moja kwa moja",
+  "Base documentation": "Nyaraka za Base",
+  "Every B20 address begins 0xb2. They are native precompiles on Base, not deployed bytecode.":
+    "Kila anwani ya B20 huanza na 0xb2. Ni precompiles za asili kwenye Base, si bytecode iliyosambazwa.",
+
+  "The issuer mints a B20 token": "Mtoaji hutengeneza tokeni ya B20",
+  "A regulated issuer holds the underlying share and mints a matching B20 token on Base. B20 extends ERC-20 for real-world assets and is asset-agnostic. These tokens are native precompiles rather than separately deployed contracts, audited by Base and Spearbit with ongoing Cantina and HackerOne bounty coverage.":
+    "Mtoaji aliyesajiliwa hushika hisa halisi na kutengeneza tokeni ya B20 inayolingana kwenye Base. B20 huongeza ERC-20 kwa ajili ya mali halisi na haijafungwa kwa aina moja ya mali. Tokeni hizi ni precompiles za asili badala ya mikataba iliyosambazwa peke yake, zilizokaguliwa na Base na Spearbit, na zina ulinzi endelevu wa zawadi kupitia Cantina na HackerOne.",
+
+  "Chainlink publishes a total-return mark": "Chainlink huchapisha bei ya total-return",
+  "Each asset has a Chainlink feed on Base reporting price × multiplier, WAD-scaled, running 24/5 and freezing through corporate actions. CAPX reads updatedAt on every round and flags a feed that has missed a session instead of showing you a confident number that isn't.":
+    "Kila mali ina Chainlink feed kwenye Base inayoripoti bei × multiplier, kwa kipimo cha WAD, ikifanya kazi saa 24 kwa siku 5 na kusimama wakati wa maamuzi ya kampuni. CAPX husoma updatedAt kwa kila raundi na huonyesha alama pale feed imekosa kipindi, badala ya kukuonyesha namba inayoonekana ya uhakika kumbe si kweli.",
+
+  "Corporate actions move the multiplier": "Maamuzi ya kampuni hubadilisha multiplier",
+  "Splits and dividends do not rewrite balances. They adjust a WAD-precision multiplier, so one token is not permanently one share. CAPX applies the current multiplier everywhere a share count appears: portfolio quantities use scaledBalanceOf, and supply figures are multiplier-adjusted share-equivalents.":
+    "Kugawanya hisa na gawio havibadilishi salio lako. Hurekebisha multiplier ya usahihi wa WAD, hivyo tokeni moja si hisa moja milele. CAPX hutumia multiplier ya sasa kila mahali idadi ya hisa inapoonekana: idadi za uwekezaji hutumia scaledBalanceOf, na takwimu za ugavi ni sawa na hisa baada ya kurekebishwa kwa multiplier.",
+
+  "Policies gate transfers, not holding": "Sera hudhibiti uhamishaji, si umiliki",
+  "Onchain policy registries enforce allowlists and blocklists, and a transfer to a sanctioned address reverts. Holding and secondary transfer are otherwise permissionless. KYC applies at mint and redeem with the issuer, not between wallets.":
+    "Rejista za sera kwenye mnyororo hutekeleza orodha za kuruhusu na kuzuia, na uhamishaji kwenda anwani iliyozuiwa hukataliwa. Vinginevyo, kushika na kuhamisha hisa hakuhitaji ruhusa. KYC hutumika wakati wa kutengeneza na kukomboa na mtoaji, si kati ya pochi na pochi.",
+
+  "CAPX reads, you sign": "CAPX husoma, wewe unasaini",
+  "Prices, supply and balances are read straight from Base. Trades are routed by aggregating every venue on the chain: Aerodrome concentrated liquidity, Uniswap v3 and v4, PancakeSwap, because equity liquidity moves between them and no single pool tells the truth. Every fill is checked against the Chainlink mark before it is offered, and CAPX refuses to route anything more than 15% away from it.":
+    "Bei, ugavi na salio husomwa moja kwa moja kutoka Base. Biashara hupitishwa kwa kukusanya kila soko kwenye mnyororo: Aerodrome concentrated liquidity, Uniswap v3 na v4, PancakeSwap, kwa sababu ukwasi wa hisa husogea kati yao na hakuna dimbwi moja linalosema ukweli wote. Kila biashara hukaguliwa dhidi ya bei ya Chainlink kabla ya kutolewa, na CAPX hukataa kupitisha lolote lililo zaidi ya asilimia 15 kutoka kwake.",
+
+  "Is one token one share?": "Je, tokeni moja ni hisa moja?",
+  "No. Redemption applies the current onchain multiplier, which absorbs splits and dividends. CAPX shows the multiplier on every asset page and adjusts every share count it displays.":
+    "Hapana. Ukombozi hutumia multiplier ya sasa kwenye mnyororo, ambayo huchukua kugawanya hisa na gawio. CAPX huonyesha multiplier kwenye kila ukurasa wa hisa na hurekebisha kila idadi ya hisa inayoonyesha.",
+
+  "Why does an asset show zero onchain supply?": "Kwa nini hisa fulani inaonyesha ugavi sifuri kwenye mnyororo?",
+  "The Chainlink feed is live for all thirteen assets, but tokens are only minted as demand arrives. A supply of zero means nothing has been minted on Base yet. The mark is still real, there is just nothing to trade against.":
+    "Chainlink feed inafanya kazi kwa hisa zote kumi na tatu, lakini tokeni hutengenezwa pale mahitaji yanapofika. Ugavi wa sifuri maana yake hakuna kilichotengenezwa kwenye Base bado. Bei bado ni halisi, ila hakuna cha kufanyia biashara.",
+
+  "Why can't I trade every asset?": "Kwa nini siwezi kufanya biashara ya kila hisa?",
+  "Secondary trading needs minted supply and a venue holding it. Four assets route today at roughly the oracle mark; the rest have nothing minted on Base yet, so CAPX marks them mint-only rather than inventing a fill. The markets table labels each one.":
+    "Biashara ya pili inahitaji ugavi uliotengenezwa na soko linaloushika. Hisa nne zinapitishwa leo karibu na bei ya oracle; zilizobaki hazina kilichotengenezwa kwenye Base bado, hivyo CAPX huziweka alama ya kutengeneza tu badala ya kubuni biashara. Jedwali la masoko huweka alama kwa kila moja.",
+
+  "Who can use this?": "Nani anaweza kutumia hii?",
+  "Tokenized equities are not available to US persons. Connect your own wallet and CAPX holds nothing. Fund an account with Tanzanian shillings and CAPX holds those assets for you, recording your entitlement in its own ledger. That is custody, and it is the trade-off for not needing a wallet. Nothing here is investment advice.":
+    "Hisa za kidijitali hazipatikani kwa watu wa Marekani. Unganisha pochi yako mwenyewe na CAPX haishiki chochote. Weka pesa kwa shilingi za Tanzania na CAPX hushika mali hizo kwa niaba yako, ikirekodi haki yako kwenye daftari lake. Hiyo ni udhamini, na ndiyo bei ya kutohitaji pochi. Hakuna chochote hapa ni ushauri wa uwekezaji.",
+
   "oracle-implied": "kwa makadirio ya oracle",
   "Review": "Kagua",
   "order": "agizo",

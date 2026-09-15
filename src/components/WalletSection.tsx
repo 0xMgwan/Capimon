@@ -11,6 +11,7 @@ import { useMemo } from "react";
 import { AssetPicker } from "./AssetPicker";
 import { useMarkets } from "@/lib/useMarkets";
 import { useVenues } from "@/lib/useVenues";
+import { useT } from "@/lib/i18n";
 
 type Deposit = {
   id: string; amount_tzs: number; status: string; usdc_credited: string | null;
@@ -55,6 +56,7 @@ export function WalletSection({ holdings }: {
    */
   holdings?: React.ReactNode;
 }) {
+  const { t } = useT();
   const { account, refresh } = useCapimonAccount();
   const router = useRouter();
   // Buying and selling start from the same searchable list the ticket uses, so
@@ -197,7 +199,7 @@ export function WalletSection({ holdings }: {
       <div className="mt-4 grid gap-4">
         <div id="wallet" className="scroll-mt-24 rounded-3xl border hairline p-5 lg:flex lg:items-center lg:justify-between lg:gap-8">
           <div className="lg:flex-1">
-          <div className="eyebrow">Available to invest</div>
+          <div className="eyebrow">{t("Available to invest")}</div>
           {(() => {
             /*
              * An account can hold shillings and USDC at once, and each is spent
@@ -238,7 +240,7 @@ export function WalletSection({ holdings }: {
               onClick={() => setPanel((p) => (p === "deposit" ? "none" : "deposit"))}
               className="w-full rounded-full bg-[var(--fg)] py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95"
             >
-              {panel === "deposit" ? "Cancel" : "Add money"}
+              {t(panel === "deposit" ? "Cancel" : "Add money")}
             </button>
             <div className="grid grid-cols-3 gap-2">
               <AssetPicker
@@ -251,7 +253,7 @@ export function WalletSection({ holdings }: {
                     disabled={buyable.length === 0}
                     className="w-full whitespace-nowrap rounded-full border hairline py-3 text-center text-[13px] font-medium transition-colors hover:surface disabled:opacity-40"
                   >
-                    Buy shares
+                    {t("Buy shares")}
                   </button>
                 )}
               />
@@ -265,17 +267,17 @@ export function WalletSection({ holdings }: {
                       onClick={open}
                       className="w-full whitespace-nowrap rounded-full border hairline py-3 text-center text-[13px] font-medium transition-colors hover:surface"
                     >
-                      Sell shares
+                      {t("Sell shares")}
                     </button>
                   )}
                 />
               ) : (
                 <button
                   disabled
-                  title="You have no shares to sell yet"
+                  title={t("You have no shares to sell yet")}
                   className="whitespace-nowrap rounded-full border hairline py-3 text-[13px] font-medium opacity-40"
                 >
-                  Sell shares
+                  {t("Sell shares")}
                 </button>
               )}
               <button
@@ -286,7 +288,7 @@ export function WalletSection({ holdings }: {
                   : undefined}
                 className="whitespace-nowrap rounded-full border hairline py-3 text-[13px] font-medium transition-colors hover:surface disabled:opacity-40"
               >
-                {panel === "withdraw" ? "Cancel" : "Withdraw"}
+                {t(panel === "withdraw" ? "Cancel" : "Withdraw")}
               </button>
             </div>
 
@@ -308,7 +310,7 @@ export function WalletSection({ holdings }: {
                 className="overflow-hidden"
               >
                 <div className="mt-4 border-t hairline pt-4">
-                  <div className="eyebrow">How you are paying</div>
+                  <div className="eyebrow">{t("How you are paying")}</div>
                   <div className="mt-2 flex rounded-full surface p-1">
                     {([["mobile_money", "Mobile money"], ["bank_transfer", "Bank"]] as const).map(([k, label]) => (
                       <button
@@ -323,7 +325,7 @@ export function WalletSection({ holdings }: {
                     ))}
                   </div>
 
-                  <div className="eyebrow mt-4">Amount</div>
+                  <div className="eyebrow mt-4">{t("Amount")}</div>
                   <div className="mt-2 grid grid-cols-4 gap-2">
                     {presets.map((p) => (
                       <button
@@ -347,7 +349,7 @@ export function WalletSection({ holdings }: {
                   <input
                     value={phoneToUse}
                     onChange={(e) => setPhone(e.target.value)}
-                    inputMode="numeric" placeholder="Mobile money number"
+                    inputMode="numeric" placeholder={t("Mobile money number")}
                     className="mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
                   />
                   {/* A bank credit arrives without its narration, so the sending
@@ -356,7 +358,7 @@ export function WalletSection({ holdings }: {
                     <input
                       value={payerAccount}
                       onChange={(e) => setPayerAccount(e.target.value)}
-                      inputMode="numeric" placeholder="Bank account you are sending from"
+                      inputMode="numeric" placeholder={t("Bank account you are sending from")}
                       className="tnum mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
                     />
                   )}
@@ -391,7 +393,7 @@ export function WalletSection({ holdings }: {
                 className="overflow-hidden"
               >
                 <div className="mt-4 border-t hairline pt-4">
-                  <div className="eyebrow">Send to mobile money</div>
+                  <div className="eyebrow">{t("Send to mobile money")}</div>
                   <input
                     value={String(wdAmount)}
                     onChange={(e) => { setWdAmount(Number(e.target.value.replace(/\D/g, "")) || 0); setQuote(null); }}
@@ -402,21 +404,21 @@ export function WalletSection({ holdings }: {
                   <input
                     value={phoneToUse}
                     onChange={(e) => { setPhone(e.target.value); setQuote(null); }}
-                    inputMode="numeric" placeholder="Mobile money number"
+                    inputMode="numeric" placeholder={t("Mobile money number")}
                     className="mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
                   />
 
                   {quote ? (
                     <div className="mt-3 rounded-xl surface p-3 text-xs">
                       <div className="flex justify-between gap-3">
-                        <span className="text-[var(--muted)]">Sending to</span>
+                        <span className="text-[var(--muted)]">{t("Sending to")}</span>
                         <span className="truncate">{quote.recipientName ?? phoneToUse}</span>
                       </div>
                       <div className="tnum mt-1.5 flex justify-between gap-3">
                         <span className="text-[var(--muted)]">Fee</span><span>{TZS(quote.feeTzs)}</span>
                       </div>
                       <div className="tnum mt-1.5 flex justify-between gap-3 border-t hairline pt-1.5">
-                        <span className="text-[var(--muted)]">They receive</span><span>{TZS(wdAmount)}</span>
+                        <span className="text-[var(--muted)]">{t("They receive")}</span><span>{TZS(wdAmount)}</span>
                       </div>
                       <button
                         onClick={confirmWithdraw}
@@ -454,11 +456,11 @@ export function WalletSection({ holdings }: {
 
         <div className="rounded-3xl border hairline">
           <div className="border-b hairline px-5 py-3.5">
-            <span className="eyebrow">Activity</span>
+            <span className="eyebrow">{t("Activity")}</span>
           </div>
           {deposits.length === 0 && account.entries.length === 0 ? (
             <p className="px-5 py-10 text-center text-sm text-[var(--muted)]">
-              Nothing yet. Add money to get started.
+              {t("Nothing yet. Add money to get started.")}
             </p>
           ) : (
             <div className="divide-y divide-[var(--border)]">
@@ -471,7 +473,7 @@ export function WalletSection({ holdings }: {
                       : "↓"}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium">Deposit</span>
+                    <span className="block text-sm font-medium">{t("Deposit")}</span>
                     <span className="block truncate text-[11px] text-[var(--muted)]">
                       {STATUS_LABEL[d.status] ?? d.status} ·{" "}
                       {new Date(d.created_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}

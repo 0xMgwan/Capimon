@@ -11,6 +11,7 @@ import { Logo, Wordmark } from "./Logo";
 import { WalletButton } from "./WalletButton";
 import { NotificationBell } from "./NotificationBell";
 import { ThemeToggle } from "./ThemeToggle";
+import { LangToggle } from "./LangToggle";
 import { useBodyLock } from "@/lib/useBodyLock";
 import { useT } from "@/lib/i18n";
 
@@ -99,6 +100,7 @@ export function Nav() {
             * which is where a dropdown should line up.
             */}
           <div className="relative flex items-center gap-2">
+            <LangToggle />
             <ThemeToggle />
             {/* Renders nothing when signed out, so it never crowds a visitor. */}
             <NotificationBell />

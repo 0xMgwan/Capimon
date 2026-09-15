@@ -325,7 +325,7 @@ export function WalletSection({ holdings }: {
                     ))}
                   </div>
 
-                  <div className="eyebrow mt-4">{t("Amount")}</div>
+                  <div className="eyebrow mt-4 flex items-center gap-1.5"><NtzsIcon className="h-3.5 w-3.5" /> {t("Amount")}</div>
                   <div className="mt-2 grid grid-cols-4 gap-2">
                     {presets.map((p) => (
                       <button
@@ -393,7 +393,7 @@ export function WalletSection({ holdings }: {
                 className="overflow-hidden"
               >
                 <div className="mt-4 border-t hairline pt-4">
-                  <div className="eyebrow">{t("Send to mobile money")}</div>
+                  <div className="eyebrow flex items-center gap-1.5"><NtzsIcon className="h-3.5 w-3.5" /> {t("Send to mobile money")}</div>
                   <input
                     value={String(wdAmount)}
                     onChange={(e) => { setWdAmount(Number(e.target.value.replace(/\D/g, "")) || 0); setQuote(null); }}

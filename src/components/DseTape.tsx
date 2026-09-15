@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { NtzsIcon } from "./icons/Ntzs";
 
 /**
  * The Dar es Salaam board.
@@ -61,6 +62,7 @@ export function DseTape() {
     <div className="border-b hairline bg-[var(--bg)] md:bg-[var(--bg)]/95 md:backdrop-blur-xl">
       <div className="flex items-center">
         <div className="flex shrink-0 items-center gap-2 border-r hairline px-3 py-1.5 sm:px-4 sm:py-2">
+          <NtzsIcon className="h-3.5 w-3.5" />
           <span className={`inline-block h-1.5 w-1.5 rounded-full ${
             board?.live ? "live-dot bg-[var(--color-up)]" : "bg-[var(--color-muted)]"}`} />
           <span className="eyebrow hidden sm:inline">{label}</span>

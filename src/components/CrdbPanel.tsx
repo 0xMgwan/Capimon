@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { useT } from "@/lib/i18n";
 import { haptic } from "@/lib/haptics";
+import { NtzsIcon } from "./icons/Ntzs";
 
 /**
  * Buying and selling CRDB.
@@ -146,7 +147,9 @@ export function CrdbPanel() {
         </div>
         <div className="ml-auto text-right">
           <div className="tnum text-2xl font-medium">{tzs.format(price)}</div>
-          <div className="text-[11px] text-[var(--muted)]">{t("TZS a share")}</div>
+          <div className="flex items-center justify-end gap-1 text-[11px] text-[var(--muted)]">
+            <NtzsIcon className="h-3 w-3" /> {t("TZS a share")}
+          </div>
         </div>
       </div>
 

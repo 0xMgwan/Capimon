@@ -5,10 +5,10 @@ import { useState } from "react";
 /**
  * nTZS brand mark.
  *
- * Prefers an uploaded file at `public/ntzs.png` and falls back to the drawn
- * mark below when there is not one. That way dropping the real artwork into
- * the folder is the whole job — no component to edit, and no broken image in
- * the meantime if it is never added.
+ * Uses the artwork at `public/ntzs.png`, falling back to the drawn mark below
+ * if it is ever missing. Not cropped to a circle: the file carries its own
+ * shape and its own transparency, and rounding it would cut the corners off
+ * whatever the designer intended.
  */
 export function NtzsIcon({ className = "h-4 w-4" }: { className?: string }) {
   const [noFile, setNoFile] = useState(false);
@@ -20,7 +20,7 @@ export function NtzsIcon({ className = "h-4 w-4" }: { className?: string }) {
         src="/ntzs.png"
         alt=""
         onError={() => setNoFile(true)}
-        className={`shrink-0 rounded-full object-contain ${className}`}
+        className={`shrink-0 object-contain ${className}`}
       />
     );
   }

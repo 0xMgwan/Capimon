@@ -9,6 +9,7 @@ import { WalletSection } from "./WalletSection";
 import { KycPrompt } from "./KycPrompt";
 import { usd, costLabel } from "@/lib/format";
 import { useT } from "@/lib/i18n";
+import { NtzsIcon } from "./icons/Ntzs";
 
 /** The book CAPX holds for a shilling-funded account. */
 export function CustodialPortfolio() {
@@ -69,7 +70,15 @@ export function CustodialPortfolio() {
             */}
           <div className="grid w-full grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-4 lg:w-auto">
             <Cell label={t("Shares")} value={<Counter value={equity} format={money} />} />
-            <Cell label={t("Cash")} value={<Counter value={shillings} format={(n) => `${Math.round(n).toLocaleString()} TZS`} />} />
+            <Cell
+              label={t("Cash")}
+              value={
+                <span className="flex items-center gap-1.5 sm:justify-start">
+                  <NtzsIcon className="h-4 w-4" />
+                  <Counter value={shillings} format={(n) => `${Math.round(n).toLocaleString()} TZS`} />
+                </span>
+              }
+            />
             <Cell label={t("Total value")} value={<Counter value={total} format={money} />} />
             {pnl && pnl.invested > 0 ? (
               <Cell

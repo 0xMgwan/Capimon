@@ -27,7 +27,13 @@ export type CustodialAccount = {
   positions: CustodialPosition[];
   equity: number;
   total: number;
-  entries: { id: string; kind: string; asset: string; amount: string; created_at: string }[];
+  entries: {
+    id: string; kind: string; asset: string; amount: string; created_at: string;
+    /** Pairs the cash and share legs of one trade. */
+    orderId?: string | null;
+    /** The execution price, on whichever leg carried it. */
+    price?: number | null;
+  }[];
   capabilities: { ntzs: boolean; trading: boolean };
 };
 

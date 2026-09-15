@@ -139,6 +139,19 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       user,
+      /*
+       * Entries carry their order id and price.
+       *
+       * A trade writes two rows — the shares and the cash — and without the id
+       * tying them together the activity list showed one purchase as two
+       * events, one of which read "Paid TZS" as though it were a transaction of
+       * its own.
+       */
+      entries: entries.map((e) => ({
+        id: e.id, kind: e.kind, asset: e.asset, amount: e.amount, created_at: e.created_at,
+        orderId: (e.metadata as { orderId?: string } | null)?.orderId ?? null,
+        price: Number((e.metadata as { price?: number } | null)?.price ?? 0) || null,
+      })),
       cash, tzs, positions, equity, total: equity + cash,
       pnl: {
         invested,
@@ -151,7 +164,6 @@ export async function GET() {
       depositMinTzs,
       /** Cash expressed in shillings, when a rate is available. */
       cashTzs: usdcPerTzs && usdcPerTzs > 0 ? cash / usdcPerTzs : null,
-      entries,
       capabilities: { ntzs: ntzsConfigured, trading: treasuryConfigured },
     }, { headers: { "cache-control": "no-store" } });
   } catch (e) {

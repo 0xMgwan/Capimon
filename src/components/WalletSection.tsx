@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
-import { UsdcIcon } from "./icons/Usdc";
 import { NtzsIcon } from "./icons/Ntzs";
 import { usd, ledgerAmount } from "@/lib/format";
 import { useRouter } from "next/navigation";
@@ -12,6 +11,7 @@ import { AssetPicker } from "./AssetPicker";
 import { useMarkets } from "@/lib/useMarkets";
 import { useVenues } from "@/lib/useVenues";
 import { useT } from "@/lib/i18n";
+import { AssetLogo } from "./AssetLogo";
 
 type Deposit = {
   id: string; amount_tzs: number; status: string; usdc_credited: string | null;
@@ -197,48 +197,39 @@ export function WalletSection({ holdings }: {
       )}
 
       <div className="mt-4 grid gap-4">
-        <div id="wallet" className="scroll-mt-24 rounded-3xl border hairline p-5 lg:flex lg:items-center lg:justify-between lg:gap-8">
-          <div className="lg:flex-1">
-          <div className="eyebrow">{t("Available to invest")}</div>
-          {(() => {
-            /*
-             * An account can hold shillings and USDC at once, and each is spent
-             * on its own. Merging them into one "≈ N TZS" figure disagreed with
-             * the trade panel, which shows the balance actually being spent —
-             * so name both parts rather than only their sum.
-             */
-            const shillings = account.tzs + (account.cashTzs ?? 0);
-            const showTzs = account.tzs > 0 || account.cashTzs !== null;
-            const parts = [
-              account.tzs > 0 ? TZS(account.tzs) : null,
-              account.cash > 0 ? usd(account.cash) : null,
-            ].filter(Boolean) as string[];
-            return (
-              <>
-                <div className="tnum mt-2 flex items-center gap-2 text-3xl font-medium tracking-tight">
-                  {showTzs && <NtzsIcon className="h-6 w-6" />}
-                  {showTzs ? `≈ ${TZS(shillings)}` : usd(account.cash)}
+        <div id="wallet" className="scroll-mt-24 rounded-3xl border hairline p-4 sm:p-5 lg:flex lg:items-center lg:justify-between lg:gap-8">
+          {/*
+            * The big number is gone.
+            *
+            * "Available to invest" printed the same figure as the Cash cell
+            * directly above it, at three times the size — a third of a phone
+            * screen spent restating something the reader had just been told,
+            * which pushed the holdings and the activity below the fold. What is
+            * left is the part the totals do not say: which currencies the
+            * balance is actually in, since each is spent on its own.
+            */}
+          <div className="min-w-0 lg:flex-1">
+            {(() => {
+              const parts = [
+                account.tzs > 0 ? TZS(account.tzs) : null,
+                account.cash > 0 ? usd(account.cash) : null,
+              ].filter(Boolean) as string[];
+              if (!parts.length) return null;
+              return (
+                <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-[var(--muted)]">
+                  <NtzsIcon className="h-4 w-4" />
+                  <span className="tnum text-[var(--fg)]">{parts.join(" + ")}</span>
+                  {parts.length > 1 && <span>{t("each spent in its own currency")}</span>}
+                  {account.equity > 0 && <span>· {usd(account.equity)} {t("in shares")}</span>}
                 </div>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--muted)]">
-                  {parts.length > 1 ? (
-                    <span>{parts.join(" + ")}, each spent in its own currency</span>
-                  ) : account.cash > 0 && showTzs ? (
-                    <span className="inline-flex items-center gap-1">
-                      <UsdcIcon className="h-3 w-3" />{usd(account.cash)} held, shown in shillings at today&apos;s rate
-                    </span>
-                  ) : null}
-                  {account.equity > 0 && <span>· {usd(account.equity)} in shares</span>}
-                </div>
-              </>
-            );
-          })()}
-
+              );
+            })()}
           </div>
 
-          <div className="mt-5 grid gap-2 lg:mt-0 lg:w-[340px] lg:shrink-0">
+          <div className="mt-3 grid gap-2 lg:mt-0 lg:w-[360px] lg:shrink-0">
             <button
               onClick={() => setPanel((p) => (p === "deposit" ? "none" : "deposit"))}
-              className="w-full rounded-full bg-[var(--fg)] py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95"
+              className="w-full rounded-full bg-[var(--fg)] py-3 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95"
             >
               {t(panel === "deposit" ? "Cancel" : "Add money")}
             </button>
@@ -483,36 +474,92 @@ export function WalletSection({ holdings }: {
                   main: TZS(d.amount_tzs),
                   extra: d.usdc_credited ? `+${usd(Number(d.usdc_credited))}` : null,
                   tone: "neutral" as const,
+                  asset: null,
                 })),
-                ...account.entries
-                  .filter((e) => e.kind !== "deposit")
-                  .map((e) => {
+                /*
+                 * One row per trade, not one per ledger entry.
+                 *
+                 * A trade writes two entries — the shares and the cash — and
+                 * listing both showed a single purchase as two events, the
+                 * second of which read "Paid TZS" as though shillings had been
+                 * traded for something unnamed. They are paired by order id and
+                 * shown as what actually happened: bought this much of this, for
+                 * this much.
+                 */
+                ...(() => {
+                  const trades = new Map<string, { at: string; kind: string; asset: string; qty: number; cash: number; price: number | null }>();
+                  const loose: typeof rows = [];
+                  type Row = {
+                    key: string; at: string; inFlight: boolean; glyph: string; asset: string | null;
+                    title: string; sub: string | null; main: string; extra: string | null;
+                    tone: "up" | "down" | "neutral";
+                  };
+                  const rows: Row[] = [];
+
+                  for (const e of account.entries) {
+                    if (e.kind === "deposit") continue;
                     const amount = Number(e.amount);
-                    return {
-                      key: `e-${e.id}`,
-                      at: e.created_at,
-                      inFlight: false,
-                      glyph: e.kind === "buy" ? "↗" : e.kind === "sell" ? "↘" : "•",
-                      title: (e.kind === "buy" || e.kind === "sell") && (e.asset === "TZS" || e.asset === "USDC")
-                        ? (amount >= 0 ? `${t("Proceeds")} ${e.asset}` : `${t("Paid")} ${e.asset}`)
-                        : `${e.kind[0].toUpperCase()}${e.kind.slice(1)} ${e.asset}`,
-                      sub: null,
-                      main: ledgerAmount(amount, e.asset),
-                      extra: null,
-                      tone: (amount >= 0 ? "up" : "down") as "up" | "down",
-                    };
-                  }),
+                    const cash = e.asset === "TZS" || e.asset === "USDC";
+
+                    if (e.orderId && (e.kind === "buy" || e.kind === "sell")) {
+                      const tr = trades.get(e.orderId) ?? {
+                        at: e.created_at, kind: e.kind, asset: "", qty: 0, cash: 0, price: null,
+                      };
+                      if (cash) tr.cash = Math.abs(amount);
+                      else { tr.asset = e.asset; tr.qty = Math.abs(amount); }
+                      if (e.price) tr.price = e.price;
+                      // The earliest timestamp of the pair, so the trade sits
+                      // where it happened rather than where it finished writing.
+                      if (e.created_at < tr.at) tr.at = e.created_at;
+                      trades.set(e.orderId, tr);
+                      continue;
+                    }
+                    loose.push({
+                      key: `e-${e.id}`, at: e.created_at, inFlight: false,
+                      glyph: amount >= 0 ? "↗" : "↘", asset: cash ? null : e.asset,
+                      title: `${e.kind[0].toUpperCase()}${e.kind.slice(1)} ${e.asset}`,
+                      sub: null, main: ledgerAmount(amount, e.asset), extra: null,
+                      tone: amount >= 0 ? "up" : "down",
+                    });
+                  }
+
+                  for (const [id, tr] of trades) {
+                    if (!tr.asset) continue;
+                    const bought = tr.kind === "buy";
+                    rows.push({
+                      key: `t-${id}`, at: tr.at, inFlight: false,
+                      glyph: bought ? "↗" : "↘", asset: tr.asset,
+                      title: `${bought ? t("Bought") : t("Sold")} ${tr.asset}`,
+                      sub: tr.price
+                        ? `${tr.price.toLocaleString()} ${tr.asset === "CRDB" ? "TZS" : "USD"} a share`
+                        : null,
+                      main: `${bought ? "−" : "+"}${tr.cash.toLocaleString("en-TZ", { maximumFractionDigits: 2 })} TZS`,
+                      extra: `${bought ? "+" : "−"}${tr.qty.toLocaleString("en-US", { maximumFractionDigits: 8 })} ${tr.asset}`,
+                      tone: bought ? "down" : "up",
+                    });
+                  }
+                  return [...rows, ...loose];
+                })(),
               ]
                 .sort((a, b) => +new Date(b.at) - +new Date(a.at))
                 .slice(0, 20)
                 .map((row) => (
                   <div key={row.key} className="flex items-center gap-3 px-5 py-3.5">
-                    <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] ${
-                      row.inFlight ? "bg-[#b45309]/10 text-[#b45309]" : "surface"}`}>
-                      {row.inFlight
-                        ? <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                        : row.glyph}
-                    </span>
+                    {row.asset ? (
+                      <AssetLogo
+                        logo={row.asset === "CRDB" ? "/crdb.jpg" : marketData?.markets.find((m) => m.symbol === row.asset)?.logo ?? null}
+                        ticker={row.asset}
+                        color={row.asset === "CRDB" ? "#0B7D3E" : marketData?.markets.find((m) => m.symbol === row.asset)?.color ?? "#888"}
+                        size={32}
+                      />
+                    ) : (
+                      <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] ${
+                        row.inFlight ? "bg-[#b45309]/10 text-[#b45309]" : "surface"}`}>
+                        {row.inFlight
+                          ? <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                          : row.glyph}
+                      </span>
+                    )}
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-medium">{row.title}</span>
                       <span className="block truncate text-[11px] text-[var(--muted)]">
@@ -529,7 +576,7 @@ export function WalletSection({ holdings }: {
                         {row.main}
                       </span>
                       {row.extra && (
-                        <span className="tnum block text-[11px] text-[var(--color-up)]">{row.extra}</span>
+                        <span className="tnum block text-[11px] text-[var(--muted)]">{row.extra}</span>
                       )}
                     </span>
                   </div>

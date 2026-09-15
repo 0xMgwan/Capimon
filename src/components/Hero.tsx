@@ -104,9 +104,9 @@ export function Hero() {
           className="mt-7 flex flex-col gap-7 sm:mt-8 sm:gap-8 lg:flex-row lg:items-end lg:justify-between"
         >
           <p className="mx-auto max-w-xl text-center font-[family-name:var(--font-serif)] text-[17px] leading-relaxed text-[var(--muted)] sm:mx-0 sm:text-left sm:text-xl">
-            CAPX puts public equities onchain. Live oracle marks,
-            real onchain supply, permissionless secondary transfer, and self-custody —
-            no broker, no closing bell for settlement.
+            CAPX puts public equities onchain — Wall Street and Dar es Salaam on
+            the same rails. Buy US shares in dollars or CRDB Bank in shillings,
+            priced by live marks, settled against custody published on Base.
           </p>
 
           <div className="flex w-full flex-col gap-2.5 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
@@ -139,13 +139,25 @@ export function Hero() {
             </div>
             <div className="mt-1 text-[11px] text-[var(--muted)]">supply × live mark</div>
           </div>
-          <div className="bg-[var(--bg)] p-4 sm:bg-[var(--bg)]/80 sm:p-5 sm:backdrop-blur">
-            <div className="eyebrow">Listed assets</div>
-            <div className="tnum mt-2 text-xl font-medium sm:text-2xl">
-              <Counter value={data?.totals.assets ?? 0} format={(n) => Math.round(n).toString()} />
+          {/*
+            * Two markets, not one count.
+            *
+            * Rolling CRDB into "listed assets" would bury the thing that makes
+            * this different from every other tokenised-equity front end: you
+            * can buy a Tanzanian bank here, in shillings, and that is worth its
+            * own square rather than a increment on a number.
+            */}
+          <Link
+            href="/markets/crdb"
+            className="group bg-[var(--bg)] p-4 transition-colors sm:bg-[var(--bg)]/80 sm:p-5 sm:backdrop-blur"
+          >
+            <div className="eyebrow">Dar es Salaam</div>
+            <div className="tnum mt-2 text-xl font-medium sm:text-2xl">CRDB</div>
+            <div className="mt-1 text-[11px] text-[var(--muted)]">
+              buy in shillings{" "}
+              <span className="inline-block transition-transform group-hover:translate-x-0.5">→</span>
             </div>
-            <div className="mt-1 text-[11px] text-[var(--muted)]">tokenized equities</div>
-          </div>
+          </Link>
           {movers.map((m) => (
             <Link key={m.symbol} href={`/markets/${m.ticker.toLowerCase()}`} className="group bg-[var(--bg)] p-4 transition-colors hover:bg-[var(--bg)] sm:bg-[var(--bg)]/80 sm:p-5 sm:backdrop-blur">
               <div className="flex items-center justify-between gap-2">

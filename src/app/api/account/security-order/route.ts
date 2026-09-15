@@ -5,7 +5,7 @@ import { balanceOf, record } from "@/lib/ledger";
 import { requireDb, bad, boom } from "@/lib/apiHelpers";
 import { assertSolvent } from "@/lib/solvency";
 import { notify } from "@/lib/notify";
-import { crdbMarket, quoteBuyTzs, quoteSellQty } from "@/lib/dseTrading";
+import { crdbMarket, quoteBuyTzs, quoteSellQty, sellQtyOrAll } from "@/lib/dseTrading";
 import { CRDBT_SECURITY } from "@/lib/assets";
 
 export const dynamic = "force-dynamic";
@@ -58,9 +58,18 @@ export async function POST(req: Request) {
       }
     }
 
+    /*
+     * A sell that would leave dust takes the rest with it.
+     *
+     * Selling by a shilling amount almost never lands on a round number of
+     * shares, so "sell everything" left a few millionths behind that priced to
+     * nothing and could not be sold for anything. It is cleaner to close the
+     * position than to leave a row that looks like a holding and is not.
+     */
+    const held = side === "sell" ? await balanceOf(user.id, CRDBT_SECURITY) : 0;
     const quote = side === "buy"
-      ? quoteBuyTzs(market.price, amount)   // amount is shillings
-      : quoteSellQty(market.price, amount); // amount is shares
+      ? quoteBuyTzs(market.price, amount)                       // amount is shillings
+      : quoteSellQty(market.price, sellQtyOrAll(amount, held)); // amount is shares
 
     if (!(quote.qty > 0)) {
       return bad(
@@ -91,7 +100,6 @@ export async function POST(req: Request) {
         );
       }
     } else {
-      const held = await balanceOf(user.id, CRDBT_SECURITY);
       if (quote.qty > held) {
         return bad(`You hold ${held} CRDB.`, "insufficient_balance");
       }

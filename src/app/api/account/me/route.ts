@@ -51,8 +51,17 @@ export async function GET() {
     // Shilling accounts hold TZS; a legacy USDC balance is still shown.
     const tzs = bal.find((b) => b.asset === "TZS")?.amount ?? 0;
     const cash = bal.find((b) => b.asset === "USDC")?.amount ?? 0;
+    /*
+     * Dust is not a position.
+     *
+     * A few millionths of a share left over from selling "everything" prices to
+     * zero and cannot be sold for anything, but it occupied a row that looked
+     * like a holding. It stays in the ledger — nothing is written off — it
+     * simply stops being shown as something the account owns.
+     */
+    const DUST = 0.001;
     const positions = bal
-      .filter((b) => b.asset !== "USDC" && b.asset !== "TZS")
+      .filter((b) => b.asset !== "USDC" && b.asset !== "TZS" && Math.abs(b.amount) >= DUST)
       .map((b) => {
         const m = markets.find((x) => x.symbol === b.asset);
         const isCrdb = b.asset === "CRDB";

@@ -125,6 +125,22 @@ export function quoteBuyTzs(price: number, tzs: number): Quote {
   return { side: "buy", price, tzs: roundTo(tzs, TZS_DP), netTzs, fee, qty: floorTo(netTzs / price, QTY_DP), feeBps: FEE_BPS };
 }
 
+/**
+ * Below this, a holding is not worth keeping on a page.
+ *
+ * A few millionths of a share prices to nothing, cannot be sold for anything,
+ * and sits in the list looking like a position. Selling "almost all" leaves
+ * exactly that, so a sale that would leave less than this takes the rest with
+ * it rather than manufacturing a remainder nobody can use.
+ */
+export const DUST_SHARES = 0.001;
+
+/** Rounds a sale up to the whole position when the remainder would be dust. */
+export function sellQtyOrAll(requested: number, held: number): number {
+  const remainder = held - requested;
+  return remainder > 0 && remainder < DUST_SHARES ? held : requested;
+}
+
 export function quoteSellQty(price: number, qty: number): Quote {
   const gross = roundTo(qty * price, TZS_DP);
   const fee = feeEnabled ? roundTo((gross * FEE_BPS) / 10_000, TZS_DP) : 0;

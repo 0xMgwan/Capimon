@@ -39,6 +39,37 @@ async function spendableTzs(userId: string) {
 }
 
 /**
+ * Which rail pays this out.
+ *
+ * Shillings first, whenever the omnibus is holding enough of them.
+ *
+ * The ramp pays from the USDC float, so using it means sending dollars to the
+ * float and having them converted back into shillings at the other end. For
+ * someone who sold a shilling-priced share, holds shillings, and is being paid
+ * in shillings, that is a round trip through a currency nobody involved asked
+ * for — and it is charged a spread on both legs.
+ *
+ * The ramp used to be preferred unconditionally because the disbursement rail
+ * refuses to quote more than the omnibus is holding. That is a real limit, but
+ * it is a balance that can be read rather than a reason to avoid the rail
+ * entirely. So: disburse when the shillings are already there, and fall back to
+ * the ramp when they are not.
+ */
+async function chooseRail(amountTzs: number, rampAvailable: boolean) {
+  if (!rampAvailable) return false;
+  try {
+    const { omnibusBalances } = await import("@/lib/omnibus");
+    const omnibus = await omnibusBalances();
+    // A small margin, so a payout is not routed to a balance that a concurrent
+    // trade is about to spend.
+    if (omnibus.tzs >= amountTzs * 1.02) return false;
+  } catch {
+    /* cannot read the omnibus: the ramp can always fund itself */
+  }
+  return true;
+}
+
+/**
  * Cash out to mobile money.
  *
  * Two steps, because the fee is priced upstream and must never be recomputed
@@ -69,19 +100,8 @@ export async function GET(req: Request) {
       return bad(`Your balance is ${Math.floor(funds.totalTzs).toLocaleString()} TZS.`, "insufficient_balance");
     }
 
-    /*
-     * Two payout rails, and the ramp is preferred for both.
-     *
-     * The ramp debits the USDC settlement float, which the treasury can top up
-     * by signing a transfer — so it can pay any amount the customer is owed.
-     * The disbursement rail pays from the omnibus wallet's shillings, and that
-     * holds only what has not yet been swapped, so it refuses to quote a payout
-     * larger than the balance sitting there. Deposits routing through the
-     * omnibus is unrelated to which rail can fund a payout, and tying them
-     * together declined withdrawals the account could comfortably afford.
-     */
     const caps = await capabilities();
-    const viaRamp = caps.ramp.available;
+    const viaRamp = await chooseRail(amountTzs, caps.ramp.available);
 
     let quoteId: string | null = null;
     let feeTzs = 0;
@@ -163,7 +183,7 @@ export async function POST(req: Request) {
 
     // Same rail choice as the quote, for the same reasons.
     const caps = await capabilities();
-    const viaRamp = caps.ramp.available;
+    const viaRamp = await chooseRail(amountTzs, caps.ramp.available);
 
     /*
      * Debit before paying out, and refund if the payout does not happen.

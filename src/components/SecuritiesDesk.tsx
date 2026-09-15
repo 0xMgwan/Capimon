@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 type Backing = {
   security: string; custodian: string | null;
   underlying: number; locked: number; issued: number;
+  recorded: number; drift: number; source: "chain" | "ledger";
   ratioPct: number | null; headroom: number;
   fresh: boolean; expiresAt: string | null; lastVerified: string | null;
 };
@@ -139,7 +140,10 @@ export function SecuritiesDesk() {
               <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-5">
                 <Cell label="Underlying" value={b.underlying.toLocaleString()} />
                 <Cell label="Locked" value={b.locked.toLocaleString()} />
-                <Cell label="Issued" value={b.issued.toLocaleString()} />
+                <Cell
+                  label={b.source === "chain" ? "Issued (chain)" : "Issued (log)"}
+                  value={b.issued.toLocaleString()}
+                />
                 <Cell label="Headroom" value={b.headroom.toLocaleString()} />
                 <Cell label="Custodian" value={b.custodian ?? "—"} />
               </div>
@@ -148,6 +152,22 @@ export function SecuritiesDesk() {
                   ? `Attestation in force until ${dt(b.expiresAt)}. Verified ${dt(b.lastVerified)}.`
                   : "No attestation in force — issuance is blocked until one is approved."}
               </p>
+
+              {/*
+                * The log and the chain disagreeing is the one thing on this page
+                * that cannot be left to a number nobody reads. Minting happens
+                * with the issuer key, outside this app, so a gap here means a
+                * mint was recorded and never executed, or executed and never
+                * recorded — and both need a person, not a refresh.
+                */}
+              {b.drift !== 0 && (
+                <p className="mt-2 rounded-xl border border-[var(--color-down)]/40 bg-[var(--color-down)]/[0.06] px-3 py-2 text-[11px] text-[var(--color-down)]">
+                  {b.drift > 0
+                    ? `${b.drift.toLocaleString()} more on-chain than the issuance log records — a mint happened that was never written down.`
+                    : `${Math.abs(b.drift).toLocaleString()} recorded in the issuance log but not on-chain — a mint was logged and never executed.`}
+                  {" "}Issuance is measured against the larger of the two until this is resolved.
+                </p>
+              )}
 
               <div className="mt-4 flex flex-wrap gap-2">
                 <MintBurn security={s.symbol} headroom={b.headroom} issued={b.issued} onAct={act} busy={busy} />

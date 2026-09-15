@@ -1,5 +1,6 @@
 import "server-only";
 import { db, migrate } from "./db";
+import { onchainSupply } from "./securities";
 
 /**
  * What a custodian says it holds, and what CAPX has issued against it.
@@ -36,8 +37,14 @@ export type Backing = {
   underlying: number;
   /** Of those, the ones earmarked against tokens. */
   locked: number;
-  /** Tokens outstanding, from the issuance log. */
+  /** Tokens outstanding. The chain's figure once the security has a token. */
   issued: number;
+  /** What the issuance log says was minted. Equal to `issued` when all is well. */
+  recorded: number;
+  /** issued − recorded. Non-zero means the log and the chain disagree. */
+  drift: number;
+  /** Which of the two the ceiling is computed from — always the larger. */
+  source: "chain" | "ledger";
   /** locked ÷ issued, as a percentage. Infinite coverage reads as null. */
   ratioPct: number | null;
   /** How many more tokens may be issued before breaching the backing. */
@@ -61,8 +68,8 @@ export async function activeAttestation(security: string): Promise<Attestation |
   return rows[0] ?? null;
 }
 
-/** Net tokens outstanding, summed from the events that created them. */
-export async function issuedQuantity(security: string): Promise<number> {
+/** Net tokens the issuance log claims, summed from the events themselves. */
+export async function recordedQuantity(security: string): Promise<number> {
   await migrate();
   const rows = await db()<{ total: string | null }[]>`
     select coalesce(sum(case when kind = 'mint' then quantity else -quantity end), 0)::text as total
@@ -71,12 +78,40 @@ export async function issuedQuantity(security: string): Promise<number> {
   return Number(rows[0]?.total ?? 0);
 }
 
+/**
+ * Tokens outstanding.
+ *
+ * The chain's figure when the security has a token, because that is what
+ * actually exists. Before tokenisation there is nothing to read and the log is
+ * all there is, so it stands in — flagged as such rather than passed off as a
+ * measurement.
+ */
+export async function issuedQuantity(security: string): Promise<number> {
+  const [chain, recorded] = await Promise.all([
+    onchainSupply(security).catch(() => null),
+    recordedQuantity(security),
+  ]);
+  return chain ? chain.quantity : recorded;
+}
+
 export async function backing(security: string): Promise<Backing> {
-  const [att, issued] = await Promise.all([
+  const [att, chain, recorded] = await Promise.all([
     activeAttestation(security),
-    issuedQuantity(security),
+    onchainSupply(security).catch(() => null),
+    recordedQuantity(security),
   ]);
 
+  const issued = chain ? chain.quantity : recorded;
+  /*
+   * The ceiling is computed from whichever figure is larger.
+   *
+   * The two can disagree in both directions and both are dangerous if trusted
+   * alone: a mint that happened but was never written down would leave the log
+   * understating supply, and a mint written down but never executed would leave
+   * the chain understating it. Taking the larger means neither mistake invents
+   * headroom, and the drift stays visible instead of being averaged away.
+   */
+  const committed = Math.max(issued, recorded);
   const locked = att?.locked ?? 0;
   return {
     security,
@@ -84,10 +119,13 @@ export async function backing(security: string): Promise<Backing> {
     underlying: att?.quantity ?? 0,
     locked,
     issued,
+    recorded,
+    drift: issued - recorded,
+    source: chain ? "chain" : "ledger",
     // Nothing issued is not 0% backed, it is a ratio with no denominator —
     // reporting 0% would read as a breach when none exists.
-    ratioPct: issued > 0 ? (locked / issued) * 100 : null,
-    headroom: Math.max(0, locked - issued),
+    ratioPct: committed > 0 ? (locked / committed) * 100 : null,
+    headroom: Math.max(0, locked - committed),
     fresh: !!att,
     expiresAt: att?.expires_at ?? null,
     lastVerified: att?.issued_at ?? null,
@@ -114,7 +152,7 @@ export async function canIssue(security: string, quantity: number): Promise<{ ok
   if (quantity > b.headroom) {
     return {
       ok: false,
-      reason: `Only ${b.headroom} more may be issued: ${b.locked} shares are locked and ${b.issued} tokens already exist.`,
+      reason: `Only ${b.headroom} more may be issued: ${b.locked} shares are locked and ${Math.max(b.issued, b.recorded)} tokens already exist.`,
       backing: b,
     };
   }
@@ -139,9 +177,16 @@ export async function recordIssuance(input: {
     const check = await canIssue(input.security, input.quantity);
     if (!check.ok) throw new Error(check.reason ?? "Issuance refused.");
   } else {
-    const issued = await issuedQuantity(input.security);
-    if (input.quantity > issued) {
-      throw new Error(`Cannot burn ${input.quantity}: only ${issued} are outstanding.`);
+    // Burning is bounded by what actually exists on the chain, not by what the
+    // log believes — the smaller of the two, so an over-count in the log cannot
+    // authorise burning tokens that are not there.
+    const [chain, recorded] = await Promise.all([
+      onchainSupply(input.security).catch(() => null),
+      recordedQuantity(input.security),
+    ]);
+    const outstanding = chain ? Math.min(chain.quantity, recorded) : recorded;
+    if (input.quantity > outstanding) {
+      throw new Error(`Cannot burn ${input.quantity}: only ${outstanding} are outstanding.`);
     }
   }
 

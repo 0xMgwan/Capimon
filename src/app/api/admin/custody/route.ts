@@ -73,10 +73,49 @@ export async function POST(req: Request) {
       const symbol = String(body.symbol ?? "").trim().toUpperCase();
       const name = String(body.name ?? "").trim();
       if (!symbol || !name) return NextResponse.json({ ok: false, error: "symbol and name are required" }, { status: 400 });
+
+      const tokenAddress = body.tokenAddress ? String(body.tokenAddress).trim().toLowerCase() : null;
+      let decimals = Number(body.decimals ?? 8);
+
+      /*
+       * A registered address is checked against the token it names.
+       *
+       * Supply is now read from this address, so a typo here would not be a
+       * cosmetic error — it would silently report some other token's supply as
+       * this security's, and the backing check would be measuring the wrong
+       * thing entirely. The token already knows its own decimals, so they are
+       * taken from it rather than from whatever was typed into the form.
+       */
+      if (tokenAddress) {
+        if (!/^0x[0-9a-f]{40}$/.test(tokenAddress)) {
+          return NextResponse.json({ ok: false, error: "That is not a valid token address." }, { status: 400 });
+        }
+        try {
+          const { publicClient } = await import("@/lib/chain");
+          const { b20Abi } = await import("@/lib/abis");
+          const [onchainDecimals, onchainSymbol] = await Promise.all([
+            publicClient.readContract({ address: tokenAddress as `0x${string}`, abi: b20Abi, functionName: "decimals" }),
+            publicClient.readContract({ address: tokenAddress as `0x${string}`, abi: b20Abi, functionName: "symbol" }),
+          ]);
+          decimals = Number(onchainDecimals);
+          if (body.expectSymbol && String(body.expectSymbol) !== String(onchainSymbol)) {
+            return NextResponse.json(
+              { ok: false, error: `That address is ${onchainSymbol}, not ${body.expectSymbol}.` },
+              { status: 400 },
+            );
+          }
+        } catch {
+          return NextResponse.json(
+            { ok: false, error: "That address did not answer as a token on Base — check the network and the address." },
+            { status: 400 },
+          );
+        }
+      }
+
       await sql`
         insert into capx.securities (symbol, name, token_address, decimals, chain_id, status)
-        values (${symbol}, ${name}, ${body.tokenAddress ?? null}, ${Number(body.decimals ?? 2)},
-                ${Number(body.chainId ?? 84532)}, ${String(body.status ?? "draft")})
+        values (${symbol}, ${name}, ${tokenAddress}, ${decimals},
+                ${Number(body.chainId ?? 8453)}, ${String(body.status ?? "draft")})
         on conflict (symbol) do update
           set name = excluded.name,
               token_address = coalesce(excluded.token_address, capx.securities.token_address),

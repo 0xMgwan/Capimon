@@ -158,8 +158,8 @@ export const SECURITIES_CONTRACTS = {
   chainId: 8453,
   investorRegistry: "0x7ff9a98b0769647213e5599ddc805317b1b402fa",
   custodyRegistry: "0x6aaabcd0083e0ee91deeb6a6bb06414cceb97901",
-  priceOracle: "0x28d5f0b47cdb502ea5f0f8be2cfa9461afe3a440",
-  settlementEngine: "0x175dbe2391b1f3ce7bb96ca51e714f54c3e6dbc7",
+  priceOracle: "0x400110946852e0c2c12b6bfc26e0a0909904e889",
+  settlementEngine: "0xb01f2b1a2c78ec9bc74616fe0359a7fd22c6d3b7",
 } as const;
 
 /**

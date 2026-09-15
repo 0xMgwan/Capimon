@@ -1,6 +1,6 @@
 import "server-only";
 import { db, migrate } from "./db";
-import { onchainSupply } from "./securities";
+import { onchainSupply, onchainCustody } from "./securities";
 
 /**
  * What a custodian says it holds, and what CAPX has issued against it.
@@ -51,6 +51,10 @@ export type Backing = {
   headroom: number;
   /** False when the attestation has expired or none is approved. */
   fresh: boolean;
+  /** Which record the custody figures came from. */
+  custodySource: "chain" | "filed" | "none";
+  /** Set when the filed copy and the published registry entry disagree. */
+  custodyMismatch: string | null;
   expiresAt: string | null;
   lastVerified: string | null;
 };
@@ -95,11 +99,34 @@ export async function issuedQuantity(security: string): Promise<number> {
 }
 
 export async function backing(security: string): Promise<Backing> {
-  const [att, chain, recorded] = await Promise.all([
+  const [att, onchain, chain, recorded] = await Promise.all([
     activeAttestation(security),
+    onchainCustody(security).catch(() => null),
     onchainSupply(security).catch(() => null),
     recordedQuantity(security),
   ]);
+
+  /*
+   * The published statement wins over the filed one.
+   *
+   * The registry entry is the claim CAPX has actually made where anyone can
+   * check it; the database row is the desk's workflow, and a row marked
+   * approved is a statement of intent until it reaches the chain. Backing a
+   * token against intent is how a system ends up over-issued with every
+   * internal record looking correct.
+   *
+   * When both exist and disagree, the smaller quantity is used and the
+   * disagreement is reported. Neither copy is assumed right, and the direction
+   * that cannot over-issue is the one to be wrong in.
+   */
+  const usable = onchain?.fresh ? onchain : null;
+  const custodySource: "chain" | "filed" | "none" = usable ? "chain" : att ? "filed" : "none";
+  let custodyMismatch: string | null = null;
+  if (usable && att && (usable.locked !== att.locked || usable.quantity !== att.quantity)) {
+    custodyMismatch =
+      `The filed attestation says ${att.quantity} held / ${att.locked} locked, ` +
+      `the registry says ${usable.quantity} / ${usable.locked}.`;
+  }
 
   const issued = chain ? chain.quantity : recorded;
   /*
@@ -112,11 +139,16 @@ export async function backing(security: string): Promise<Backing> {
    * headroom, and the drift stays visible instead of being averaged away.
    */
   const committed = Math.max(issued, recorded);
-  const locked = att?.locked ?? 0;
+  const locked = usable
+    ? (att ? Math.min(usable.locked, att.locked) : usable.locked)
+    : att?.locked ?? 0;
+  const underlying = usable
+    ? (att ? Math.min(usable.quantity, att.quantity) : usable.quantity)
+    : att?.quantity ?? 0;
   return {
     security,
-    custodian: att?.custodian ?? null,
-    underlying: att?.quantity ?? 0,
+    custodian: usable?.custodian ?? att?.custodian ?? null,
+    underlying,
     locked,
     issued,
     recorded,
@@ -126,9 +158,13 @@ export async function backing(security: string): Promise<Backing> {
     // reporting 0% would read as a breach when none exists.
     ratioPct: committed > 0 ? (locked / committed) * 100 : null,
     headroom: Math.max(0, locked - committed),
-    fresh: !!att,
-    expiresAt: att?.expires_at ?? null,
-    lastVerified: att?.issued_at ?? null,
+    // Freshness is the registry's to decide once it has a statement: an entry
+    // that has expired on-chain backs nothing, whatever the desk still shows.
+    fresh: usable ? true : !!att,
+    custodySource,
+    custodyMismatch,
+    expiresAt: usable?.expiresAt ?? att?.expires_at ?? null,
+    lastVerified: usable?.issuedAt ?? att?.issued_at ?? null,
   };
 }
 
@@ -145,7 +181,7 @@ export async function canIssue(security: string, quantity: number): Promise<{ ok
   if (!b.fresh) {
     return {
       ok: false,
-      reason: "No approved custody attestation is in force — it is missing, unapproved or expired.",
+      reason: "No custody attestation is in force — it is missing, unapproved, or expired on-chain.",
       backing: b,
     };
   }

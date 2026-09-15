@@ -3,6 +3,7 @@ import { formatUnits } from "viem";
 import { publicClient } from "./chain";
 import { b20Abi } from "./abis";
 import { db, migrate } from "./db";
+import { SECURITIES_CONTRACTS } from "./assets";
 
 /**
  * Where a tokenised security's supply is read from.
@@ -66,4 +67,84 @@ export async function onchainSupply(symbol: string): Promise<Supply | null> {
     source: "chain",
     tokenAddress: token,
   };
+}
+
+
+/**
+ * The custody registry's ABI, kept here because it is the only caller.
+ */
+const custodyRegistryAbi = [
+  { type: "function", name: "getCustodyPosition", stateMutability: "view",
+    inputs: [{ name: "security", type: "string" }],
+    outputs: [{ type: "tuple", components: [
+      { name: "custodian", type: "string" },
+      { name: "quantity", type: "uint256" },
+      { name: "locked", type: "uint256" },
+      { name: "issuedAt", type: "uint64" },
+      { name: "expiresAt", type: "uint64" },
+      { name: "docRef", type: "string" },
+      { name: "active", type: "bool" },
+    ] }] },
+  { type: "function", name: "verifiedQuantity", stateMutability: "view",
+    inputs: [{ name: "security", type: "string" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "isFresh", stateMutability: "view",
+    inputs: [{ name: "security", type: "string" }], outputs: [{ type: "bool" }] },
+] as const;
+
+export type OnchainCustody = {
+  custodian: string;
+  /** Whole shares the custodian is recorded as holding. */
+  quantity: number;
+  /** Of those, the ones earmarked against tokens. */
+  locked: number;
+  issuedAt: string;
+  expiresAt: string;
+  /** False once the statement has expired, at which point it backs nothing. */
+  fresh: boolean;
+  docRef: string;
+};
+
+/**
+ * The published custody statement.
+ *
+ * This is the record anyone can check, which is what makes it the one that
+ * counts. The database copy is the desk's workflow — filed, approved, rejected
+ * — and a workflow row is a statement of intent; only the registry entry is a
+ * claim CAPX has actually made in public.
+ *
+ * Counts are whole shares here and base units on the token, so the conversion
+ * belongs at this boundary rather than in whatever code compares them next.
+ */
+export async function onchainCustody(security: string): Promise<OnchainCustody | null> {
+  const registry = SECURITIES_CONTRACTS.custodyRegistry as `0x${string}`;
+  try {
+    const [position, fresh] = await Promise.all([
+      publicClient.readContract({
+        address: registry, abi: custodyRegistryAbi,
+        functionName: "getCustodyPosition", args: [security],
+      }),
+      publicClient.readContract({
+        address: registry, abi: custodyRegistryAbi,
+        functionName: "isFresh", args: [security],
+      }),
+    ]);
+    const p = position as {
+      custodian: string; quantity: bigint; locked: bigint;
+      issuedAt: bigint; expiresAt: bigint; docRef: string; active: boolean;
+    };
+    if (!p.active) return null;
+    return {
+      custodian: p.custodian,
+      quantity: Number(p.quantity),
+      locked: Number(p.locked),
+      issuedAt: new Date(Number(p.issuedAt) * 1000).toISOString(),
+      expiresAt: new Date(Number(p.expiresAt) * 1000).toISOString(),
+      fresh: Boolean(fresh),
+      docRef: p.docRef,
+    };
+  } catch {
+    // Unreadable is not the same as absent. The caller falls back to the
+    // filed copy and says which one it used.
+    return null;
+  }
 }

@@ -136,4 +136,61 @@ contract SettlementTest is Test {
         vm.expectRevert(CustodyRegistry.LockedExceedsQuantity.selector);
         custody.attestCustody("CRDB", "Stanbic", 100, 101, uint64(block.timestamp + 1 days), "BAD");
     }
+
+    /**
+     * The publisher can price and cannot do anything else.
+     *
+     * The point of splitting the role is that the key doing the frequent,
+     * exposed work carries none of the dangerous powers, so both halves are
+     * asserted here rather than just the happy path.
+     */
+    function test_publisherMayPriceButNotAdminister() public {
+        address publisher = address(0xBEEF);
+
+        vm.prank(admin);
+        oracle.setPublisher(publisher);
+
+        vm.prank(publisher);
+        oracle.setPrice("CRDB", 2_980e18, "DSE close 2026-09-14");
+        (uint256 p,,) = oracle.getPrice("CRDB");
+        assertEq(p, 2_980e18);
+
+        vm.prank(publisher);
+        vm.expectRevert(PriceOracle.NotAdmin.selector);
+        oracle.setMaxAge(1 days);
+
+        vm.prank(publisher);
+        vm.expectRevert(PriceOracle.NotAdmin.selector);
+        oracle.setPublisher(publisher);
+    }
+
+    function test_strangerCannotPrice() public {
+        vm.prank(address(0xDEAD));
+        vm.expectRevert(PriceOracle.NotPublisher.selector);
+        oracle.setPrice("CRDB", 1, "forged");
+    }
+
+    /**
+     * A price survives a long weekend.
+     *
+     * DSE prints once a session, so the Friday close is the only real mark
+     * until Monday. A staleness window shorter than that gap does not make
+     * settlement safer, it stops settlement altogether — which is what an hour
+     * would have done here every single weekend.
+     */
+    function test_priceSurvivesAWeekend() public {
+        vm.prank(admin);
+        oracle.setMaxAge(4 days);
+
+        vm.prank(admin);
+        oracle.setPrice("CRDB", 2_980e18, "DSE close");
+
+        vm.warp(block.timestamp + 3 days);
+        (uint256 p,,) = oracle.getPrice("CRDB");
+        assertEq(p, 2_980e18, "Friday close must still price a Monday trade");
+
+        vm.warp(block.timestamp + 2 days);
+        vm.expectRevert();
+        oracle.getPrice("CRDB");
+    }
 }

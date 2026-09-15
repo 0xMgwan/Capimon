@@ -6,6 +6,7 @@ type Backing = {
   security: string; custodian: string | null;
   underlying: number; locked: number; issued: number;
   recorded: number; drift: number; source: "chain" | "ledger";
+  custodySource: "chain" | "filed" | "none"; custodyMismatch: string | null;
   ratioPct: number | null; headroom: number;
   fresh: boolean; expiresAt: string | null; lastVerified: string | null;
 };
@@ -149,7 +150,7 @@ export function SecuritiesDesk() {
               </div>
               <p className="mt-3 text-[11px] text-[var(--muted)]">
                 {b.fresh
-                  ? `Attestation in force until ${dt(b.expiresAt)}. Verified ${dt(b.lastVerified)}.`
+                  ? `${b.custodySource === "chain" ? "On-chain attestation" : "Filed attestation (not yet published on-chain)"} in force until ${dt(b.expiresAt)}. Verified ${dt(b.lastVerified)}.`
                   : "No attestation in force — issuance is blocked until one is approved."}
               </p>
 
@@ -160,6 +161,12 @@ export function SecuritiesDesk() {
                 * mint was recorded and never executed, or executed and never
                 * recorded — and both need a person, not a refresh.
                 */}
+              {b.custodyMismatch && (
+                <p className="mt-2 rounded-xl border border-[var(--color-down)]/40 bg-[var(--color-down)]/[0.06] px-3 py-2 text-[11px] text-[var(--color-down)]">
+                  {b.custodyMismatch} The smaller figure is in force until they agree.
+                </p>
+              )}
+
               {b.drift !== 0 && (
                 <p className="mt-2 rounded-xl border border-[var(--color-down)]/40 bg-[var(--color-down)]/[0.06] px-3 py-2 text-[11px] text-[var(--color-down)]">
                   {b.drift > 0

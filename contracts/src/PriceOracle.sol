@@ -11,6 +11,13 @@ pragma solidity ^0.8.24;
  *
  * `source` is a string so the same contract serves a demo feed today and a
  * licensed DSE data feed later without a migration.
+ *
+ * Publishing is separated from administering. Prices have to be pushed often —
+ * DSE prints every session and a mark nobody refreshes is a halt waiting to
+ * happen — so the key that pushes them lives in a server and is exposed in a
+ * way an issuing key must never be. The publisher can set prices and nothing
+ * else: it cannot mint, cannot change the staleness window, and cannot hand
+ * either power to anyone.
  */
 contract PriceOracle {
     struct Quote {
@@ -21,6 +28,8 @@ contract PriceOracle {
     }
 
     address public admin;
+    /// May set prices, and may do nothing else.
+    address public publisher;
     /// How old a quote may be before it stops being usable.
     uint64 public maxAge;
 
@@ -29,14 +38,22 @@ contract PriceOracle {
     event AdminTransferred(address indexed from, address indexed to);
     event PriceSet(string symbol, uint256 price, string source, uint64 updatedAt);
     event MaxAgeSet(uint64 maxAge);
+    event PublisherSet(address indexed publisher);
 
     error NotAdmin();
+    error NotPublisher();
     error ZeroAddress();
     error NoPrice();
     error StalePrice(uint64 updatedAt, uint64 maxAge);
 
     modifier onlyAdmin() {
         if (msg.sender != admin) revert NotAdmin();
+        _;
+    }
+
+    /// The admin can always publish, so a lost publisher key is not a halt.
+    modifier onlyPublisher() {
+        if (msg.sender != publisher && msg.sender != admin) revert NotPublisher();
         _;
     }
 
@@ -50,7 +67,12 @@ contract PriceOracle {
         return keccak256(bytes(symbol));
     }
 
-    function setPrice(string calldata symbol, uint256 price, string calldata source) external onlyAdmin {
+    function setPublisher(address publisher_) external onlyAdmin {
+        publisher = publisher_;
+        emit PublisherSet(publisher_);
+    }
+
+    function setPrice(string calldata symbol, uint256 price, string calldata source) external onlyPublisher {
         _quotes[key(symbol)] = Quote({
             price: price,
             updatedAt: uint64(block.timestamp),

@@ -36,7 +36,7 @@ export async function GET(req: Request) {
     ]);
 
     const withBacking = await Promise.all(
-      (securities as { symbol: string }[]).map(async (s) => ({ ...s, backing: await backing(s.symbol) })),
+      (securities as unknown as { symbol: string }[]).map(async (s) => ({ ...s, backing: await backing(s.symbol) })),
     );
 
     return NextResponse.json(
@@ -147,7 +147,15 @@ export async function POST(req: Request) {
 
     if (action === "check-issue") {
       const security = String(body.security ?? "").trim().toUpperCase();
-      return NextResponse.json({ ok: true, ...(await canIssue(security, Number(body.quantity))) });
+      const verdict = await canIssue(security, Number(body.quantity));
+      // `ok` here means the request succeeded; whether issuance is permitted
+      // is a separate answer, so it gets its own name rather than colliding.
+      return NextResponse.json({
+        ok: true,
+        allowed: verdict.ok,
+        reason: verdict.reason ?? null,
+        backing: verdict.backing,
+      });
     }
 
     return NextResponse.json({ ok: false, error: `Unknown action "${action}".` }, { status: 400 });

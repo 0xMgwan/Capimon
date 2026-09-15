@@ -286,14 +286,26 @@ function MintBurn({ security, headroom, issued, onAct, busy }: {
 }
 
 function RegisterSecurity({ onAct, busy }: { onAct: (b: Record<string, unknown>) => Promise<void>; busy: boolean }) {
-  const [f, setF] = useState({ symbol: "", name: "", tokenAddress: "", decimals: "2" });
+  const [f, setF] = useState({ symbol: "", name: "", tokenAddress: "", decimals: "8" });
   return (
     <div className="rounded-3xl border hairline p-5">
       <div className="eyebrow">Register a security</div>
-      <Field label="Symbol" v={f.symbol} on={(v) => setF({ ...f, symbol: v.toUpperCase() })} ph="CRDBt" />
+      {/*
+        * The symbol is a key, not a label.
+        *
+        * It is what custody and the oracle are looked up by, so it has to match
+        * the string those were written under — CRDB, the security, rather than
+        * CRDBt, the token that represents it. Getting it wrong does not error:
+        * the desk simply reports no attestation in force while one sits on the
+        * registry, and issuance stays blocked with nothing to point at.
+        */}
+      <Field label="Symbol" v={f.symbol} on={(v) => setF({ ...f, symbol: v.toUpperCase() })} ph="CRDB"
+        hint="The security's key in the custody registry and oracle — CRDB, not CRDBt." />
       <Field label="Name" v={f.name} on={(v) => setF({ ...f, name: v })} ph="CRDB Bank Plc" />
-      <Field label="Token address" v={f.tokenAddress} on={(v) => setF({ ...f, tokenAddress: v })} ph="0x… (once deployed)" />
-      <Field label="Decimals" v={f.decimals} on={(v) => setF({ ...f, decimals: v })} ph="2" />
+      <Field label="Token address" v={f.tokenAddress} on={(v) => setF({ ...f, tokenAddress: v })} ph="0xb200…60F"
+        hint="Checked against the token on Base before it is saved." />
+      <Field label="Decimals" v={f.decimals} on={(v) => setF({ ...f, decimals: v })} ph="8"
+        hint="Read from the token itself when an address is given." />
       <button
         onClick={() => void onAct({ action: "register-security", ...f, decimals: Number(f.decimals) })}
         disabled={busy || !f.symbol || !f.name}
@@ -306,17 +318,28 @@ function RegisterSecurity({ onAct, busy }: { onAct: (b: Record<string, unknown>)
 }
 
 function FileAttestation({ onAct, busy }: { onAct: (b: Record<string, unknown>) => Promise<void>; busy: boolean }) {
-  const [f, setF] = useState({ security: "", custodian: "Stanbic Bank Tanzania", quantity: "", locked: "", docRef: "", expiresAt: "" });
+  /*
+   * The custodian is blank on purpose.
+   *
+   * A prefilled bank name is one click away from asserting that an institution
+   * confirmed a holding it has never been asked about, and an attestation is
+   * exactly the record that must not be filled in for you.
+   */
+  const [f, setF] = useState({ security: "", custodian: "", quantity: "", locked: "", docRef: "", expiresAt: "" });
   const q = Number(f.quantity) || 0;
   const l = Number(f.locked || f.quantity) || 0;
   return (
     <div className="rounded-3xl border hairline p-5">
       <div className="eyebrow">File a custody attestation</div>
-      <Field label="Security" v={f.security} on={(v) => setF({ ...f, security: v.toUpperCase() })} ph="CRDBt" />
-      <Field label="Custodian" v={f.custodian} on={(v) => setF({ ...f, custodian: v })} ph="Stanbic Bank Tanzania" />
+      <Field label="Security" v={f.security} on={(v) => setF({ ...f, security: v.toUpperCase() })} ph="CRDB"
+        hint="The registered security's symbol — CRDB, not CRDBt." />
+      <Field label="Custodian" v={f.custodian} on={(v) => setF({ ...f, custodian: v })}
+        ph="Who is confirming the holding"
+        hint="Name the party actually standing behind this. If none has confirmed yet, say so here." />
       <Field label="Shares held" v={f.quantity} on={(v) => setF({ ...f, quantity: v.replace(/[^0-9.]/g, "") })} ph="100" />
       <Field label="Of those, locked" v={f.locked} on={(v) => setF({ ...f, locked: v.replace(/[^0-9.]/g, "") })} ph="100" />
-      <Field label="Custodian reference" v={f.docRef} on={(v) => setF({ ...f, docRef: v })} ph="STANBIC-ATTESTATION-001" />
+      <Field label="Custodian reference" v={f.docRef} on={(v) => setF({ ...f, docRef: v })}
+        ph="Statement or reference number" />
       <label className="mb-3 block">
         <span className="eyebrow">Expires</span>
         <input
@@ -332,7 +355,7 @@ function FileAttestation({ onAct, busy }: { onAct: (b: Record<string, unknown>) 
           action: "attest", ...f, quantity: q, locked: l,
           expiresAt: f.expiresAt ? new Date(`${f.expiresAt}T23:59:59Z`).toISOString() : "",
         })}
-        disabled={busy || !f.security || !(q > 0) || l > q || !f.expiresAt}
+        disabled={busy || !f.security || !f.custodian.trim() || !(q > 0) || l > q || !f.expiresAt}
         className="mt-1 w-full rounded-full bg-[var(--fg)] py-2.5 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40"
       >
         File for approval
@@ -458,12 +481,15 @@ function Cell({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Field({ label, v, on, ph }: { label: string; v: string; on: (v: string) => void; ph?: string }) {
+function Field({ label, v, on, ph, hint }: {
+  label: string; v: string; on: (v: string) => void; ph?: string; hint?: string;
+}) {
   return (
     <label className="mb-3 block">
       <span className="eyebrow">{label}</span>
       <input value={v} onChange={(e) => on(e.target.value)} placeholder={ph}
         className="mt-1.5 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]" />
+      {hint && <span className="mt-1 block text-[11px] text-[var(--muted)]">{hint}</span>}
     </label>
   );
 }

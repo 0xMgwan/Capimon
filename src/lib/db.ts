@@ -292,6 +292,11 @@ export async function migrate() {
              opened before there were any, which is a fact worth keeping rather
              than back-filling with a date nobody chose. */
           "terms_accepted_at timestamptz",
+          /* Which document the number in `nida_number` belongs to. The column
+             is named for the one Tanzanians mostly carry, but a passport or a
+             licence is just as valid and storing one under a NIDA label made
+             the record say something untrue. */
+          "doc_type text",
           "nida_number text",
           "is_admin boolean not null default false",
           "username text",

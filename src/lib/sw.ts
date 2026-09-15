@@ -133,6 +133,19 @@ export const SW: Record<string, string> = {
   "Not accepted": "Haikukubaliwa",
   "Not started": "Haijaanza",
   "Verify your account": "Thibitisha akaunti yako",
+  "Verify your identity": "Thibitisha utambulisho wako",
+  "Your identity has been confirmed. Nothing more to do here.":
+    "Utambulisho wako umethibitishwa. Hakuna zaidi la kufanya hapa.",
+  "Your verification is being reviewed. You can keep going below while we look at it.":
+    "Uthibitishaji wako unakaguliwa. Unaweza kuendelea hapa chini wakati tunauangalia.",
+  "Open your account first, then we will confirm who you are.":
+    "Fungua akaunti yako kwanza, kisha tutathibitisha wewe ni nani.",
+  "Identity document": "Hati ya utambulisho",
+  "National ID": "Kitambulisho cha Taifa",
+  "NIDA number": "Namba ya NIDA",
+  "Passport number": "Namba ya paspoti",
+  "Licence number": "Namba ya leseni",
+  "Voter number": "Namba ya mpiga kura",
   "Submit again": "Wasilisha tena",
   "View status": "Angalia hali",
 

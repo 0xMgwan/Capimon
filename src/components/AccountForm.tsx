@@ -5,6 +5,14 @@ import Link from "next/link";
 import { useState } from "react";
 import { passwordProblem } from "@/lib/passwordRule";
 
+/** The documents a Tanzanian account can be opened against. */
+const DOCS = [
+  { id: "nida", label: "National ID", field: "NIDA number", ph: "20 digits" },
+  { id: "passport", label: "Passport", field: "Passport number", ph: "e.g. AB123456" },
+  { id: "licence", label: "Driver's licence", field: "Licence number", ph: "Licence number" },
+  { id: "voter", label: "Voter's card", field: "Voter number", ph: "Voter number" },
+] as const;
+
 export type AccountMode = "signin" | "signup";
 
 /**
@@ -27,6 +35,15 @@ export function AccountForm({
 }) {
   const [form, setForm] = useState({ email: "", password: "", username: "", name: "", phone: "", nidaNumber: "" });
   /*
+   * Which document, not just its number.
+   *
+   * The field was labelled NIDA and stripped everything that was not a digit,
+   * so anyone holding a passport or a licence either could not enter theirs or
+   * watched it be silently mangled. Most people here carry a NIDA, so it leads;
+   * the others are a tap away.
+   */
+  const [docType, setDocType] = useState<"nida" | "passport" | "licence" | "voter">("nida");
+  /*
    * Unticked by default, and it stays unticked.
    *
    * A pre-ticked box is not agreement, it is a box someone failed to notice.
@@ -43,7 +60,7 @@ export function AccountForm({
       const r = await fetch(`/api/account/${mode === "signup" ? "register" : "login"}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(mode === "signup" ? { ...form, acceptedTerms: agreed } : form),
+        body: JSON.stringify(mode === "signup" ? { ...form, docType, acceptedTerms: agreed } : form),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error ?? "Could not continue");
@@ -133,9 +150,28 @@ export function AccountForm({
             })}
             {field("name", "Full name", { autoComplete: "name", placeholder: "As on your NIDA" })}
             {field("phone", "Mobile money number", { inputMode: "numeric", placeholder: "255712345678" })}
-            {field("nidaNumber", "NIDA number", {
-              inputMode: "numeric", placeholder: "20 digits",
-              hint: `${form.nidaNumber.replace(/\D/g, "").length}/20`,
+            <div>
+              <span className="eyebrow">Identity document</span>
+              <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                {DOCS.map((d) => (
+                  <button
+                    key={d.id}
+                    onClick={() => { setDocType(d.id); setForm((f) => ({ ...f, nidaNumber: "" })); }}
+                    className={`rounded-xl border px-3 py-2 text-[12px] font-medium transition-colors ${
+                      docType === d.id ? "border-[var(--fg)] bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"
+                    }`}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {field("nidaNumber", DOCS.find((d) => d.id === docType)!.field, {
+              inputMode: docType === "nida" ? "numeric" : "text",
+              placeholder: DOCS.find((d) => d.id === docType)!.ph,
+              hint: docType === "nida"
+                ? `${form.nidaNumber.replace(/\D/g, "").length}/20`
+                : undefined,
             })}
           </>
         )}

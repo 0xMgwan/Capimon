@@ -19,8 +19,25 @@ export async function POST(req: Request) {
     const password = String(body.password ?? "");
     const name = body.name ? String(body.name).trim() : null;
     const phone = body.phone ? String(body.phone).replace(/[^\d]/g, "") : null;
-    // Collected for CAPX's own records — nTZS no longer verifies these users.
-    const nida = body.nidaNumber ? String(body.nidaNumber).replace(/[^\d]/g, "") : null;
+    /*
+     * The identity document, whichever kind it is.
+     *
+     * Only a NIDA is twenty digits; a passport or a licence carries letters,
+     * so the digits-only strip that used to run here quietly destroyed those
+     * numbers before they were stored.
+     */
+    const DOC_TYPES = new Set(["nida", "passport", "licence", "voter"]);
+    const docType = DOC_TYPES.has(String(body.docType ?? "").toLowerCase())
+      ? String(body.docType).toLowerCase() : "nida";
+    const rawDoc = body.nidaNumber ?? body.docNumber;
+    const nida = rawDoc
+      ? (docType === "nida"
+          ? String(rawDoc).replace(/[^\d]/g, "")
+          : String(rawDoc).trim().toUpperCase().replace(/[^A-Z0-9-]/g, "")).slice(0, 32) || null
+      : null;
+    if (docType === "nida" && nida && nida.length !== 20) {
+      return bad("A NIDA number is 20 digits.");
+    }
     const username = body.username ? String(body.username).trim().replace(/^@/, "") : null;
     if (username && !/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
       return bad("A username is 3–20 letters, numbers or underscores.", "bad_username");
@@ -55,8 +72,8 @@ export async function POST(req: Request) {
     }
 
     const rows = await sql<{ id: string }[]>`
-      insert into capx.users (email, password_hash, name, phone, nida_number, username, terms_accepted_at)
-      values (${email}, ${await hashPassword(password)}, ${name}, ${phone}, ${nida}, ${username}, now())
+      insert into capx.users (email, password_hash, name, phone, nida_number, doc_type, username, terms_accepted_at)
+      values (${email}, ${await hashPassword(password)}, ${name}, ${phone}, ${nida}, ${docType}, ${username}, now())
       returning id`;
     const userId = rows[0].id;
 

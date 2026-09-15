@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Reveal, RevealWords } from "@/components/Reveal";
 import { UsdcIcon } from "@/components/icons/Usdc";
 import { AccountForm, type AccountMode } from "@/components/AccountForm";
+import { KycFlow } from "@/components/KycFlow";
 import { usd } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 
@@ -70,7 +71,22 @@ export function JoinFlow() {
   };
 
   const signedIn = !!account?.user;
-  const step = !signedIn ? 1 : (account.cash <= 0 && account.equity <= 0) ? 2 : 3;
+  /*
+   * Verification sits between opening the account and funding it.
+   *
+   * It used to live on a page of its own that a new customer only reached by
+   * following a banner, so the natural path was open, deposit, buy, and meet
+   * the identity check afterwards — which is the wrong order for a regulated
+   * account and a nasty surprise when someone has already sent money.
+   *
+   * It does not block the steps below. Someone can fund while a submission is
+   * being reviewed, and a check that stopped a deposit would just push them
+   * into abandoning the account instead.
+   */
+  const verified = account?.user.kycStatus === "approved";
+  const submitted = account?.user.kycStatus === "pending";
+  const funded = (account?.cash ?? 0) > 0 || (account?.equity ?? 0) > 0;
+  const step = !signedIn ? 1 : !(verified || submitted) ? 2 : !funded ? 3 : 4;
 
   return (
     <div className="mx-auto max-w-[1400px] px-5 pb-24 pt-12 sm:px-8">
@@ -102,8 +118,32 @@ export function JoinFlow() {
             )}
           </Step>
 
-          {/* 2 — deposit */}
-          <Step n={2} active={step === 2} done={(account?.cash ?? 0) > 0 || (account?.equity ?? 0) > 0} title={t("Fund with mobile money")}>
+          {/* 2 — identity */}
+          <Step
+            n={2}
+            active={step === 2}
+            done={verified}
+            title={verified ? t("Verified") : submitted ? t("Under review") : t("Verify your identity")}
+          >
+            {verified ? (
+              <p className="text-sm text-[var(--muted)]">
+                {t("Your identity has been confirmed. Nothing more to do here.")}
+              </p>
+            ) : submitted ? (
+              <p className="text-sm leading-relaxed text-[var(--muted)]">
+                {t("Your verification is being reviewed. You can keep going below while we look at it.")}
+              </p>
+            ) : signedIn ? (
+              <KycFlow onDone={() => void load()} />
+            ) : (
+              <p className="text-sm text-[var(--muted)]">
+                {t("Open your account first, then we will confirm who you are.")}
+              </p>
+            )}
+          </Step>
+
+          {/* 3 — deposit */}
+          <Step n={3} active={step === 3} done={funded} title={t("Fund with mobile money")}>
             <p className="text-sm leading-relaxed text-[var(--muted)]">
               You&rsquo;ll get a prompt on your phone. Approve it and your balance appears here,
               CAPX handles the conversion.
@@ -137,8 +177,8 @@ export function JoinFlow() {
             </button>
           </Step>
 
-          {/* 3 — trade */}
-          <Step n={3} active={step === 3} done={false} title={t("Buy shares")} last>
+          {/* 4 — trade */}
+          <Step n={4} active={step === 4} done={false} title={t("Buy shares")} last>
             <div className="rounded-2xl surface p-4">
               <div className="flex items-center justify-between text-sm">
                 <span className="flex items-center gap-1.5 text-[var(--muted)]"><UsdcIcon className="h-3.5 w-3.5" /> {t("Available")}</span>

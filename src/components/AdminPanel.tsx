@@ -9,7 +9,7 @@ type Admin = {
               usdc?: { treasury: number; rampFloat: number };
               assets: { asset: string; owed: number; held: number; covered: boolean }[];
               unavailable?: string } | null;
-  totalsExtra: { settledOrders: number; failedOrders: number };
+  totalsExtra: { settledOrders: number; failedOrders: number; feesTzs: number };
   ntzs: { available: true; source: string; tzs: number; usdc: number; walletAddress: string | null }
       | { available: false; reason: string } | null;
   onchain: { address: string; usdc: number; holdings: { asset: string; qty: number }[] } | null;
@@ -304,13 +304,16 @@ export function AdminPanel() {
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-6">
+      <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-4 lg:grid-cols-7">
         <Cell label="Users" value={String(data.totals.users)} />
         <Cell label="Pending" value={String(data.totals.pendingDeposits)} />
         <Cell label="Collected" value={TZS(data.totals.settledTzs)} />
         <Cell label="Credited" value={usd(data.totals.creditedUsdc)} />
         <Cell label="Orders" value={String(data.totalsExtra?.settledOrders ?? 0)} />
         <Cell label="Failed" value={String(data.totalsExtra?.failedOrders ?? 0)} />
+        {/* Shilling trade fees. They are not swept anywhere — they stay in the
+            omnibus and were, until now, visible only as unexplained surplus. */}
+        <Cell label="Fees (held)" value={TZS(data.totalsExtra?.feesTzs ?? 0)} />
       </div>
 
       <div className="mt-8 flex gap-1 rounded-full border hairline p-1">

@@ -55,13 +55,27 @@ export async function GET(req: Request) {
                  o.tx_hash, o.error, o.created_at, u.email
             from capx.orders o join capx.users u on u.id = o.user_id
            order by o.created_at desc limit 50`,
-      sql<{ users: number; pending: number; settled_tzs: string | null; credited_usdc: string | null; settled_orders: number; failed_orders: number }[]>`
+      sql<{ users: number; pending: number; settled_tzs: string | null; credited_usdc: string | null;
+            settled_orders: number; failed_orders: number; fees_tzs: string | null }[]>`
         select (select count(*) from capx.users)::int as users,
                (select count(*) from capx.deposits where status in ('pending','uncertain'))::int as pending,
                (select coalesce(sum(amount_tzs),0) from capx.deposits where status = 'settled')::text as settled_tzs,
                (select coalesce(sum(usdc_credited),0) from capx.deposits where status = 'settled')::text as credited_usdc,
                (select count(*) from capx.orders where status = 'settled')::int as settled_orders,
-               (select count(*) from capx.orders where status = 'failed')::int as failed_orders`,
+               (select count(*) from capx.orders where status = 'failed')::int as failed_orders,
+               /*
+                * Fees taken on shilling trades.
+                *
+                * These are not swept anywhere — they are deducted from what a
+                * customer's shillings buy and stay in the omnibus, so they show
+                * as TZS surplus against client liabilities and nowhere else.
+                * Summed from the entry that charged them so the figure comes
+                * from the trades themselves rather than a second tally that
+                * could drift from them.
+                */
+               (select coalesce(sum((metadata->>'fee')::numeric), 0)
+                  from capx.ledger_entries
+                 where asset = 'TZS' and metadata ? 'fee')::text as fees_tzs`,
 
       // Shares owed to clients, aggregated per asset.
       sql`select asset, sum(amount)::text as qty, count(distinct user_id)::int as holders
@@ -104,6 +118,7 @@ export async function GET(req: Request) {
       totalsExtra: {
         settledOrders: totals[0]?.settled_orders ?? 0,
         failedOrders: totals[0]?.failed_orders ?? 0,
+        feesTzs: Number(totals[0]?.fees_tzs ?? 0),
       },
       solvency,
       // The two sides of custody: shillings held at nTZS, shares and USDC held onchain.

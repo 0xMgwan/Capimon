@@ -3,6 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { usd } from "@/lib/format";
 
+/** One identity check, without the images it points at. */
+type KycRow = {
+  id: string; user_id: string; email: string; name: string | null;
+  doc_type: string; doc_number: string | null; status: string; reason: string | null;
+  reviewed_by: string | null; reviewed_at: string | null; created_at: string;
+  doc_bytes: number; selfie_bytes: number;
+};
+
 type Admin = {
   totals: { users: number; pendingDeposits: number; settledTzs: number; creditedUsdc: number };
   solvency: { ok: boolean; totals: { owedUsd: number; heldUsd: number; shortfallUsd: number };
@@ -49,7 +57,51 @@ export function AdminPanel() {
   const [data, setData] = useState<Admin | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<"deposits" | "users" | "orders" | "holdings" | "withdrawals">("deposits");
+  const [tab, setTab] = useState<"deposits" | "users" | "orders" | "holdings" | "withdrawals" | "kyc">("deposits");
+  const [kyc, setKyc] = useState<KycRow[] | null>(null);
+
+  /*
+   * Loaded on demand rather than with the dashboard.
+   *
+   * The listing carries image sizes but not images, so it is small — the reason
+   * it is separate is that identity documents should not be fetched at all by
+   * an operator who only came to look at deposits.
+   */
+  const loadKyc = useCallback(async () => {
+    try {
+      const r = await fetch("/api/admin/kyc", { headers: { authorization: `Bearer ${token}` } });
+      const j = await r.json();
+      if (j.ok) setKyc(j.submissions);
+    } catch { /* the rest of the desk still works */ }
+  }, [token]);
+
+  useEffect(() => {
+    if (tab !== "kyc" || !token) return;
+    // Deferred rather than called in the effect body: a synchronous setState
+    // during an effect cascades a second render before the first has painted.
+    const id = setTimeout(() => void loadKyc(), 0);
+    return () => clearTimeout(id);
+  }, [tab, token, loadKyc]);
+
+  const review = async (id: string, approve: boolean) => {
+    const reason = approve ? null : window.prompt("Why is this being rejected? The customer is shown this.");
+    if (!approve && !reason?.trim()) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await fetch("/api/admin/kyc", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id, approve, reason }),
+      });
+      const j = await r.json();
+      setNote(j.ok ? `Verification ${j.status}.` : j.error ?? "Review failed.");
+      if (j.ok) { await loadKyc(); await load(token); }
+    } catch {
+      setNote("Could not reach the server.");
+    } finally {
+      setBusy(false);
+    }
+  };
   const [openRow, setOpenRow] = useState<string | null>(null);
 
   const load = useCallback(async (t: string) => {
@@ -175,6 +227,7 @@ export function AdminPanel() {
     ["deposits", `Deposits (${data.deposits.length})`],
     ["users", `Users (${data.totals.users})`],
     ["orders", `Orders (${data.orders.length})`],
+    ["kyc", kyc ? `KYC (${kyc.filter((k) => k.status === "pending").length})` : "KYC"],
     ["holdings", `Holdings (${data.holdingsByAsset?.length ?? 0})`],
     ["withdrawals", `Withdrawals (${data.withdrawals?.length ?? 0})`],
   ] as const;
@@ -414,6 +467,7 @@ export function AdminPanel() {
                 : tab === "users" ? ["User", "National ID", "Phone", "Deposits", "Balance"]
                 : tab === "holdings" ? ["Asset", "Owed to clients", "Holders", "Onchain", "Covered"]
                 : tab === "withdrawals" ? ["User", "Amount", "Reference", "When"]
+                : tab === "kyc" ? ["Applicant", "Document", "Selfie", "Status", "Decision"]
                 : ["User", "Side", "Asset", "Amount", "Status", "Tx"]).map((h, i) => (
               <th key={h} className={`px-3 py-3 text-[11px] font-medium uppercase tracking-wider text-[var(--muted)] ${i === 0 ? "text-left" : "text-right"}`}>{h}</th>
             ))}</tr>
@@ -523,6 +577,77 @@ export function AdminPanel() {
                 </tr>
               );
             })}
+            {tab === "kyc" && (kyc ?? []).map((k) => (
+              <tr key={k.id} className="border-b hairline last:border-0 align-top">
+                <td className="px-3 py-3">
+                  <div>{k.email}</div>
+                  <div className="text-[11px] text-[var(--muted)]">
+                    {k.name ?? "no name"} · {k.doc_type}
+                    {k.doc_number ? ` · ${k.doc_number}` : ""}
+                  </div>
+                  {k.reason && (
+                    <div className="mt-1 text-[11px] text-[var(--color-down)]">{k.reason}</div>
+                  )}
+                </td>
+                {/*
+                  * Thumbnails, loaded from a token-gated route.
+                  * An identity document is the one thing on this desk that must
+                  * not be viewable by anyone who happens to have the URL, so the
+                  * image route checks the same token this panel was opened with.
+                  */}
+                <td className="px-3 py-3" colSpan={2}>
+                  <div className="flex gap-2">
+                    {(["doc", "selfie"] as const).map((which) => (
+                      <a
+                        key={which}
+                        href={`/api/admin/kyc/image?id=${k.id}&which=${which}&token=${encodeURIComponent(token)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={`Open ${which} full size`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={`/api/admin/kyc/image?id=${k.id}&which=${which}&token=${encodeURIComponent(token)}`}
+                          alt={which}
+                          className={`h-16 border hairline object-cover ${
+                            which === "selfie" ? "w-16 rounded-full" : "w-24 rounded-lg"}`}
+                        />
+                      </a>
+                    ))}
+                  </div>
+                </td>
+                <td className="px-3 py-3 text-right text-[var(--muted)]">{k.status}</td>
+                <td className="px-3 py-3 text-right">
+                  {k.status === "pending" ? (
+                    <div className="flex justify-end gap-1.5">
+                      <button
+                        onClick={() => void review(k.id, true)}
+                        disabled={busy}
+                        className="rounded-full border border-[var(--color-up)]/50 px-3 py-1 text-[11px] text-[var(--color-up)] hover:bg-[var(--color-up)]/10 disabled:opacity-40"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => void review(k.id, false)}
+                        disabled={busy}
+                        className="rounded-full border border-[var(--color-down)]/50 px-3 py-1 text-[11px] text-[var(--color-down)] hover:bg-[var(--color-down)]/10 disabled:opacity-40"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-[11px] text-[var(--muted)]">
+                      {k.reviewed_by ?? "—"}
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {tab === "kyc" && kyc && kyc.length === 0 && (
+              <tr><td colSpan={5} className="px-3 py-10 text-center text-[var(--muted)]">
+                No verification submissions yet.
+              </td></tr>
+            )}
             {tab === "withdrawals" && (data.withdrawals ?? []).map((w) => (
               <tr key={w.id} className="border-b hairline last:border-0">
                 <td className="px-3 py-3">{w.email}</td>

@@ -50,20 +50,20 @@ export function Footer() {
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-5 md:contents">
+          <div className="grid grid-cols-3 gap-4 md:contents">
           {COLS.map((c) => (
             <div key={c.title}>
               <div className="eyebrow">{c.title}</div>
-              <ul className="mt-3 space-y-2 md:mt-4 md:space-y-2.5">
+              <ul className="mt-2.5 space-y-1.5 md:mt-4 md:space-y-2.5">
                 {c.links.map((l) => (
                   <li key={l.label}>
                     {"ext" in l && l.ext ? (
                       <a href={l.href} target="_blank" rel="noreferrer"
-                        className="text-[13px] leading-snug text-[var(--muted)] transition-colors hover:text-[var(--fg)] sm:text-sm">
+                        className="block text-[13px] leading-[1.35] text-[var(--muted)] transition-colors hover:text-[var(--fg)] sm:text-sm sm:leading-snug">
                         {l.label}&nbsp;↗
                       </a>
                     ) : (
-                      <Link href={l.href} className="text-[13px] leading-snug text-[var(--muted)] transition-colors hover:text-[var(--fg)] sm:text-sm">
+                      <Link href={l.href} className="block text-[13px] leading-[1.35] text-[var(--muted)] transition-colors hover:text-[var(--fg)] sm:text-sm sm:leading-snug">
                         {l.label}
                       </Link>
                     )}

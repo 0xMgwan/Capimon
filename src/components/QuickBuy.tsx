@@ -29,7 +29,16 @@ export function QuickBuy() {
   const { data, ticks } = useMarkets();
   const { venues } = useVenues();
   const router = useRouter();
-  const [amount, setAmount] = useState(100);
+  /*
+   * Shillings, and 100,000 of them.
+   *
+   * Almost everyone arriving here earns and thinks in shillings, so opening in
+   * dollars asks each of them to do a conversion before the first number means
+   * anything. The dollar figure is one press away for the minority who want it.
+   * If the rate turns out to be unavailable the effect below falls back, so the
+   * ticket still works rather than showing shillings it cannot price.
+   */
+  const [amount, setAmount] = useState(PRESETS_TZS[1]);
   /*
    * The ticket prices in USDC because the router does, but a Tanzanian visitor
    * thinks in shillings — and this is the first number they see on the site.
@@ -47,17 +56,26 @@ export function QuickBuy() {
    * ticket is for logged-out visitors. It would have rendered the toggle and
    * then ignored every press.
    */
-  const [currency, setCurrency] = useState<"TZS" | "USDC">("USDC");
+  const [currency, setCurrency] = useState<"TZS" | "USDC">("TZS");
   const [rate, setRate] = useState<number | null>(null);
   useEffect(() => {
     let alive = true;
+    const toUsdc = () => {
+      // No rate means shillings cannot be priced, so the ticket drops to the
+      // currency it can quote rather than showing a figure it cannot convert.
+      if (!alive) return;
+      setCurrency("USDC");
+      setAmount(PRESETS[1]);
+    };
     fetch("/api/ntzs/rate", { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
         const out = Number(j?.expectedOutput ?? 0);
-        if (alive && j?.ok && out > 0) setRate(out / 100_000);
+        if (!alive) return;
+        if (j?.ok && out > 0) setRate(out / 100_000);
+        else toUsdc();
       })
-      .catch(() => { /* the ticket still works in USDC */ });
+      .catch(toUsdc);
     return () => { alive = false; };
   }, []);
   const canShowTzs = !!rate && rate > 0;

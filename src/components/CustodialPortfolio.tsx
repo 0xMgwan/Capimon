@@ -6,6 +6,7 @@ import { AssetLogo } from "./AssetLogo";
 import { Counter } from "./Counter";
 import { Reveal } from "./Reveal";
 import { WalletSection } from "./WalletSection";
+import { KycPrompt } from "./KycPrompt";
 import { usd, costLabel } from "@/lib/format";
 
 /** The book CAPX holds for a shilling-funded account. */
@@ -92,6 +93,10 @@ export function CustodialPortfolio() {
         </div>
       </Reveal>
 
+
+      {/* Above the money, because an unverified account is a limit on what
+          they can do with it. */}
+      <div className="mt-4"><KycPrompt /></div>
 
       {/*
         * Money first, then what it bought.

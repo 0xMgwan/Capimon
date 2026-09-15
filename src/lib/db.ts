@@ -219,6 +219,38 @@ export async function migrate() {
         )`;
 
       /*
+       * Identity checks.
+       *
+       * The images live in the database rather than object storage because
+       * there is no bucket configured and adding one would mean another
+       * credential to lose; at this volume a few megabytes of bytea is the
+       * smaller risk. They are never served without the admin token, and the
+       * column they sit in is the reason the review route reads them one at a
+       * time rather than selecting the whole row.
+       *
+       * A submission is kept after review rather than deleted, because the
+       * evidence for a decision has to outlive the decision. That also means
+       * this table holds identity documents: it is the one place in the schema
+       * where a retention policy is a real obligation rather than tidiness.
+       */
+      await sql`
+        create table if not exists capx.kyc_submissions (
+          id            uuid primary key default gen_random_uuid(),
+          user_id       uuid not null references capx.users(id) on delete cascade,
+          doc_type      text not null,
+          doc_number    text,
+          doc_image     bytea not null,
+          doc_mime      text not null,
+          selfie_image  bytea not null,
+          selfie_mime   text not null,
+          status        text not null default 'pending',
+          reason        text,
+          reviewed_by   text,
+          reviewed_at   timestamptz,
+          created_at    timestamptz not null default now()
+        )`;
+
+      /*
        * Fees moved out of the omnibus.
        *
        * Fees are charged inside a trade and stay where the trade left them, so
@@ -286,6 +318,8 @@ export async function migrate() {
       await sql`create index if not exists custody_sec_idx on capx.custody_attestations(security, created_at desc)`;
       await sql`create index if not exists issuance_sec_idx on capx.issuance_events(security, created_at desc)`;
       await sql`create index if not exists fee_sweeps_status_idx on capx.fee_sweeps(status, created_at desc)`;
+      await sql`create index if not exists kyc_user_idx on capx.kyc_submissions(user_id, created_at desc)`;
+      await sql`create index if not exists kyc_status_idx on capx.kyc_submissions(status, created_at desc)`;
       await sql`create index if not exists orders_user_idx on capx.orders(user_id, created_at desc)`;
       await sql`create index if not exists deposits_user_idx on capx.deposits(user_id, created_at desc)`;
       await sql`create index if not exists deposits_status_idx on capx.deposits(status)`;

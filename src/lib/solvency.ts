@@ -31,7 +31,18 @@ export type Solvency = {
   ok: boolean;
   checkedAt: number;
   assets: AssetSolvency[];
-  totals: { owedUsd: number; heldUsd: number; shortfallUsd: number };
+  totals: {
+    owedUsd: number; heldUsd: number; shortfallUsd: number;
+    /**
+     * Held beyond what clients are owed.
+     *
+     * Almost all of this is tokenised inventory bought before anyone has bought
+     * it from us. Reported separately because "held" sitting next to "owed"
+     * reads as coverage, and a hundred unsold CRDBt made it look like client
+     * assets were backed twelve times over.
+     */
+    inventoryUsd: number;
+  };
   /** Where the USDC actually sits, since it backs balances from two places. */
   usdc: { treasury: number; rampFloat: number; omnibus: number };
   /** Present when solvency could not be established, which is not the same as insolvent. */
@@ -41,7 +52,7 @@ export type Solvency = {
 export async function checkSolvency(): Promise<Solvency> {
   const checkedAt = Math.floor(Date.now() / 1000);
   if (!treasuryConfigured) {
-    return { ok: false, checkedAt, assets: [], totals: { owedUsd: 0, heldUsd: 0, shortfallUsd: 0 },
+    return { ok: false, checkedAt, assets: [], totals: { owedUsd: 0, heldUsd: 0, shortfallUsd: 0, inventoryUsd: 0 },
       usdc: { treasury: 0, rampFloat: 0, omnibus: 0 }, unavailable: "No treasury is configured." };
   }
 
@@ -69,7 +80,7 @@ export async function checkSolvency(): Promise<Solvency> {
   ]);
   const omnibus = ntzsTzs as { tzs: number; usdc: number };
   if (!holdings) {
-    return { ok: false, checkedAt, assets: [], totals: { owedUsd: 0, heldUsd: 0, shortfallUsd: 0 },
+    return { ok: false, checkedAt, assets: [], totals: { owedUsd: 0, heldUsd: 0, shortfallUsd: 0, inventoryUsd: 0 },
       usdc: { treasury: 0, rampFloat: 0, omnibus: 0 }, unavailable: "Treasury holdings could not be read." };
   }
 
@@ -152,11 +163,13 @@ export async function checkSolvency(): Promise<Solvency> {
   const owedUsd = assets.reduce((s, a) => s + a.owed * priceOf(a.asset), 0);
   const heldUsd = assets.reduce((s, a) => s + a.held * priceOf(a.asset), 0);
   const shortfallUsd = assets.reduce((s, a) => s + a.shortfall * priceOf(a.asset), 0);
+  const inventoryUsd = assets.reduce(
+    (s, a) => s + Math.max(0, a.held - a.owed) * priceOf(a.asset), 0);
 
   return {
     ok: assets.every((a) => a.covered),
     checkedAt, assets,
-    totals: { owedUsd, heldUsd, shortfallUsd },
+    totals: { owedUsd, heldUsd, shortfallUsd, inventoryUsd },
     usdc: { treasury: holdings.usdc, rampFloat: float, omnibus: omnibus.usdc },
   };
 }

@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { useT } from "@/lib/i18n";
+import { haptic } from "@/lib/haptics";
 
 /**
  * Buying and selling CRDB.
@@ -114,8 +115,10 @@ export function CrdbPanel() {
       });
       const d = await res.json();
       if (!d.ok) {
+        haptic("error");
         setMsg({ tone: "bad", text: d.error ?? "That order could not be placed." });
       } else {
+        haptic("success");
         setMsg({
           tone: "ok",
           text: side === "buy"

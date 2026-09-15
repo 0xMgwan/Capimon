@@ -7,6 +7,7 @@ import { Footer } from "@/components/Footer";
 import { TickerTape } from "@/components/TickerTape";
 import { DseTape } from "@/components/DseTape";
 import { MobileTabs } from "@/components/MobileTabs";
+import { Haptics } from "@/components/Haptics";
 
 /*
  * One superfamily, carrying the whole page.
@@ -113,6 +114,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <main className="safe-x">{children}</main>
           <Footer />
           <MobileTabs />
+          <Haptics />
         </Providers>
       </body>
     </html>

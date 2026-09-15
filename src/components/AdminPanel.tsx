@@ -3,6 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { usd } from "@/lib/format";
 
+/** One position, with who holds it and what it cost them. */
+type HolderRow = {
+  userId: string; email: string; name: string | null; username: string | null;
+  kycStatus: string; asset: string; qty: number; bought: number; sold: number;
+  trades: number; firstBought: string | null; lastTrade: string | null;
+  avgCost: number; costBasis: number; realised: number; currency: "USD" | "TZS";
+};
+
 /** One identity check, without the images it points at. */
 type KycRow = {
   id: string; user_id: string; email: string; name: string | null;
@@ -13,7 +21,7 @@ type KycRow = {
 
 type Admin = {
   totals: { users: number; pendingDeposits: number; settledTzs: number; creditedUsdc: number };
-  solvency: { ok: boolean; totals: { owedUsd: number; heldUsd: number; shortfallUsd: number };
+  solvency: { ok: boolean; totals: { owedUsd: number; heldUsd: number; shortfallUsd: number; inventoryUsd: number };
               usdc?: { treasury: number; rampFloat: number };
               assets: { asset: string; owed: number; held: number; covered: boolean }[];
               unavailable?: string } | null;
@@ -59,6 +67,21 @@ export function AdminPanel() {
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<"deposits" | "users" | "orders" | "holdings" | "withdrawals" | "kyc">("deposits");
   const [kyc, setKyc] = useState<KycRow[] | null>(null);
+  const [holders, setHolders] = useState<HolderRow[] | null>(null);
+
+  const loadHolders = useCallback(async () => {
+    try {
+      const r = await fetch("/api/admin/holders", { headers: { authorization: `Bearer ${token}` } });
+      const j = await r.json();
+      if (j.ok) setHolders(j.holders);
+    } catch { /* the rest of the desk still works */ }
+  }, [token]);
+
+  useEffect(() => {
+    if (tab !== "holdings" || !token) return;
+    const id = setTimeout(() => void loadHolders(), 0);
+    return () => clearTimeout(id);
+  }, [tab, token, loadHolders]);
 
   /*
    * Loaded on demand rather than with the dashboard.
@@ -284,16 +307,30 @@ export function AdminPanel() {
                 <span className="rounded-full surface px-2.5 py-1">
                   nTZS float {usd(s.usdc.rampFloat)}
                 </span>
-                {s.usdc.treasury < s.totals.owedUsd && (
-                  <span className="rounded-full bg-[#b45309]/15 px-2.5 py-1 text-[#b45309]">
-                    backing is in the float, move it to the treasury before trading
-                  </span>
-                )}
+                {/*
+                  * No "move it to the treasury" warning any more.
+                  *
+                  * It compared the treasury's USDC against every client
+                  * liability converted to dollars — shillings and shares
+                  * included — so it fired whenever anyone held anything that
+                  * was not USDC, which is always. It also described a model
+                  * this system stopped using: a buy sweeps what it needs from
+                  * the omnibus and holds nothing between trades, so a near-zero
+                  * treasury is the design working rather than a problem.
+                  */}
               </div>
             )}
             <div className="tnum mt-4 grid grid-cols-3 gap-4 text-sm">
               <div><div className="eyebrow">Owed to clients</div><div className="mt-1">{usd(s.totals.owedUsd)}</div></div>
-              <div><div className="eyebrow">Held in treasury</div><div className="mt-1">{usd(s.totals.heldUsd)}</div></div>
+              <div>
+                <div className="eyebrow">Assets held</div>
+                <div className="mt-1">{usd(s.totals.heldUsd)}</div>
+                {s.totals.inventoryUsd > 0.01 && (
+                  <div className="mt-0.5 text-[10px] text-[var(--muted)]">
+                    incl. {usd(s.totals.inventoryUsd)} unsold
+                  </div>
+                )}
+              </div>
               <div><div className="eyebrow">Shortfall</div>
                 <div className={`mt-1 ${s.totals.shortfallUsd > 0 ? "text-[var(--color-down)]" : ""}`}>
                   {usd(s.totals.shortfallUsd)}
@@ -465,7 +502,7 @@ export function AdminPanel() {
           <thead className="border-b hairline">
             <tr>{(tab === "deposits" ? ["User", "Amount", "Status", "Credited", "Phone", "When"]
                 : tab === "users" ? ["User", "National ID", "Phone", "Deposits", "Balance"]
-                : tab === "holdings" ? ["Asset", "Owed to clients", "Holders", "Onchain", "Covered"]
+                : tab === "holdings" ? ["Holder", "Asset", "Quantity", "Cost", "Value", "Since"]
                 : tab === "withdrawals" ? ["User", "Amount", "Reference", "When"]
                 : tab === "kyc" ? ["Applicant", "Document", "Selfie", "Status", "Decision"]
                 : ["User", "Side", "Asset", "Amount", "Status", "Tx"]).map((h, i) => (
@@ -542,41 +579,56 @@ export function AdminPanel() {
                 <td className="tnum px-3 py-3 text-right">{usd(Number(u.usdc_balance ?? 0))}</td>
               </tr>
             ))}
-            {tab === "holdings" && (data.holdingsByAsset ?? []).map((h) => {
-              const owed = Math.abs(Number(h.qty));
-              /*
-               * Coverage comes from the solvency check, not from the treasury's
-               * asset list.
-               *
-               * That list is the Chainlink-fed US equities. A local security
-               * like CRDB has its own token and is not in it, so looking there
-               * found nothing, reported zero held against real client holdings,
-               * and flagged a fully backed position as short — the same fault
-               * that once paused trading for everyone, showing up in a second
-               * place because two bits of code were both working out "held".
-               * There is now one answer, and this reads it.
-               */
-              const fromSolvency = data.solvency?.assets.find((a) => a.asset === h.asset);
-              const held = fromSolvency?.held
-                ?? data.onchain?.holdings.find((x) => x.asset === h.asset)?.qty
-                ?? 0;
-              const covered = fromSolvency?.covered ?? held + 1e-8 >= owed;
+            {tab === "holdings" && (holders ?? []).map((h) => {
+              // Valued at what it cost, in the currency it was bought in. The
+              // live mark belongs on the customer's own page; here the useful
+              // question is what they put in and what they took out.
+              const value = h.costBasis > 0 ? h.qty * h.avgCost : 0;
+              const money = (n: number) =>
+                h.currency === "TZS" ? `${Math.round(n).toLocaleString()} TZS` : usd(n);
               return (
-                <tr key={h.asset} className="border-b hairline last:border-0">
-                  <td className="px-3 py-3 font-medium">{h.asset}</td>
-                  <td className="tnum px-3 py-3 text-right">{owed.toFixed(6)}</td>
-                  <td className="tnum px-3 py-3 text-right">{h.holders}</td>
-                  <td className="tnum px-3 py-3 text-right">{held.toFixed(6)}</td>
-                  <td className="px-3 py-3 text-right">
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] ${covered
-                      ? "bg-[var(--color-up)]/10 text-[var(--color-up)]"
-                      : "bg-[var(--color-down)]/10 text-[var(--color-down)]"}`}>
-                      {covered ? "covered" : "short"}
-                    </span>
+                <tr key={`${h.userId}-${h.asset}`} className="border-b hairline last:border-0 align-top">
+                  <td className="px-3 py-3">
+                    <div>{h.username ? `@${h.username}` : h.email}</div>
+                    <div className="text-[11px] text-[var(--muted)]">
+                      {h.name ?? h.email}
+                      <span className={h.kycStatus === "approved" ? "" : "text-[#b45309]"}>
+                        {" · "}{h.kycStatus === "approved" ? "verified" : h.kycStatus}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-3 text-right font-medium">{h.asset}</td>
+                  <td className="tnum px-3 py-3 text-right">
+                    <div>{h.qty.toLocaleString("en-US", { maximumFractionDigits: 8 })}</div>
+                    <div className="text-[11px] text-[var(--muted)]">
+                      {h.trades} {h.trades === 1 ? "trade" : "trades"}
+                      {h.sold > 0 && ` · sold ${h.sold.toLocaleString("en-US", { maximumFractionDigits: 6 })}`}
+                    </div>
+                  </td>
+                  <td className="tnum px-3 py-3 text-right">
+                    <div>{h.avgCost > 0 ? money(h.avgCost) : "—"}</div>
+                    <div className="text-[11px] text-[var(--muted)]">avg</div>
+                  </td>
+                  <td className="tnum px-3 py-3 text-right">
+                    <div>{value > 0 ? money(value) : "—"}</div>
+                    {Math.abs(h.realised) > 0.005 && (
+                      <div className={`text-[11px] ${h.realised >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                        {h.realised >= 0 ? "+" : ""}{money(h.realised)} banked
+                      </div>
+                    )}
+                  </td>
+                  <td className="tnum px-3 py-3 text-right text-[11px] text-[var(--muted)]">
+                    <div>{h.firstBought ? new Date(h.firstBought).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}</div>
+                    {h.lastTrade && <div>last {new Date(h.lastTrade).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>}
                   </td>
                 </tr>
               );
             })}
+            {tab === "holdings" && holders && holders.length === 0 && (
+              <tr><td colSpan={6} className="px-3 py-10 text-center text-[var(--muted)]">
+                Nobody holds a position yet.
+              </td></tr>
+            )}
             {tab === "kyc" && (kyc ?? []).map((k) => (
               <tr key={k.id} className="border-b hairline last:border-0 align-top">
                 <td className="px-3 py-3">

@@ -8,7 +8,7 @@ type KycRow = {
   id: string; user_id: string; email: string; name: string | null;
   doc_type: string; doc_number: string | null; status: string; reason: string | null;
   reviewed_by: string | null; reviewed_at: string | null; created_at: string;
-  doc_bytes: number; selfie_bytes: number;
+  doc_bytes: number; selfie_bytes: number; doc_mime: string;
 };
 
 type Admin = {
@@ -597,23 +597,30 @@ export function AdminPanel() {
                   */}
                 <td className="px-3 py-3" colSpan={2}>
                   <div className="flex gap-2">
-                    {(["doc", "selfie"] as const).map((which) => (
-                      <a
-                        key={which}
-                        href={`/api/admin/kyc/image?id=${k.id}&which=${which}&token=${encodeURIComponent(token)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={`Open ${which} full size`}
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={`/api/admin/kyc/image?id=${k.id}&which=${which}&token=${encodeURIComponent(token)}`}
-                          alt={which}
-                          className={`h-16 border hairline object-cover ${
-                            which === "selfie" ? "w-16 rounded-full" : "w-24 rounded-lg"}`}
-                        />
-                      </a>
-                    ))}
+                    {(["doc", "selfie"] as const).map((which) => {
+                      const href = `/api/admin/kyc/image?id=${k.id}&which=${which}&token=${encodeURIComponent(token)}`;
+                      // A PDF has no thumbnail, so it gets a tile that opens it
+                      // rather than a broken image where a face should be.
+                      const isPdf = which === "doc" && k.doc_mime === "application/pdf";
+                      return (
+                        <a key={which} href={href} target="_blank" rel="noreferrer"
+                          title={`Open ${which} full size`}>
+                          {isPdf ? (
+                            <span className="grid h-16 w-24 place-items-center rounded-lg border hairline surface text-[11px] font-medium text-[var(--muted)]">
+                              PDF ↗
+                            </span>
+                          ) : (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={href}
+                              alt={which}
+                              className={`h-16 border hairline object-cover ${
+                                which === "selfie" ? "w-16 rounded-full" : "w-24 rounded-lg"}`}
+                            />
+                          )}
+                        </a>
+                      );
+                    })}
                   </div>
                 </td>
                 <td className="px-3 py-3 text-right text-[var(--muted)]">{k.status}</td>

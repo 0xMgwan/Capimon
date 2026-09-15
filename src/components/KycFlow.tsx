@@ -21,6 +21,19 @@ const DOCS = [
   { id: "voter", label: "Voter's card" },
 ] as const;
 
+/** The largest a document may be once encoded. Matches the server's ceiling. */
+const MAX_BYTES = 6 * 1024 * 1024;
+
+/** Reads a file as-is, for formats there is nothing sensible to resize. */
+function readAsDataUrl(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(new Error("unreadable"));
+    r.readAsDataURL(file);
+  });
+}
+
 /** Phone photos run large; the server refuses above 6MB, so shrink before sending. */
 async function shrink(file: Blob, maxEdge = 1600): Promise<string> {
   const bitmap = await createImageBitmap(file);
@@ -41,6 +54,9 @@ export function KycFlow({ onDone }: { onDone?: () => void }) {
   const [docType, setDocType] = useState<string>("nida");
   const [docNumber, setDocNumber] = useState("");
   const [doc, setDoc] = useState<string | null>(null);
+  /** A PDF has no thumbnail, so the preview shows its name instead. */
+  const [docKind, setDocKind] = useState<"image" | "pdf">("image");
+  const [docName, setDocName] = useState<string>("");
   const [selfie, setSelfie] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,14 +110,36 @@ export function KycFlow({ onDone }: { onDone?: () => void }) {
     stopCamera();
   };
 
+  /**
+   * Takes a photograph or a file.
+   *
+   * People keep their ID as a scan as often as a photo, and a scan is usually a
+   * PDF. A PDF cannot be drawn to a canvas, so it is sent as it arrived and
+   * checked against the size limit here instead — the resize exists to get
+   * under that limit, and a file already under it needs nothing done to it.
+   */
   const pickDoc = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
     try {
+      if (file.type === "application/pdf") {
+        if (file.size > MAX_BYTES) {
+          setError(t("That file is too large. The limit is 6MB."));
+          return;
+        }
+        setDocKind("pdf");
+        setDocName(file.name);
+        setDoc(await readAsDataUrl(file));
+        return;
+      }
+      setDocKind("image");
+      setDocName(file.name);
       setDoc(await shrink(file));
     } catch {
-      setError("That file could not be read as an image.");
+      // HEIC from an iPhone is the usual cause: some browsers cannot decode it
+      // to a canvas. Saying which formats work is more use than saying no.
+      setError(t("That file could not be read. Try a JPEG, PNG or PDF."));
     }
   };
 
@@ -175,17 +213,39 @@ export function KycFlow({ onDone }: { onDone?: () => void }) {
         {doc ? (
           <div className="flex items-center gap-3 rounded-2xl border hairline p-3">
             {/* A preview, not a gallery: enough to see the right page was photographed. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={doc} alt="" className="h-16 w-24 rounded-lg object-cover" />
-            <span className="flex-1 text-[13px] text-[var(--muted)]">{t("Document attached.")}</span>
+            {docKind === "pdf" ? (
+              <span className="grid h-16 w-24 shrink-0 place-items-center rounded-lg surface text-[11px] font-medium text-[var(--muted)]">
+                PDF
+              </span>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={doc} alt="" className="h-16 w-24 rounded-lg object-cover" />
+            )}
+            <span className="flex-1 truncate text-[13px] text-[var(--muted)]">
+              {docName || t("Document attached.")}
+            </span>
             <button onClick={() => setDoc(null)} className="text-[12px] underline underline-offset-2">
               {t("Replace")}
             </button>
           </div>
         ) : (
           <label className="flex cursor-pointer items-center justify-center rounded-2xl border border-dashed hairline px-4 py-7 text-center text-[13px] text-[var(--muted)] transition-colors hover:surface">
-            <input type="file" accept="image/*" capture="environment" onChange={pickDoc} className="hidden" />
-            {t("Photograph or upload your document")}
+            {/*
+              * No `capture` attribute.
+              *
+              * It tells the browser to prefer the camera, and on a phone that
+              * meant the picker opened straight into photos with no way to
+              * reach a file. Someone whose ID is a scan in Files could not get
+              * to it at all. Without it the OS offers camera, photos and files,
+              * and the person chooses.
+              */}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
+              onChange={pickDoc}
+              className="hidden"
+            />
+            {t("Photograph or upload your document (JPEG, PNG or PDF)")}
           </label>
         )}
       </div>

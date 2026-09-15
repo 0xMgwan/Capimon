@@ -40,9 +40,18 @@ export async function GET(req: Request) {
       "content-type": row.mime,
       "content-length": String(row.image.length),
       "cache-control": "private, no-store",
-      // An identity document should never be framed by another origin.
-      "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+      /*
+       * An identity document should never be framed by another origin.
+       *
+       * `frame-ancestors` is the directive that does that. An earlier
+       * `default-src 'none'` alongside it did nothing useful for an image and
+       * risked breaking the browser's built-in PDF viewer, which is how a
+       * reviewer opens a scanned ID.
+       */
+      "content-security-policy": "frame-ancestors 'none'",
       "x-content-type-options": "nosniff",
+      "content-disposition": `inline; filename="${which}-${id.slice(0, 8)}${
+        row.mime === "application/pdf" ? ".pdf" : ".jpg"}"`,
     },
   });
 }

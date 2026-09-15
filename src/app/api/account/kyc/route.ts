@@ -46,7 +46,7 @@ export async function POST(req: Request) {
 
     let doc, selfie;
     try {
-      doc = decodeImage(body.doc, "The document photo");
+      doc = decodeImage(body.doc, "The document", { allowPdf: true });
       selfie = decodeImage(body.selfie, "The selfie");
     } catch (e) {
       return bad(e instanceof Error ? e.message : "Those images could not be read.");

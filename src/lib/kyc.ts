@@ -28,10 +28,20 @@ export type KycSubmission = {
   /** Bytes, so a list can show sizes without carrying the images. */
   doc_bytes: number;
   selfie_bytes: number;
+  /** A reviewer needs to know whether the document is a picture or a PDF. */
+  doc_mime: string;
 };
 
-/** Accepted document images. Anything else is a file, not a photograph. */
+/** Accepted photographs. */
 const IMAGE_MIME = /^image\/(jpeg|png|webp|heic|heif)$/i;
+/**
+ * A document may also be a PDF, because an ID scan usually is one.
+ *
+ * Only the document. A selfie has to be a photograph taken now, and accepting a
+ * PDF there would let someone attach a scan of a photograph of somebody else,
+ * which is the exact thing the selfie step is for.
+ */
+const DOC_MIME = /^(image\/(jpeg|png|webp|heic|heif)|application\/pdf)$/i;
 /** Per image. Phone cameras produce two to five megabytes; this leaves room. */
 const MAX_BYTES = 6 * 1024 * 1024;
 
@@ -42,19 +52,28 @@ const MAX_BYTES = 6 * 1024 * 1024;
  * length tells you very little and the point is to bound what actually reaches
  * the database.
  */
-export function decodeImage(dataUrl: unknown, label: string): { bytes: Buffer; mime: string } {
+export function decodeImage(
+  dataUrl: unknown,
+  label: string,
+  opts: { allowPdf?: boolean } = {},
+): { bytes: Buffer; mime: string } {
   if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:")) {
     throw new Error(`${label} is missing.`);
   }
   const match = /^data:([^;,]+);base64,(.+)$/s.exec(dataUrl);
-  if (!match) throw new Error(`${label} is not a readable image.`);
+  if (!match) throw new Error(`${label} is not a readable file.`);
 
   const [, mime, b64] = match;
-  if (!IMAGE_MIME.test(mime)) {
-    throw new Error(`${label} must be a photo (JPEG, PNG, WebP or HEIC).`);
+  const allowed = opts.allowPdf ? DOC_MIME : IMAGE_MIME;
+  if (!allowed.test(mime)) {
+    throw new Error(
+      opts.allowPdf
+        ? `${label} must be a photo or a PDF.`
+        : `${label} must be a photo (JPEG, PNG, WebP or HEIC).`,
+    );
   }
   const bytes = Buffer.from(b64, "base64");
-  if (bytes.length < 1024) throw new Error(`${label} is too small to be a photograph.`);
+  if (bytes.length < 1024) throw new Error(`${label} is too small to be a real file.`);
   if (bytes.length > MAX_BYTES) {
     throw new Error(`${label} is ${(bytes.length / 1e6).toFixed(1)}MB. The limit is 6MB.`);
   }
@@ -114,7 +133,8 @@ export async function listKyc(limit = 50): Promise<KycSubmission[]> {
     select k.id::text, k.user_id::text, u.email, u.name,
            k.doc_type, k.doc_number, k.status, k.reason,
            k.reviewed_by, k.reviewed_at, k.created_at,
-           length(k.doc_image) as doc_bytes, length(k.selfie_image) as selfie_bytes
+           length(k.doc_image) as doc_bytes, length(k.selfie_image) as selfie_bytes,
+           k.doc_mime
       from capx.kyc_submissions k
       join capx.users u on u.id = k.user_id
      order by (k.status = 'pending') desc, k.created_at desc

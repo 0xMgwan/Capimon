@@ -105,7 +105,11 @@ export const SW: Record<string, string> = {
   "Driver's licence": "Leseni ya udereva",
   "Voter's card": "Kadi ya mpiga kura",
   "Document number (optional)": "Namba ya hati (si lazima)",
-  "Photograph or upload your document": "Piga picha au pakia hati yako",
+  "Photograph or upload your document (JPEG, PNG or PDF)":
+    "Piga picha au pakia hati yako (JPEG, PNG au PDF)",
+  "That file is too large. The limit is 6MB.": "Faili hilo ni kubwa mno. Kikomo ni MB 6.",
+  "That file could not be read. Try a JPEG, PNG or PDF.":
+    "Faili hilo halikusomeka. Jaribu JPEG, PNG au PDF.",
   "Document attached.": "Hati imeambatishwa.",
   "Replace": "Badilisha",
   "Photo taken.": "Picha imepigwa.",

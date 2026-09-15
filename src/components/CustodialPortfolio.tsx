@@ -122,7 +122,7 @@ export function CustodialPortfolio() {
                           <div className="min-w-0 flex-1">
                             <div className="text-[14px] font-medium leading-tight">{p.ticker}</div>
                             <div className="tnum text-xs text-[var(--muted)]">
-                              {p.qty.toFixed(6)}
+                              {p.qty.toLocaleString("en-US", { maximumFractionDigits: 8 })}
                               {p.avgCostNative > 0 ? <> · avg {costLabel(p.avgCostNative, p.currency)}</> : <> @ {usd(p.price)}</>}
                             </div>
                           </div>

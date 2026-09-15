@@ -1,6 +1,32 @@
-/** nTZS brand mark — the Tanzanian shilling stablecoin. */
+"use client";
+
+import { useState } from "react";
+
+/**
+ * nTZS brand mark.
+ *
+ * Prefers an uploaded file at `public/ntzs.png` and falls back to the drawn
+ * mark below when there is not one. That way dropping the real artwork into
+ * the folder is the whole job — no component to edit, and no broken image in
+ * the meantime if it is never added.
+ */
 export function NtzsIcon({ className = "h-4 w-4" }: { className?: string }) {
+  const [noFile, setNoFile] = useState(false);
+
+  if (!noFile) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src="/ntzs.png"
+        alt=""
+        onError={() => setNoFile(true)}
+        className={`shrink-0 rounded-full object-contain ${className}`}
+      />
+    );
+  }
+
   return (
+
     <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
       <circle cx="32" cy="32" r="32" fill="#1B4A72" />
       <circle cx="32" cy="32" r="24.5" fill="none" stroke="#ffffff" strokeWidth="2.6" opacity="0.9" />

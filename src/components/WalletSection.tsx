@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { UsdcIcon } from "./icons/Usdc";
 import { NtzsIcon } from "./icons/Ntzs";
-import { usd } from "@/lib/format";
+import { usd, ledgerAmount } from "@/lib/format";
 import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 import { AssetPicker } from "./AssetPicker";
@@ -493,9 +493,11 @@ export function WalletSection({ holdings }: {
                       at: e.created_at,
                       inFlight: false,
                       glyph: e.kind === "buy" ? "↗" : e.kind === "sell" ? "↘" : "•",
-                      title: `${e.kind[0].toUpperCase()}${e.kind.slice(1)} ${e.asset}`,
+                      title: (e.kind === "buy" || e.kind === "sell") && (e.asset === "TZS" || e.asset === "USDC")
+                        ? (amount >= 0 ? `${t("Proceeds")} ${e.asset}` : `${t("Paid")} ${e.asset}`)
+                        : `${e.kind[0].toUpperCase()}${e.kind.slice(1)} ${e.asset}`,
                       sub: null,
-                      main: `${amount >= 0 ? "+" : ""}${amount.toFixed(e.asset === "USDC" ? 2 : 6)}`,
+                      main: ledgerAmount(amount, e.asset),
                       extra: null,
                       tone: (amount >= 0 ? "up" : "down") as "up" | "down",
                     };

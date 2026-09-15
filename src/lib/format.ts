@@ -74,3 +74,30 @@ export function costLabel(amount: number, currency: "USD" | "TZS" = "USD") {
     ? `${amount.toLocaleString("en-TZ", { maximumFractionDigits: 0 })} TZS`
     : usd(amount);
 }
+
+/**
+ * A ledger amount, at the precision the thing is actually counted in.
+ *
+ * Money and shares had been sharing one format, so a five-thousand shilling
+ * withdrawal printed as -5000.000000. Nobody counts shillings to six decimal
+ * places; the zeros are noise that makes a column of figures harder to scan
+ * than it needs to be.
+ *
+ * Shares keep their precision because there it is real — a third of a share is
+ * a third of a share — but trailing zeros are trimmed, so 0.500000 reads as
+ * 0.5 while 0.334899 keeps every digit that means something.
+ */
+export function ledgerAmount(amount: number, asset: string) {
+  const sign = amount > 0 ? "+" : amount < 0 ? "−" : "";
+  const n = Math.abs(amount);
+
+  if (asset === "TZS") {
+    // Whole shillings, unless there is a fraction worth showing.
+    const dp = Number.isInteger(n) ? 0 : 2;
+    return `${sign}${n.toLocaleString("en-TZ", { minimumFractionDigits: dp, maximumFractionDigits: dp })}`;
+  }
+  if (asset === "USDC") {
+    return `${sign}${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  return `${sign}${n.toLocaleString("en-US", { maximumFractionDigits: 8 })}`;
+}

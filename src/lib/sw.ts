@@ -86,6 +86,8 @@ export const SW: Record<string, string> = {
   "Bank account you are sending from": "Akaunti ya benki unayotumia kutuma",
   "You have no shares to sell yet": "Bado huna hisa za kuuza",
   "Deposit": "Amana",
+  "Proceeds": "Mapato",
+  "Paid": "Imelipwa",
   "invested": "zimewekezwa",
 
   // --- verification ---

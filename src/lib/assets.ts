@@ -135,3 +135,14 @@ export const AERO_CL_QUOTER = "0x514c8B5f54112481E28028F1166Bd78501089259" as co
 export const AERO_CL_ROUTER = "0x698Cb2b6dd822994581fEa6eA4Fc755d1363A92F" as const;
 /** Slipstream keys pools by tick spacing rather than fee. */
 export const AERO_TICK_SPACINGS = [1, 10, 50, 100, 200, 2000] as const;
+
+/**
+ * nTZS on Base mainnet — the settlement currency for Tanzanian securities.
+ *
+ * Eighteen decimals, not six. USDC's six are the exception rather than the
+ * rule, and assuming them here would misprice every trade by twelve orders of
+ * magnitude, so any figure quoted to the settlement contract or the oracle is
+ * in these units.
+ */
+export const NTZS_BASE = "0xF476BA983DE2F1AD532380630e2CF1D1b8b10688" as const;
+export const NTZS_DECIMALS = 18;

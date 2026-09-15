@@ -207,6 +207,17 @@ export async function migrate() {
           created_at     timestamptz not null default now()
         )`;
 
+      // Reference prices, each with where it came from and when. A price with
+      // no provenance is a number somebody typed, and settlement decides what a
+      // share is worth (Rule 7).
+      await sql`
+        create table if not exists capx.oracle_prices (
+          symbol      text primary key,
+          price_tzs   numeric(38,8) not null,
+          source      text not null,
+          updated_at  timestamptz not null default now()
+        )`;
+
       /*
        * Columns added after a table first shipped.
        *

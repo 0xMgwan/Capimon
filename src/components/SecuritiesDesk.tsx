@@ -11,6 +11,14 @@ type Backing = {
   fresh: boolean; expiresAt: string | null; lastVerified: string | null;
 };
 type Security = { symbol: string; name: string; token_address: string | null; status: string; backing: Backing };
+
+/** Who holds this security, from the same route the admin holdings tab uses. */
+type Holder = {
+  userId: string; email: string; name: string | null; username: string | null;
+  kycStatus: string; asset: string; qty: number; trades: number;
+  firstBought: string | null; lastTrade: string | null;
+  avgCost: number; realised: number; currency: "USD" | "TZS";
+};
 type Attestation = {
   id: string; security: string; custodian: string; quantity: number; locked: number;
   doc_ref: string | null; issued_at: string; expires_at: string;
@@ -34,6 +42,7 @@ export function SecuritiesDesk() {
   const [token, setToken] = useState("");
   const [data, setData] = useState<{ securities: Security[]; attestations: Attestation[]; issuance: Issuance[] } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [holders, setHolders] = useState<Holder[] | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -45,6 +54,17 @@ export function SecuritiesDesk() {
       const j = await r.json();
       if (!j.ok) throw new Error(j.code === "unauthorised" ? "That token was not accepted." : j.error);
       setData({ securities: j.securities ?? [], attestations: j.attestations ?? [], issuance: j.issuance ?? [] });
+
+      /*
+       * Who actually holds it, from the same route the admin holdings tab
+       * reads. A backing ratio says the position is covered; it does not say
+       * whose it is, and the desk deciding whether to mint more should be able
+       * to see both on one screen.
+       */
+      const h = await fetch(`/api/admin/holders?token=${encodeURIComponent(t)}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .catch(() => null);
+      setHolders(h?.ok ? h.holders : []);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not load");
       setData(null);
@@ -196,6 +216,57 @@ export function SecuritiesDesk() {
               <div className="mt-4 flex flex-wrap gap-2">
                 <MintBurn security={s.symbol} headroom={b.headroom} issued={b.issued} onAct={act} busy={busy} />
               </div>
+
+              {/* The holders of this security specifically, not every position
+                  on the platform. */}
+              {(() => {
+                const mine = (holders ?? []).filter((h) => h.asset === s.symbol);
+                if (!mine.length) return null;
+                const fmt = (n: number, c: "USD" | "TZS") =>
+                  c === "TZS" ? `${Math.round(n).toLocaleString()} TZS` : `$${n.toFixed(2)}`;
+                return (
+                  <div className="mt-4 overflow-hidden rounded-2xl border hairline">
+                    <div className="flex items-center justify-between border-b hairline px-4 py-2.5">
+                      <span className="eyebrow">Holders</span>
+                      <span className="tnum text-[11px] text-[var(--muted)]">
+                        {mine.length} · {mine.reduce((t, h) => t + h.qty, 0)
+                          .toLocaleString("en-US", { maximumFractionDigits: 8 })} held
+                      </span>
+                    </div>
+                    <div className="scroll-thin max-h-72 divide-y divide-[var(--border)] overflow-y-auto">
+                      {mine.map((h) => (
+                        <div key={h.userId} className="flex items-baseline gap-3 px-4 py-2.5 text-[12px]">
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate">{h.username ? `@${h.username}` : h.email}</span>
+                            <span className="block truncate text-[11px] text-[var(--muted)]">
+                              {h.name ?? h.email}
+                              <span className={h.kycStatus === "approved" ? "" : " text-[#b45309]"}>
+                                {" · "}{h.kycStatus === "approved" ? "verified" : h.kycStatus}
+                              </span>
+                            </span>
+                          </span>
+                          <span className="tnum shrink-0 text-right">
+                            <span className="block">
+                              {h.qty.toLocaleString("en-US", { maximumFractionDigits: 8 })}
+                            </span>
+                            <span className="block text-[11px] text-[var(--muted)]">
+                              avg {h.avgCost > 0 ? fmt(h.avgCost, h.currency) : "—"}
+                            </span>
+                          </span>
+                          <span className="tnum shrink-0 text-right text-[11px] text-[var(--muted)]">
+                            <span className="block">
+                              {h.firstBought
+                                ? new Date(h.firstBought).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+                                : "—"}
+                            </span>
+                            <span className="block">{h.trades} {h.trades === 1 ? "trade" : "trades"}</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           );
         })}

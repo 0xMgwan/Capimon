@@ -21,7 +21,7 @@ type KycRow = {
 
 type Admin = {
   totals: { users: number; pendingDeposits: number; settledTzs: number; creditedUsdc: number };
-  solvency: { ok: boolean; totals: { owedUsd: number; heldUsd: number; shortfallUsd: number; inventoryUsd: number };
+  solvency: { ok: boolean; usdPerTzs: number; totals: { owedUsd: number; heldUsd: number; shortfallUsd: number; inventoryUsd: number };
               usdc?: { treasury: number; rampFloat: number };
               assets: { asset: string; owed: number; held: number; covered: boolean }[];
               unavailable?: string } | null;
@@ -68,6 +68,16 @@ export function AdminPanel() {
   const [tab, setTab] = useState<"deposits" | "users" | "orders" | "holdings" | "withdrawals" | "kyc">("deposits");
   const [kyc, setKyc] = useState<KycRow[] | null>(null);
   const [holders, setHolders] = useState<HolderRow[] | null>(null);
+  /*
+   * Shillings by default.
+   *
+   * Nearly everything on this desk is denominated in them — the float, the
+   * fees, the deposits, and now a security priced on the DSE — so showing
+   * dollars first asked the operator to convert in their head before any figure
+   * meant anything. The rate is the one the totals were computed from, not a
+   * second one fetched here, so the conversion cannot disagree with the sums.
+   */
+  const [ccy, setCcy] = useState<"TZS" | "USD">("TZS");
 
   const loadHolders = useCallback(async () => {
     try {
@@ -246,12 +256,16 @@ export function AdminPanel() {
   }
 
   const s = data.solvency;
+  const rate = s?.usdPerTzs ?? 0;
+  const money = (n: number) =>
+    ccy === "TZS" && rate > 0 ? `${Math.round(n / rate).toLocaleString()} TZS` : usd(n);
+
   const tabs = [
     ["deposits", `Deposits (${data.deposits.length})`],
     ["users", `Users (${data.totals.users})`],
     ["orders", `Orders (${data.orders.length})`],
     ["kyc", kyc ? `KYC (${kyc.filter((k) => k.status === "pending").length})` : "KYC"],
-    ["holdings", `Holdings (${data.holdingsByAsset?.length ?? 0})`],
+    ["holdings", holders ? `Holdings (${holders.length})` : "Holdings"],
     ["withdrawals", `Withdrawals (${data.withdrawals?.length ?? 0})`],
   ] as const;
 
@@ -302,10 +316,10 @@ export function AdminPanel() {
             {s.usdc && (
               <div className="tnum mt-3 flex flex-wrap gap-2 text-[11px]">
                 <span className="rounded-full surface px-2.5 py-1">
-                  treasury {usd(s.usdc.treasury)}
+                  treasury {money(s.usdc.treasury)}
                 </span>
                 <span className="rounded-full surface px-2.5 py-1">
-                  nTZS float {usd(s.usdc.rampFloat)}
+                  nTZS float {money(s.usdc.rampFloat)}
                 </span>
                 {/*
                   * No "move it to the treasury" warning any more.
@@ -321,19 +335,19 @@ export function AdminPanel() {
               </div>
             )}
             <div className="tnum mt-4 grid grid-cols-3 gap-4 text-sm">
-              <div><div className="eyebrow">Owed to clients</div><div className="mt-1">{usd(s.totals.owedUsd)}</div></div>
+              <div><div className="eyebrow">Owed to clients</div><div className="mt-1">{money(s.totals.owedUsd)}</div></div>
               <div>
                 <div className="eyebrow">Assets held</div>
-                <div className="mt-1">{usd(s.totals.heldUsd)}</div>
+                <div className="mt-1">{money(s.totals.heldUsd)}</div>
                 {s.totals.inventoryUsd > 0.01 && (
                   <div className="mt-0.5 text-[10px] text-[var(--muted)]">
-                    incl. {usd(s.totals.inventoryUsd)} unsold
+                    incl. {money(s.totals.inventoryUsd)} unsold
                   </div>
                 )}
               </div>
               <div><div className="eyebrow">Shortfall</div>
                 <div className={`mt-1 ${s.totals.shortfallUsd > 0 ? "text-[var(--color-down)]" : ""}`}>
-                  {usd(s.totals.shortfallUsd)}
+                  {money(s.totals.shortfallUsd)}
                 </div></div>
             </div>
             {s.assets.length > 0 && (
@@ -410,8 +424,8 @@ export function AdminPanel() {
             matched ? "hairline" : "border-[var(--color-down)]/50 bg-[var(--color-down)]/[0.07]"}`}>
             <span className={matched ? "text-[var(--muted)]" : "text-[var(--color-down)] font-medium"}>
               {matched
-                ? `Deposits reconcile: ${r.deposits} settled, ${usd(credited)} credited and ${usd(ledger)} in the ledger.`
-                : `Deposits do NOT reconcile: ${usd(credited)} credited against ${usd(ledger)} in the ledger (${usd(drift)} adrift).`}
+                ? `Deposits reconcile: ${r.deposits} settled, ${money(credited)} credited and ${money(ledger)} in the ledger.`
+                : `Deposits do NOT reconcile: ${money(credited)} credited against ${money(ledger)} in the ledger (${money(drift)} adrift).`}
             </span>
           </div>
         );
@@ -475,11 +489,28 @@ export function AdminPanel() {
         </div>
       </div>
 
+      {rate > 0 && (
+        <div className="mt-3 flex justify-end">
+          <span className="inline-flex overflow-hidden rounded-full border hairline text-[11px]">
+            {(["TZS", "USD"] as const).map((c) => (
+              <button
+                key={c}
+                onClick={() => setCcy(c)}
+                className={`px-3 py-1 transition-colors ${
+                  ccy === c ? "bg-[var(--fg)] text-[var(--bg)]" : "hover:surface"}`}
+              >
+                {c}
+              </button>
+            ))}
+          </span>
+        </div>
+      )}
+
       <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-4 lg:grid-cols-7">
         <Cell label="Users" value={String(data.totals.users)} />
         <Cell label="Pending" value={String(data.totals.pendingDeposits)} />
         <Cell label="Collected" value={TZS(data.totals.settledTzs)} />
-        <Cell label="Credited" value={usd(data.totals.creditedUsdc)} />
+        <Cell label="Credited" value={money(data.totals.creditedUsdc)} />
         <Cell label="Orders" value={String(data.totalsExtra?.settledOrders ?? 0)} />
         <Cell label="Failed" value={String(data.totalsExtra?.failedOrders ?? 0)} />
         {/* Shilling trade fees. They are not swept anywhere — they stay in the

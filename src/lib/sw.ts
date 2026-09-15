@@ -72,6 +72,7 @@ export const SW: Record<string, string> = {
   "held by CAPX": "inashikiliwa na CAPX",
   "Available to invest": "Pesa za kuwekeza",
   "Activity": "Shughuli",
+  "Clear": "Futa",
   "Nothing yet. Add money to get started.": "Bado hakuna kitu. Weka pesa ili kuanza.",
   "after your first buy": "baada ya ununuzi wako wa kwanza",
   "Wallet": "Mkoba",
@@ -149,6 +150,11 @@ export const SW: Record<string, string> = {
   "Verified and locked to the document we checked.":
     "Imethibitishwa na imefungwa kwenye hati tuliyokagua.",
   "Language": "Lugha",
+  "Tap feedback": "Mrejesho wa kugusa",
+  "Click on": "Mlio umewashwa",
+  "Click off": "Mlio umezimwa",
+  "This iPhone is older than iOS 17.4, which is the first version a website can use the Taptic Engine. A short click can be played instead. It is sound, not vibration.":
+    "iPhone hii ni ya zamani kuliko iOS 17.4, ambayo ndiyo toleo la kwanza tovuti inaweza kutumia Taptic Engine. Badala yake mlio mfupi unaweza kupigwa. Ni sauti, si mtetemo.",
   "Legal": "Kisheria",
   "These terms describe how CAPX actually operates today. They have not yet been reviewed by a licensed Tanzanian advocate, and will be updated when they are. If anything here conflicts with Tanzanian law, the law applies.":
     "Masharti haya yanaeleza jinsi CAPX inavyofanya kazi leo. Bado hayajakaguliwa na wakili aliyesajiliwa Tanzania, na yatasasishwa yatakapokaguliwa. Kama kitu chochote hapa kinapingana na sheria za Tanzania, sheria ndiyo inayotumika.",

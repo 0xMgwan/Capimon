@@ -51,6 +51,19 @@ export async function listNotifications(userId: string, limit = 30) {
      limit ${limit}`;
 }
 
+/**
+ * Empties the list.
+ *
+ * A real delete rather than a hidden flag: this is the customer's own record of
+ * what happened to their money, and if they ask for it to be gone, keeping a
+ * copy they cannot see is not what they asked for. The ledger and the order
+ * history are untouched — those are the account's books, not its inbox.
+ */
+export async function clearNotifications(userId: string) {
+  await migrate();
+  await db()`delete from capx.notifications where user_id = ${userId}`;
+}
+
 export async function markAllRead(userId: string) {
   await migrate();
   await db()`update capx.notifications set read_at = now()

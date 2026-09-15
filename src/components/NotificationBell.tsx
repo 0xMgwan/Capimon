@@ -125,6 +125,25 @@ export function NotificationBell() {
     return () => { alive = false; clearTimeout(first); clearInterval(id); };
   }, [account, load]);
 
+  /*
+   * Cleared locally first, then on the server.
+   *
+   * The list is the customer's own record and emptying it is not a decision
+   * anyone else depends on, so waiting for a round trip before the panel
+   * responds would make a one-tap action feel broken on a slow connection.
+   */
+  const clear = useCallback(async () => {
+    setItems([]);
+    setUnread(0);
+    try {
+      await fetch("/api/account/notifications", { method: "DELETE" });
+    } catch {
+      // It will come back on the next poll if the delete never landed, which
+      // is the honest outcome rather than a list that looks empty forever.
+      void load();
+    }
+  }, [load]);
+
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
@@ -166,8 +185,16 @@ export function NotificationBell() {
 
       {open && (
         <div className="absolute right-0 top-full z-50 mt-2.5 w-[min(21rem,calc(100vw-1.75rem))] origin-top-right overflow-hidden rounded-2xl border hairline bg-[var(--bg)] shadow-2xl shadow-black/20">
-          <div className="border-b hairline px-4 py-3">
+          <div className="flex items-center justify-between border-b hairline px-4 py-3">
             <span className="eyebrow">{t("Activity")}</span>
+            {items.length > 0 && (
+              <button
+                onClick={() => void clear()}
+                className="text-[11px] text-[var(--muted)] underline underline-offset-2 transition-colors hover:text-[var(--fg)]"
+              >
+                {t("Clear")}
+              </button>
+            )}
           </div>
           {items.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-[var(--muted)]">

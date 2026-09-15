@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { KycPrompt } from "./KycPrompt";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { Avatar } from "./Avatar";
 import { useT } from "@/lib/i18n";
+import { needsTapSound, tapSoundEnabled, setTapSound, haptic } from "@/lib/haptics";
 
 /** Shrink to this before sending; an avatar never needs more. */
 const AVATAR_PX = 128;
@@ -41,6 +42,21 @@ export function SettingsView() {
   const [name, setName] = useState<string | null>(null);
   const [phone, setPhone] = useState<string | null>(null);
   const [nida, setNida] = useState<string | null>(null);
+  /*
+   * Only shown on a device that cannot do the real thing.
+   *
+   * Offering a workaround to a phone that already vibrates is one more switch
+   * to read past, so this appears for older iPhones and nobody else.
+   */
+  const [tapSound, setTapSoundOn] = useState(false);
+  const [showTapSound, setShowTapSound] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setShowTapSound(needsTapSound());
+      setTapSoundOn(tapSoundEnabled());
+    }, 0);
+    return () => clearTimeout(id);
+  }, []);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -165,6 +181,26 @@ export function SettingsView() {
             ))}
           </div>
         </Field>
+        {showTapSound && (
+          <Field
+            label={t("Tap feedback")}
+            hint={t("This iPhone is older than iOS 17.4, which is the first version a website can use the Taptic Engine. A short click can be played instead. It is sound, not vibration.")}
+          >
+            <button
+              onClick={() => {
+                const next = !tapSound;
+                setTapSoundOn(next);
+                setTapSound(next);
+                if (next) haptic("light");
+              }}
+              className={`w-full rounded-xl border px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                tapSound ? "border-[var(--fg)] bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"
+              }`}
+            >
+              {t(tapSound ? "Click on" : "Click off")}
+            </button>
+          </Field>
+        )}
         <Field label={t("Display name")}>
           <input
             value={val(name, u.name)}

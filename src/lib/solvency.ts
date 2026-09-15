@@ -45,6 +45,14 @@ export type Solvency = {
   };
   /** Where the USDC actually sits, since it backs balances from two places. */
   usdc: { treasury: number; rampFloat: number; omnibus: number };
+  /**
+   * Dollars per shilling at the time of the check.
+   *
+   * Reported so a reader can be shown these figures in the currency they think
+   * in without fetching a rate of their own, which would be a second rate that
+   * disagrees with the one the totals were computed from.
+   */
+  usdPerTzs: number;
   /** Present when solvency could not be established, which is not the same as insolvent. */
   unavailable?: string;
 };
@@ -53,7 +61,8 @@ export async function checkSolvency(): Promise<Solvency> {
   const checkedAt = Math.floor(Date.now() / 1000);
   if (!treasuryConfigured) {
     return { ok: false, checkedAt, assets: [], totals: { owedUsd: 0, heldUsd: 0, shortfallUsd: 0, inventoryUsd: 0 },
-      usdc: { treasury: 0, rampFloat: 0, omnibus: 0 }, unavailable: "No treasury is configured." };
+      usdc: { treasury: 0, rampFloat: 0, omnibus: 0 }, usdPerTzs: 0,
+      unavailable: "No treasury is configured." };
   }
 
   const [liabilities, holdings, markets, float, ntzsTzs] = await Promise.all([
@@ -81,7 +90,8 @@ export async function checkSolvency(): Promise<Solvency> {
   const omnibus = ntzsTzs as { tzs: number; usdc: number };
   if (!holdings) {
     return { ok: false, checkedAt, assets: [], totals: { owedUsd: 0, heldUsd: 0, shortfallUsd: 0, inventoryUsd: 0 },
-      usdc: { treasury: 0, rampFloat: 0, omnibus: 0 }, unavailable: "Treasury holdings could not be read." };
+      usdc: { treasury: 0, rampFloat: 0, omnibus: 0 }, usdPerTzs: 0,
+      unavailable: "Treasury holdings could not be read." };
   }
 
   // Coverage per asset is checked in the asset's own units (owed TZS vs held
@@ -171,6 +181,7 @@ export async function checkSolvency(): Promise<Solvency> {
     checkedAt, assets,
     totals: { owedUsd, heldUsd, shortfallUsd, inventoryUsd },
     usdc: { treasury: holdings.usdc, rampFloat: float, omnibus: omnibus.usdc },
+    usdPerTzs: tzsUsd,
   };
 }
 

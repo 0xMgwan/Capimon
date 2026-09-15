@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
-import { listNotifications, markAllRead } from "@/lib/notify";
+import { listNotifications, markAllRead, clearNotifications } from "@/lib/notify";
 import { requireDb, boom } from "@/lib/apiHelpers";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +19,20 @@ export async function GET() {
     );
   } catch (e) {
     return boom(e, "Could not load your notifications");
+  }
+}
+
+/** Empties the list at the customer's request. */
+export async function DELETE() {
+  const gate = requireDb();
+  if (gate) return gate;
+  try {
+    const user = await currentUser();
+    if (!user) return NextResponse.json({ ok: false, code: "unauthenticated" }, { status: 401 });
+    await clearNotifications(user.id);
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return boom(e, "Could not clear your notifications");
   }
 }
 

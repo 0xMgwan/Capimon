@@ -150,7 +150,7 @@ export function AdminPanel() {
     return (
       <div className="mx-auto max-w-md px-5 py-24">
         <div className="eyebrow">Operations</div>
-        <h1 className="display mt-3 text-3xl">Restricted.</h1>
+        <h1 className="display mt-2 text-2xl">Restricted.</h1>
         <input
           value={token}
           onChange={(e) => setToken(e.target.value)}
@@ -180,11 +180,11 @@ export function AdminPanel() {
   ] as const;
 
   return (
-    <div className="mx-auto max-w-[1400px] px-5 pb-24 pt-10 sm:px-8">
+    <div className="mx-auto max-w-[1400px] px-5 pb-16 pt-7 sm:px-8 sm:pt-9">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="eyebrow">Operations</div>
-          <h1 className="display mt-2 text-[clamp(1.8rem,4vw,2.8rem)]">Custody desk.</h1>
+          <h1 className="display mt-1.5 text-[clamp(1.5rem,3vw,2.1rem)]">Custody desk.</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Only offered when shillings are actually owed beyond what is held. */}
@@ -210,7 +210,7 @@ export function AdminPanel() {
       )}
 
       {/* Solvency leads — it is the number that decides whether anything else matters. */}
-      <div className={`mt-8 rounded-3xl border p-6 ${
+      <div className={`mt-5 rounded-3xl border p-5 ${
         !s || s.unavailable ? "hairline"
           : s.ok ? "border-[var(--color-up)]/40 bg-[var(--color-up)]/[0.05]"
                  : "border-[var(--color-down)]/50 bg-[var(--color-down)]/[0.07]"}`}>
@@ -385,7 +385,7 @@ export function AdminPanel() {
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-4 lg:grid-cols-7">
+      <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-4 lg:grid-cols-7">
         <Cell label="Users" value={String(data.totals.users)} />
         <Cell label="Pending" value={String(data.totals.pendingDeposits)} />
         <Cell label="Collected" value={TZS(data.totals.settledTzs)} />
@@ -397,7 +397,7 @@ export function AdminPanel() {
         <Cell label="Fees (held)" value={TZS(data.totalsExtra?.feesTzs ?? 0)} />
       </div>
 
-      <div className="mt-8 flex gap-1 rounded-full border hairline p-1">
+      <div className="mt-6 flex gap-1 overflow-x-auto rounded-full border hairline p-1">
         {tabs.map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`flex-1 rounded-full px-4 py-2 text-[13px] font-medium transition-colors ${

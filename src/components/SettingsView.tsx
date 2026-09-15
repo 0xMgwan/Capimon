@@ -45,7 +45,7 @@ export function SettingsView() {
     return (
       <div className="mx-auto max-w-md px-5 py-16 sm:py-24">
         <div className="eyebrow">Settings</div>
-        <h1 className="display mt-3 text-3xl">Sign in first.</h1>
+        <h1 className="display mt-2 text-2xl">Sign in first.</h1>
         <p className="mt-3 text-sm text-[var(--muted)]">
           Your details live behind your account.
         </p>
@@ -91,9 +91,9 @@ export function SettingsView() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl px-5 pb-16 pt-6 sm:px-8 sm:pb-24 sm:pt-12">
+    <div className="mx-auto max-w-2xl px-5 pb-16 pt-6 sm:px-8 sm:pt-9">
       <div className="eyebrow">Settings</div>
-      <h1 className="display mt-2 text-[clamp(1.8rem,5vw,2.6rem)]">Your account.</h1>
+      <h1 className="display mt-1.5 text-[clamp(1.5rem,3.4vw,2.1rem)]">Your account.</h1>
 
       {/* Identity */}
       <section className="mt-8 rounded-3xl border hairline p-5">

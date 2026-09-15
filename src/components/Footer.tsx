@@ -36,28 +36,34 @@ export function Footer() {
   return (
     <footer className="border-t hairline">
       <div className="mx-auto max-w-[1400px] px-5 py-10 sm:px-8 sm:py-16">
-        <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(3,1fr)]">
+        {/*
+          * Three short link lists stacked on a phone is a lot of scrolling for
+          * nine links. They sit side by side instead, which is what the eye
+          * expects of a footer and what the column widths can easily take.
+          */}
+        <div className="grid gap-8 md:grid-cols-[1.4fr_repeat(3,1fr)] md:gap-10">
           <div>
             <Lockup />
-            <p className="mt-4 max-w-xs text-[17px] leading-snug text-[var(--muted)]">
+            <p className="mt-3 max-w-xs text-[15px] leading-snug text-[var(--muted)] sm:text-[17px]">
               Public markets, rebuilt as open infrastructure. Priced by live oracles,
               held in your own wallet.
             </p>
           </div>
 
+          <div className="grid grid-cols-3 gap-5 md:contents">
           {COLS.map((c) => (
             <div key={c.title}>
               <div className="eyebrow">{c.title}</div>
-              <ul className="mt-4 space-y-2.5">
+              <ul className="mt-3 space-y-2 md:mt-4 md:space-y-2.5">
                 {c.links.map((l) => (
                   <li key={l.label}>
                     {"ext" in l && l.ext ? (
                       <a href={l.href} target="_blank" rel="noreferrer"
-                        className="text-sm text-[var(--muted)] transition-colors hover:text-[var(--fg)]">
-                        {l.label} ↗
+                        className="text-[13px] leading-snug text-[var(--muted)] transition-colors hover:text-[var(--fg)] sm:text-sm">
+                        {l.label}&nbsp;↗
                       </a>
                     ) : (
-                      <Link href={l.href} className="text-sm text-[var(--muted)] transition-colors hover:text-[var(--fg)]">
+                      <Link href={l.href} className="text-[13px] leading-snug text-[var(--muted)] transition-colors hover:text-[var(--fg)] sm:text-sm">
                         {l.label}
                       </Link>
                     )}
@@ -66,6 +72,7 @@ export function Footer() {
               </ul>
             </div>
           ))}
+          </div>
         </div>
 
         <div className="mt-14 border-t hairline pt-6">

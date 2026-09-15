@@ -92,44 +92,53 @@ export function CustodialPortfolio() {
         </div>
       </Reveal>
 
-      {positions.length > 0 && (
-        <Reveal delay={0.06} className="mt-4">
-          <div id="holdings" className="grid gap-1.5 scroll-mt-24">
-            {positions.map((p) => (
-              <Link
-                key={p.symbol}
-                href={`/markets/${p.ticker.toLowerCase()}`}
-                className="flex items-center gap-3 rounded-2xl border hairline px-4 py-3 transition-colors hover:surface"
-              >
-                <AssetLogo logo={p.logo} ticker={p.ticker} color={p.color} size={34} />
-                <div className="min-w-0 flex-1">
-                  <div className="text-[14px] font-medium leading-tight">{p.ticker}</div>
-                  <div className="tnum text-xs text-[var(--muted)]">
-                    {p.qty.toFixed(6)}
-                    {p.avgCostNative > 0 ? <> · avg {costLabel(p.avgCostNative, p.currency)}</> : <> @ {usd(p.price)}</>}
-                  </div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="tnum text-[14px] font-medium leading-tight">{money(p.value)}</div>
-                  {/* Return on what this position cost, not the day's move —
-                      the day's move is on the market page; this is the money. */}
-                  {p.costBasis > 0 ? (
-                    <div className={`tnum text-xs ${p.pnl >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
-                      {p.pnl >= 0 ? "+" : "−"}{money(Math.abs(p.pnl))} ({p.pnlPct >= 0 ? "+" : ""}{p.pnlPct.toFixed(1)}%)
-                    </div>
-                  ) : (
-                    <div className={`tnum text-xs ${p.change >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
-                      {p.change >= 0 ? "+" : ""}{p.change.toFixed(2)}%
-                    </div>
-                  )}
-                </div>
-              </Link>
-            ))}
-          </div>
-        </Reveal>
-      )}
 
-      <WalletSection />
+      {/*
+        * Money first, then what it bought.
+        *
+        * The cash panel used to sit under a second hero heading below the
+        * holdings, so the page opened on what a customer owns and ended on
+        * what they can spend. Handing the holdings to the wallet puts them in
+        * one column in the order someone actually uses them.
+        */}
+      <WalletSection
+        holdings={positions.length > 0 ? (
+                  <Reveal delay={0.06} className="mt-4">
+                    <div id="holdings" className="grid gap-1.5 scroll-mt-24">
+                      {positions.map((p) => (
+                        <Link
+                          key={p.symbol}
+                          href={`/markets/${p.ticker.toLowerCase()}`}
+                          className="flex items-center gap-3 rounded-2xl border hairline px-4 py-3 transition-colors hover:surface"
+                        >
+                          <AssetLogo logo={p.logo} ticker={p.ticker} color={p.color} size={34} />
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[14px] font-medium leading-tight">{p.ticker}</div>
+                            <div className="tnum text-xs text-[var(--muted)]">
+                              {p.qty.toFixed(6)}
+                              {p.avgCostNative > 0 ? <> · avg {costLabel(p.avgCostNative, p.currency)}</> : <> @ {usd(p.price)}</>}
+                            </div>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <div className="tnum text-[14px] font-medium leading-tight">{money(p.value)}</div>
+                            {/* Return on what this position cost, not the day's move —
+                                the day's move is on the market page; this is the money. */}
+                            {p.costBasis > 0 ? (
+                              <div className={`tnum text-xs ${p.pnl >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                                {p.pnl >= 0 ? "+" : "−"}{money(Math.abs(p.pnl))} ({p.pnlPct >= 0 ? "+" : ""}{p.pnlPct.toFixed(1)}%)
+                              </div>
+                            ) : (
+                              <div className={`tnum text-xs ${p.change >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                                {p.change >= 0 ? "+" : ""}{p.change.toFixed(2)}%
+                              </div>
+                            )}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </Reveal>
+        ) : null}
+      />
 
       <p className="mt-6 text-xs leading-relaxed text-[var(--muted)]">
         CAPX holds these assets on your behalf and this ledger records what you are owed. Prefer

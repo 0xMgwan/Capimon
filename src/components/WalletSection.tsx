@@ -42,7 +42,19 @@ const IN_FLIGHT = new Set(["pending", "uncertain"]);
  * Deposit lives here rather than only on the onboarding page — someone topping
  * up for the second time should not be sent back through a signup flow.
  */
-export function WalletSection() {
+export function WalletSection({ holdings }: {
+  /**
+   * The holdings list, rendered between the wallet and the activity feed.
+   *
+   * Passed in rather than placed by the page, because the money and the
+   * positions it bought are one story and were reading as two: cash sat under
+   * its own hero heading below the holdings, so the first thing a customer saw
+   * was what they own and the last was what they could spend. Taking it as a
+   * slot keeps a single instance of this component, with one set of deposit
+   * state and one poll.
+   */
+  holdings?: React.ReactNode;
+}) {
   const { account, refresh } = useCapimonAccount();
   const router = useRouter();
   // Buying and selling start from the same searchable list the ticket uses, so
@@ -167,16 +179,10 @@ export function WalletSection() {
     }
   };
 
-  // A section heading, not a second hero. At the old size it took a third of a
-  // screen to introduce a balance and a list.
+  // No heading of its own any more. Sitting directly under "Your book" it was
+  // a second title introducing the same page, and the cards say what they are.
   return (
-    <section className="mt-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="eyebrow">Wallet</div>
-          <h2 className="display mt-1.5 text-[clamp(1.25rem,2.6vw,1.75rem)]">Cash and activity.</h2>
-        </div>
-      </div>
+    <section className="mt-5">
 
       {deposits.some((d) => IN_FLIGHT.has(d.status)) && (
         <div className="mt-4 flex items-center gap-3 rounded-2xl border border-[#b45309]/40 bg-[#b45309]/[0.06] px-4 py-3">
@@ -188,8 +194,9 @@ export function WalletSection() {
         </div>
       )}
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,380px)_1fr]">
-        <div className="rounded-3xl border hairline p-5">
+      <div className="mt-4 grid gap-4">
+        <div className="rounded-3xl border hairline p-5 lg:flex lg:items-center lg:justify-between lg:gap-8">
+          <div className="lg:flex-1">
           <div className="eyebrow">Available to invest</div>
           {(() => {
             /*
@@ -224,7 +231,9 @@ export function WalletSection() {
             );
           })()}
 
-          <div className="mt-5 grid gap-2">
+          </div>
+
+          <div className="mt-5 grid gap-2 lg:mt-0 lg:w-[340px] lg:shrink-0">
             <button
               onClick={() => setPanel((p) => (p === "deposit" ? "none" : "deposit"))}
               className="w-full rounded-full bg-[var(--fg)] py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95"
@@ -440,6 +449,8 @@ export function WalletSection() {
             </p>
           )}
         </div>
+
+        {holdings}
 
         <div className="rounded-3xl border hairline">
           <div className="border-b hairline px-5 py-3.5">

@@ -102,6 +102,8 @@ export const SW: Record<string, string> = {
   "Two photographs: the document you hold, and you holding the phone. It takes about a minute and only has to be done once.":
     "Picha mbili: hati uliyo nayo, na wewe ukiwa umeshika simu. Inachukua takriban dakika moja na hufanyika mara moja tu.",
   "Your document.": "Hati yako.",
+  "Your document": "Hati yako",
+  "A photo of you, now": "Picha yako, sasa hivi",
   "A photo of you, now.": "Picha yako, sasa hivi.",
   "National ID (NIDA)": "Kitambulisho cha Taifa (NIDA)",
   "Passport": "Paspoti",

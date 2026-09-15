@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { useState } from "react";
 import { passwordProblem } from "@/lib/passwordRule";
+import { IdCapture, type Captured } from "./IdCapture";
 
 /** The documents a Tanzanian account can be opened against. */
 const DOCS = [
@@ -51,6 +52,17 @@ export function AccountForm({
    * whole point of asking.
    */
   const [agreed, setAgreed] = useState(false);
+  /*
+   * The two photographs, collected here rather than on a later screen.
+   *
+   * A verification step that only appears once the account exists puts the
+   * identity check after the money, which is the wrong order for a regulated
+   * account. They are gathered with everything else and filed the moment the
+   * account is created — a submission needs a user row to belong to, so it
+   * cannot be sent before then, but that is our problem rather than something
+   * to make somebody navigate around.
+   */
+  const [ids, setIds] = useState<Captured>({ doc: null, selfie: null, docKind: "image" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +76,28 @@ export function AccountForm({
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error ?? "Could not continue");
+
+      /*
+       * Filed straight after, on the session the registration just opened.
+       *
+       * A failure here is not a failed signup: the account exists, they are
+       * signed in, and the prompt that follows them around the app will bring
+       * them back to it. Throwing would leave someone with an account they
+       * were told they did not get.
+       */
+      if (mode === "signup" && ids.doc && ids.selfie) {
+        await fetch("/api/account/kyc", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            docType,
+            docNumber: form.nidaNumber || null,
+            doc: ids.doc,
+            selfie: ids.selfie,
+          }),
+        }).catch(() => { /* the prompt will ask again */ });
+      }
+
       await onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
@@ -176,6 +210,17 @@ export function AccountForm({
           </>
         )}
       </div>
+
+      {mode === "signup" && (
+        <div className="mt-4 border-t hairline pt-4">
+          <IdCapture onChange={setIds} compact={compact} />
+          <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
+            {ids.doc && ids.selfie
+              ? "Both photos attached. They go to verification as soon as your account is open."
+              : "Needed to verify the account. You can add them later, but you will not be able to trade until they are checked."}
+          </p>
+        </div>
+      )}
 
       {mode === "signup" && (
         <label className="mt-4 flex cursor-pointer items-start gap-2.5">

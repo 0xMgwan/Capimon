@@ -74,7 +74,7 @@ export function ProofOfReserves() {
                   under ? "border-[var(--color-down)]/50 bg-[var(--color-down)]/[0.05]" : "hairline"
                 }`}
               >
-                <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-2">
                   <div>
                     <div className="flex items-center gap-2">
                       <h2 className="font-[family-name:var(--font-display)] text-2xl font-medium tracking-[-0.03em]">
@@ -84,9 +84,9 @@ export function ProofOfReserves() {
                         {s.status}
                       </span>
                     </div>
-                    <p className="mt-1 text-sm text-[var(--muted)]">{s.name}</p>
+                    <p className="mt-1 break-words text-sm text-[var(--muted)]">{s.name}</p>
                   </div>
-                  <div className="text-right">
+                  <div className="sm:text-right">
                     <div className="eyebrow">Backing</div>
                     <div className={`tnum text-3xl font-medium ${
                       under ? "text-[var(--color-down)]" : "text-[var(--color-up)]"
@@ -107,7 +107,7 @@ export function ProofOfReserves() {
                   <Cell label={t("Available to buy")} value={b.unallocated.toLocaleString()} />
                 </div>
 
-                <dl className="mt-4 grid gap-1.5 text-[13px] sm:grid-cols-2">
+                <dl className="mt-4 grid min-w-0 gap-1.5 text-[13px] sm:grid-cols-2">
                   <Row k="Custodian" v={b.custodian ?? "Not yet attested"} />
                   <Row k="Last verified" v={dt(b.lastVerified)} />
                   <Row
@@ -139,18 +139,40 @@ export function ProofOfReserves() {
 
 function Cell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-[var(--bg)] px-4 py-3">
-      <div className="eyebrow leading-tight">{label}</div>
-      <div className="tnum mt-1.5 text-lg font-medium">{value}</div>
+    <div className="min-w-0 bg-[var(--bg)] px-3 py-3 sm:px-4">
+      {/* Tracking comes off on a phone: letter-spacing on an uppercase label is
+          what turned "Locked in custody" into a 190px column. */}
+      <div className="eyebrow leading-tight tracking-[0.08em] sm:tracking-[0.16em]">{label}</div>
+      <div className="tnum mt-1.5 text-base font-medium sm:text-lg">{value}</div>
     </div>
   );
 }
 
+/**
+ * A label and its value.
+ *
+ * Stacked on a phone, side by side once there is room. It used to be side by
+ * side always, with the value set to truncate — and `truncate` implies
+ * `white-space: nowrap`, so the row's minimum width became the full length of
+ * the longest value. A custodian called "CAPX self-declared - custodian
+ * statement pending" gave the row a 546px floor on a 375px screen, and the
+ * whole card was dragged past the edge of the viewport.
+ *
+ * The value wraps now rather than truncating, because the custodian's name is
+ * the one thing this row exists to say and an ellipsis would hide exactly the
+ * part worth reading. `min-w-0` lets the row shrink as a grid item; without it
+ * the wrapping alone would not be enough.
+ */
 function Row({ k, v, warn }: { k: string; v: string; warn?: boolean }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 border-b hairline py-1.5 last:border-0">
-      <dt className="text-[var(--muted)]">{k}</dt>
-      <dd className={`tnum min-w-0 truncate text-right ${warn ? "text-[var(--color-down)]" : ""}`}>{v}</dd>
+    <div className="min-w-0 border-b hairline py-1.5 last:border-0 sm:flex sm:items-baseline sm:justify-between sm:gap-3">
+      <dt className="text-[11px] uppercase tracking-wide text-[var(--muted)] sm:text-[13px] sm:normal-case sm:tracking-normal">
+        {k}
+      </dt>
+      <dd className={`tnum mt-0.5 min-w-0 break-words sm:mt-0 sm:text-right ${
+        warn ? "text-[var(--color-down)]" : ""}`}>
+        {v}
+      </dd>
     </div>
   );
 }

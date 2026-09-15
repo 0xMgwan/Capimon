@@ -146,3 +146,17 @@ export const AERO_TICK_SPACINGS = [1, 10, 50, 100, 200, 2000] as const;
  */
 export const NTZS_BASE = "0xF476BA983DE2F1AD532380630e2CF1D1b8b10688" as const;
 export const NTZS_DECIMALS = 18;
+
+/**
+ * The securities layer, live on Base mainnet.
+ *
+ * Deployed 15 Sep 2026 by 0xc7cC8B31…6104e, which is the admin on all three.
+ * Recorded here rather than in env vars because these are public addresses and
+ * a wrong one is a silent misread rather than a missing-config error.
+ */
+export const SECURITIES_CONTRACTS = {
+  chainId: 8453,
+  investorRegistry: "0x7ff9a98b0769647213e5599ddc805317b1b402fa",
+  custodyRegistry: "0x6aaabcd0083e0ee91deeb6a6bb06414cceb97901",
+  priceOracle: "0x28d5f0b47cdb502ea5f0f8be2cfa9461afe3a440",
+} as const;

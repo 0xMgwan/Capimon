@@ -20,6 +20,8 @@ const COLS = [
       { label: "B20 standard", href: "https://docs.base.org/base-chain/specs/upgrades/beryl/b20/specification", ext: true },
       { label: "Tokenized stocks on Base", href: "https://docs.base.org/base-chain/asset-issuance/tokenized-stocks-on-base", ext: true },
       { label: "Onchain registry", href: `https://basescan.org/address/${B20_REGISTRY}`, ext: true },
+      { label: "Terms of service", href: "/terms" },
+      { label: "Privacy policy", href: "/privacy" },
     ],
   },
   {

@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useState } from "react";
 import { passwordProblem } from "@/lib/passwordRule";
 
@@ -24,6 +26,14 @@ export function AccountForm({
   compact?: boolean;
 }) {
   const [form, setForm] = useState({ email: "", password: "", username: "", name: "", phone: "", nidaNumber: "" });
+  /*
+   * Unticked by default, and it stays unticked.
+   *
+   * A pre-ticked box is not agreement, it is a box someone failed to notice.
+   * The button below stays disabled until this is deliberate, which is the
+   * whole point of asking.
+   */
+  const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,7 +43,7 @@ export function AccountForm({
       const r = await fetch(`/api/account/${mode === "signup" ? "register" : "login"}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(mode === "signup" ? { ...form, acceptedTerms: agreed } : form),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error ?? "Could not continue");
@@ -131,9 +141,31 @@ export function AccountForm({
         )}
       </div>
 
+      {mode === "signup" && (
+        <label className="mt-4 flex cursor-pointer items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={agreed}
+            onChange={(e) => setAgreed(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-[var(--fg)]"
+          />
+          <span className="text-[12px] leading-snug text-[var(--muted)]">
+            I have read and agree to the{" "}
+            <Link href="/terms" target="_blank" className="underline underline-offset-2 hover:text-[var(--fg)]">
+              terms of service
+            </Link>{" "}
+            and{" "}
+            <Link href="/privacy" target="_blank" className="underline underline-offset-2 hover:text-[var(--fg)]">
+              privacy policy
+            </Link>
+            , and I am not a United States person.
+          </span>
+        </label>
+      )}
+
       <button
         onClick={submit}
-        disabled={busy || !form.email || !form.password}
+        disabled={busy || !form.email || !form.password || (mode === "signup" && !agreed)}
         className="mt-4 w-full rounded-full bg-[var(--fg)] py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
       >
         {busy ? "Working…" : submitLabel ?? (mode === "signup" ? "Create account" : "Sign in")}

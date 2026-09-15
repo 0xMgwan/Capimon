@@ -149,6 +149,11 @@ export const SW: Record<string, string> = {
   "Verified and locked to the document we checked.":
     "Imethibitishwa na imefungwa kwenye hati tuliyokagua.",
   "Language": "Lugha",
+  "Legal": "Kisheria",
+  "These terms describe how CAPX actually operates today. They have not yet been reviewed by a licensed Tanzanian advocate, and will be updated when they are. If anything here conflicts with Tanzanian law, the law applies.":
+    "Masharti haya yanaeleza jinsi CAPX inavyofanya kazi leo. Bado hayajakaguliwa na wakili aliyesajiliwa Tanzania, na yatasasishwa yatakapokaguliwa. Kama kitu chochote hapa kinapingana na sheria za Tanzania, sheria ndiyo inayotumika.",
+  "Terms of service": "Masharti ya huduma",
+  "Privacy policy": "Sera ya faragha",
 
   // --- money and errors ---
   "Your balance is": "Salio lako ni",

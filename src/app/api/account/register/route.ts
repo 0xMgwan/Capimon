@@ -27,6 +27,18 @@ export async function POST(req: Request) {
     }
 
     if (!email.includes("@") || email.length < 5) return bad("Enter a valid email address.");
+
+    /*
+     * Agreement is checked here, not only in the form.
+     *
+     * A disabled button is a courtesy to the person using the page, not a
+     * control — anything can post to this route. The timestamp is recorded
+     * because the evidence that matters later is when someone agreed, and a
+     * boolean on a row cannot answer that.
+     */
+    if (body.acceptedTerms !== true) {
+      return bad("Please accept the terms of service and privacy policy.", "terms_not_accepted");
+    }
     const pwProblem = passwordProblem(password);
     if (pwProblem) return bad(pwProblem, "weak_password");
 
@@ -43,8 +55,8 @@ export async function POST(req: Request) {
     }
 
     const rows = await sql<{ id: string }[]>`
-      insert into capx.users (email, password_hash, name, phone, nida_number, username)
-      values (${email}, ${await hashPassword(password)}, ${name}, ${phone}, ${nida}, ${username})
+      insert into capx.users (email, password_hash, name, phone, nida_number, username, terms_accepted_at)
+      values (${email}, ${await hashPassword(password)}, ${name}, ${phone}, ${nida}, ${username}, now())
       returning id`;
     const userId = rows[0].id;
 

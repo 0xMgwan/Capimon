@@ -288,6 +288,10 @@ export async function migrate() {
        */
       const lateColumns: Record<string, string[]> = {
         users: [
+          /* When the account holder agreed to the terms. Null for accounts
+             opened before there were any, which is a fact worth keeping rather
+             than back-filling with a date nobody chose. */
+          "terms_accepted_at timestamptz",
           "nida_number text",
           "is_admin boolean not null default false",
           "username text",

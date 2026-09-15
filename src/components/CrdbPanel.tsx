@@ -24,7 +24,8 @@ type Market = {
   feeBps: number; tradable: boolean; haltReason: string | null;
 };
 type Dse = {
-  close: number; change: number; changePct: number;
+  price: number; live: number | null; close: number;
+  change: number; changePct: number;
   tradeDate: string; high: number; low: number; volume: number;
 } | null;
 
@@ -152,14 +153,14 @@ export function CrdbPanel() {
       {data?.dse && (
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--muted)]">
           <span>
-            DSE close{" "}
-            <span className="tnum text-[var(--fg)]">{tzs.format(data.dse.close)}</span>{" "}
+            {data.dse.live !== null ? t("DSE live") : t("DSE close")}{" "}
+            <span className="tnum text-[var(--fg)]">{tzs.format(data.dse.price)}</span>{" "}
             <span className={data.dse.changePct >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}>
               {data.dse.changePct >= 0 ? "▲" : "▼"} {Math.abs(data.dse.changePct).toFixed(2)}%
             </span>{" "}
-            on {data.dse.tradeDate}
+            {data.dse.live !== null ? "" : ` on ${data.dse.tradeDate}`}
           </span>
-          {data.dse.close !== price && price > 0 && (
+          {data.dse.price !== price && price > 0 && (
             <span className="text-[var(--color-down)]">
               Settling at {tzs.format(price)} until the mark is refreshed.
             </span>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { crdbMarket } from "@/lib/dseTrading";
-import { dseQuote } from "@/lib/dse";
+import { dseQuote, currentPrice } from "@/lib/dse";
 import { CRDBT_SECURITY } from "@/lib/assets";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +24,7 @@ export async function GET() {
       ok: true,
       market,
       dse: dse && {
+        price: currentPrice(dse), live: dse.live,
         close: dse.close, change: dse.change, changePct: dse.changePct,
         tradeDate: dse.tradeDate, high: dse.high, low: dse.low, volume: dse.volume,
       },

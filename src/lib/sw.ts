@@ -56,6 +56,8 @@ export const SW: Record<string, string> = {
   "asset page": "ukurasa wa hisa",
   "TZS a share": "TZS kwa hisa",
   "Dar es Salaam Stock Exchange": "Soko la Hisa la Dar es Salaam",
+  "DSE live": "DSE moja kwa moja",
+  "DSE close": "Bei ya kufunga DSE",
   "Proof of reserves": "Uthibitisho wa akiba",
   "Add money": "Weka pesa",
   "Buy shares": "Nunua hisa",

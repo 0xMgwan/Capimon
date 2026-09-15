@@ -3,7 +3,7 @@ import { parseUnits, formatUnits } from "viem";
 import { publicClient } from "./chain";
 import { treasuryWrite, treasuryAddress } from "./treasury";
 import { SECURITIES_CONTRACTS, NTZS_DECIMALS } from "./assets";
-import { dseQuote, quoteAgeDays, type DseQuote } from "./dse";
+import { dseQuote, quoteAgeDays, currentPrice, type DseQuote } from "./dse";
 
 /**
  * Publishing the DSE close to the oracle.
@@ -86,7 +86,16 @@ export async function publishDsePrice(
 
   const quote = await dseQuote(symbol, { force: true });
   if (!quote) return { ok: false, reason: `DSE returned no price for ${symbol}.`, quote: null };
-  if (!(quote.close > 0)) return { ok: false, reason: `DSE returned a zero close for ${symbol}.`, quote };
+  /*
+   * The live price while a session is running, the close otherwise.
+   *
+   * Both are the exchange's own figures. Settling a lunchtime trade against
+   * yesterday's close means every trade of the day prices off a number the
+   * market has already moved away from, and the deviation guard on the
+   * settlement engine is what would eventually refuse them.
+   */
+  const price = currentPrice(quote);
+  if (!(price > 0)) return { ok: false, reason: `DSE returned a zero price for ${symbol}.`, quote };
 
   // Publishing a quote already older than the contract tolerates would write a
   // mark that is stale the moment it lands.
@@ -104,18 +113,18 @@ export async function publishDsePrice(
 
   const current = await readOraclePrice(symbol).catch(() => null);
   if (current && current.price > 0 && !opts.force) {
-    const movePct = Math.abs((quote.close - current.price) / current.price) * 100;
+    const movePct = Math.abs((price - current.price) / current.price) * 100;
     if (movePct > IMPLAUSIBLE_MOVE_PCT) {
       return {
         ok: false,
-        reason: `${symbol} would move ${movePct.toFixed(1)}% — from ${current.price} to ${quote.close}. That is larger than DSE's daily band, so it is being treated as a bad print rather than published.`,
+        reason: `${symbol} would move ${movePct.toFixed(1)}%, from ${current.price} to ${price}. That is larger than DSE's daily band, so it is being treated as a bad print rather than published.`,
         quote,
       };
     }
     // Republishing the same number still refreshes the timestamp, which is the
     // point on a day the exchange did not move — but only once it needs to be.
-    if (current.price === quote.close && current.fresh) {
-      return { ok: true, txHash: null, price: quote.close, quote, unchanged: true };
+    if (current.price === price && current.fresh) {
+      return { ok: true, txHash: null, price, quote, unchanged: true };
     }
   }
 
@@ -123,8 +132,14 @@ export async function publishDsePrice(
     address: ORACLE,
     abi: oracleAbi,
     functionName: "setPrice",
-    args: [symbol, parseUnits(String(quote.close), NTZS_DECIMALS), `DSE close ${quote.tradeDate}`],
+    args: [
+      symbol,
+      parseUnits(String(price), NTZS_DECIMALS),
+      // The source says which figure this is, so a mark can be traced to the
+      // session that made it rather than merely to the exchange.
+      quote.live !== null ? `DSE live ${new Date().toISOString().slice(0, 10)}` : `DSE close ${quote.tradeDate}`,
+    ],
   });
 
-  return { ok: true, txHash, price: quote.close, quote };
+  return { ok: true, txHash, price, quote };
 }

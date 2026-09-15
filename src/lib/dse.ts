@@ -3,18 +3,28 @@ import "server-only";
 /**
  * Prices from the Dar es Salaam Stock Exchange.
  *
- * DSE publishes several endpoints and they do not agree with each other. The
- * one called `live/market/prices` is the one to avoid: for most securities
- * neither its `price` nor its `price + change` equals the day's actual close —
- * checked against the exchange's own history, it matched for CRDB and failed
- * for DCB, NMB, TTP, TCCL, TCC, TPCC and SWIS. Reading it as a live price
- * would have put a number into the oracle that the exchange never printed.
+ * Two endpoints, and which one is right depends on the time of day.
  *
- * So everything here comes from the per-security history endpoint, which
- * returns a dated row per trading day with open, high, low and close. That row
- * is the exchange's own record, it carries the date it belongs to, and the date
- * is what lets a stale price be recognised as stale instead of being served as
- * today's.
+ * The history endpoint returns a dated row per session with open, high, low and
+ * close. That is the exchange's own record and it carries the date it belongs
+ * to, which is what lets a stale price be recognised rather than served as
+ * today's. It is authoritative, and it only appears after a session closes.
+ *
+ * `live/market/prices` carries the session in progress, in a shape that is easy
+ * to misread: its `price` is the *previous* close and its `change` is today's
+ * move so far, so the live price is the two added together. Reading `price`
+ * alone gives yesterday's number, which is how this was first dismissed as
+ * unreliable — tested before the market opened, when `change` still held the
+ * previous completed session's move and the arithmetic was describing the wrong
+ * day.
+ *
+ * Rather than guessing from the clock whether a session is running, the feed is
+ * asked to prove it: the live entry is only trusted when its `price` equals the
+ * last close the history endpoint published. When it does, the feed has rolled
+ * forward and `change` belongs to today. When it does not, the session has not
+ * opened yet and the published close stands. That test uses data already in
+ * hand and does not care about trading hours, holidays or which timezone the
+ * server thinks it is in.
  */
 
 const BASE = "https://dse.co.tz";
@@ -26,6 +36,11 @@ export type DseQuote = {
   name: string;
   /** Closing price in whole shillings. DSE quotes integers. */
   close: number;
+  /**
+   * The price right now, when a session is running and the feed proves it.
+   * Null once the market is closed, where `close` is the only real figure.
+   */
+  live: number | null;
   open: number;
   high: number;
   low: number;
@@ -39,6 +54,11 @@ export type DseQuote = {
   tradeDate: string;
   marketCap: number | null;
 };
+
+/** The figure to trade and display: live while a session runs, else the close. */
+export function currentPrice(q: DseQuote): number {
+  return q.live ?? q.close;
+}
 
 type Row = {
   trade_date: string; company: string; fullName: string;
@@ -73,6 +93,29 @@ export async function dseLastTradeDate(): Promise<string | null> {
 
 const cache = new Map<string, { at: number; quote: DseQuote | null }>();
 
+type LiveRow = { company: string; price: number; change: number };
+let liveCache: { at: number; rows: Map<string, LiveRow> } | null = null;
+
+/**
+ * The in-progress session, by symbol.
+ *
+ * Cached briefly rather than per security: one request covers the whole board,
+ * and quoting twenty-six names should not mean twenty-six calls to the same
+ * endpoint.
+ */
+async function liveBoard(): Promise<Map<string, LiveRow>> {
+  if (liveCache && Date.now() - liveCache.at < 60_000) return liveCache.rows;
+  try {
+    const d = await dseFetch<{ data: LiveRow[] }>("/api/get/live/market/prices");
+    const rows = new Map((d.data ?? []).map((r) => [r.company, r]));
+    liveCache = { at: Date.now(), rows };
+    return rows;
+  } catch {
+    // No live board means no live prices, not wrong ones.
+    return new Map();
+  }
+}
+
 /**
  * One security's most recent printed session.
  *
@@ -96,16 +139,31 @@ export async function dseQuote(symbol: string, opts: { force?: boolean } = {}): 
       const last = rows[rows.length - 1];
       const prev = rows.length > 1 ? Number(rows[rows.length - 2].closing_price) : null;
       const close = Number(last.closing_price);
+
+      /*
+       * The live entry has to prove it belongs to a session after this close.
+       * Its `price` is the previous close, so when that equals the close we
+       * just read, the feed has rolled forward and its `change` is today's.
+       */
+      const liveRow = (await liveBoard()).get(key);
+      const rolled = liveRow && Math.abs(Number(liveRow.price) - close) < 0.51;
+      const live = rolled ? Number(liveRow.price) + Number(liveRow.change) : null;
+
       quote = {
         symbol: key,
         name: last.fullName ?? key,
         close,
+        live: live !== null && live > 0 ? live : null,
         open: Number(last.opening_price),
         high: Number(last.high),
         low: Number(last.low),
         prevClose: prev,
-        change: prev === null ? 0 : close - prev,
-        changePct: prev ? ((close - prev) / prev) * 100 : 0,
+        // Measured against whichever price is on screen: during a session the
+        // move is today's, and after it the move is the one that closed.
+        change: live !== null ? live - close : prev === null ? 0 : close - prev,
+        changePct: live !== null
+          ? (close ? ((live - close) / close) * 100 : 0)
+          : prev ? ((close - prev) / prev) * 100 : 0,
         volume: Number(last.volume ?? 0),
         tradeDate: String(last.trade_date).slice(0, 10),
         marketCap: Number(last.market_cap) || null,
@@ -140,8 +198,14 @@ export async function dseBoard(): Promise<DseQuote[]> {
     .sort((a, b) => a.symbol.localeCompare(b.symbol));
 }
 
-/** How old a quote is, in whole days. */
+/**
+ * How old a quote is, in whole days.
+ *
+ * Zero while a session is running: the price is being made right now, even
+ * though the dated row it is measured against belongs to the last close.
+ */
 export function quoteAgeDays(q: DseQuote, now = Date.now()): number {
+  if (q.live !== null) return 0;
   const t = Date.parse(`${q.tradeDate}T00:00:00Z`);
   if (!Number.isFinite(t)) return Infinity;
   return Math.floor((now - t) / 86_400_000);

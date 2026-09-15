@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { dseBoard, dseLastTradeDate, quoteAgeDays } from "@/lib/dse";
+import { dseBoard, dseLastTradeDate, quoteAgeDays, currentPrice } from "@/lib/dse";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +25,13 @@ export async function GET() {
         ok: true,
         lastTradeDate,
         ageDays: Number.isFinite(freshest) ? freshest : null,
+        // True when the exchange's own feed shows a session in progress, not
+        // when the clock says it ought to be.
+        live: quotes.some((q) => q.live !== null),
         quotes: quotes.map((q) => ({
-          symbol: q.symbol, name: q.name, close: q.close,
+          symbol: q.symbol, name: q.name,
+          price: currentPrice(q),
+          close: q.close, live: q.live,
           change: q.change, changePct: q.changePct,
           volume: q.volume, tradeDate: q.tradeDate,
         })),

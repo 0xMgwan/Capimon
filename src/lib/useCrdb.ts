@@ -32,7 +32,7 @@ export function useCrdb() {
       .then((j) => {
         if (!j?.ok) return;
         const next: CrdbSummary = {
-          price: j.market.price,
+          price: j.dse?.price ?? j.market.price,
           changePct: j.dse?.changePct ?? 0,
           tradeDate: j.dse?.tradeDate ?? null,
           availableShares: j.market.availableShares,

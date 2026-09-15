@@ -267,7 +267,22 @@ export function CrdbPanel() {
         </dl>
       )}
 
-      {tooPoor && <Warn>Your balance is {tzs.format(tzsBalance)} TZS.</Warn>}
+      {/* Saying the balance is short and leaving it there makes the customer
+          find the way to fix it. The fix is one tap away, so offer it. */}
+      {tooPoor && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <span className="text-[12px] text-[var(--color-down)]">
+            Your balance is {tzs.format(tzsBalance)} TZS. You need{" "}
+            {tzs.format(Math.max(0, quote!.spend - tzsBalance))} TZS more.
+          </span>
+          <Link
+            href="/portfolio#wallet"
+            className="rounded-full border hairline px-3 py-1 text-[12px] font-medium transition-colors hover:surface"
+          >
+            Add money
+          </Link>
+        </div>
+      )}
       {tooFew && <Warn>You hold {fmtQty(held)} CRDB.</Warn>}
       {tooMany && m && (
         <Warn>

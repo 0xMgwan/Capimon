@@ -11,6 +11,7 @@ import { AssetLogo } from "./AssetLogo";
 import { Sparkline } from "./Sparkline";
 import { usd } from "@/lib/format";
 import { useBodyLock } from "@/lib/useBodyLock";
+import { useCrdb, matchesCrdb } from "@/lib/useCrdb";
 
 /**
  * Company selector for the order ticket. A popover on desktop, a bottom sheet
@@ -34,6 +35,7 @@ export function AssetPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const crdb = useCrdb();
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // useSyncExternalStore is the sanctioned way to read "are we on the client"
@@ -81,11 +83,7 @@ export function AssetPicker({
    * alternative, faking a Chainlink market so it fits the row shape, would mean
    * inventing a feed address and round history to satisfy a type.
    */
-  const showCrdb = (() => {
-    const s = q.trim().toLowerCase();
-    return !s || "crdb".includes(s) || "crdb bank plc".includes(s)
-      || "dar es salaam".includes(s) || "tanzania".includes(s);
-  })();
+  const showCrdb = matchesCrdb(q);
 
   const list = (
     <div className="scroll-thin max-h-[52vh] overflow-y-auto overscroll-contain p-1.5">
@@ -110,7 +108,24 @@ export function AssetPicker({
               CRDB Bank Plc · Dar es Salaam
             </span>
           </span>
-          <span className="shrink-0 text-[11px] text-[var(--muted)]">Open →</span>
+          {/* The same three figures every other row carries, so the list reads
+              as one list rather than twelve prices and a link. */}
+          <span className="shrink-0 text-right">
+            {crdb ? (
+              <>
+                <span className="tnum block text-sm">
+                  {crdb.price.toLocaleString("en-TZ", { maximumFractionDigits: 0 })}
+                  <span className="ml-1 text-[10px] font-normal text-[var(--muted)]">TZS</span>
+                </span>
+                <span className={`tnum block text-[11px] ${
+                  crdb.changePct >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                  {crdb.changePct >= 0 ? "+" : ""}{crdb.changePct.toFixed(2)}%
+                </span>
+              </>
+            ) : (
+              <span className="text-[11px] text-[var(--muted)]">Open →</span>
+            )}
+          </span>
         </Link>
       )}
       {rows.map((m) => {

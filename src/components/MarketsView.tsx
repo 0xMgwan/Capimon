@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useCrdb, matchesCrdb } from "@/lib/useCrdb";
 import { useMarkets } from "@/lib/useMarkets";
 import { MarketTable } from "./MarketTable";
 import { Sparkline } from "./Sparkline";
@@ -13,6 +14,8 @@ import { compactUsd, ago } from "@/lib/format";
 
 export function MarketsView() {
   const { data, error } = useMarkets();
+  /** Shared with the table below, so one search filters both lists. */
+  const [query, setQuery] = useState("");
   const markets = useMemo(() => data?.markets ?? [], [data]);
 
   const { gainers, losers, sectors } = useMemo(() => {
@@ -68,6 +71,10 @@ export function MarketsView() {
         * fourteenth row would have meant a column of dollar prices with one
         * shilling figure in it.
         */}
+      {/* Hidden when the search is looking for something else. A listing that
+          ignores the filter above it reads as a bug, and CRDB was the one row
+          that never disappeared. */}
+      {matchesCrdb(query) && (
       <Reveal delay={0.04} className="mt-8">
         <Link
           href="/markets/crdb"
@@ -86,6 +93,7 @@ export function MarketsView() {
           <CrdbTag />
         </Link>
       </Reveal>
+      )}
 
       <Reveal delay={0.06} className="mt-10">
         <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
@@ -122,7 +130,7 @@ export function MarketsView() {
       </Reveal>
 
       <Reveal delay={0.1} className="mt-12">
-        <MarketTable />
+        <MarketTable onQuery={setQuery} />
       </Reveal>
 
       <p className="mt-6 text-xs leading-relaxed text-[var(--muted)]">
@@ -169,18 +177,7 @@ function MoverCard({ title, rows }: { title: string; rows: ReturnType<typeof use
 
 /** The live CRDB mark, so the card is not just a link to find out. */
 function CrdbTag() {
-  const [d, setD] = useState<{ price: number; changePct: number } | null>(null);
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/securities/crdb")
-      .then((r) => r.json())
-      .then((j) => {
-        if (alive && j.ok) setD({ price: j.market.price, changePct: j.dse?.changePct ?? 0 });
-      })
-      .catch(() => { /* the card still links through */ });
-    return () => { alive = false; };
-  }, []);
-
+  const d = useCrdb();
   if (!d) return <div className="h-8 w-20 shrink-0 animate-pulse rounded surface" />;
   const up = d.changePct >= 0;
   return (

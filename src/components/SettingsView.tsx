@@ -37,6 +37,7 @@ export function SettingsView() {
   const [username, setUsername] = useState<string | null>(null);
   const [name, setName] = useState<string | null>(null);
   const [phone, setPhone] = useState<string | null>(null);
+  const [nida, setNida] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -151,6 +152,21 @@ export function SettingsView() {
             className="w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
           />
         </Field>
+        <Field
+          label="National ID (NIDA)"
+          hint={u.kycStatus === "approved"
+            ? "Verified and locked to the document we checked."
+            : "Twenty digits. Must match the document you submit for verification."}
+        >
+          <input
+            value={val(nida, u.nidaNumber)}
+            onChange={(e) => setNida(e.target.value.replace(/[^\d]/g, "").slice(0, 20))}
+            disabled={u.kycStatus === "approved"}
+            inputMode="numeric"
+            placeholder="20 digits"
+            className="tnum w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)] disabled:opacity-50"
+          />
+        </Field>
         <Field label="Mobile money number" hint="Used for deposits and withdrawals.">
           <input
             value={val(phone, u.phone)}
@@ -165,8 +181,9 @@ export function SettingsView() {
             ...(username !== null ? { username } : {}),
             ...(name !== null ? { name } : {}),
             ...(phone !== null ? { phone } : {}),
+            ...(nida !== null ? { nidaNumber: nida } : {}),
           })}
-          disabled={busy || (username === null && name === null && phone === null)}
+          disabled={busy || (username === null && name === null && phone === null && nida === null)}
           className="mt-2 w-full rounded-full bg-[var(--fg)] py-3 text-sm font-medium text-[var(--bg)] transition-transform active:scale-95 disabled:opacity-40"
         >
           {busy ? "Saving…" : "Save changes"}
@@ -181,11 +198,26 @@ export function SettingsView() {
       {/* Fixed details. Shown because people need to check them, not edit them. */}
       <section className="mt-4 rounded-3xl border hairline p-5">
         <Row label="Email" value={u.email} />
-        <Row label="Verification" value={u.kycStatus === "approved" ? "Verified" : "Pending"} />
+        <Row
+          label="Verification"
+          value={
+            u.kycStatus === "approved" ? "Verified"
+            : u.kycStatus === "pending" ? "Under review"
+            : u.kycStatus === "rejected" ? "Not accepted"
+            : "Not started"
+          }
+        />
         <Row label="Country" value="Tanzania" />
+        {u.kycStatus !== "approved" && (
+          <Link
+            href="/verify"
+            className="mt-3 inline-flex rounded-full bg-[var(--fg)] px-4 py-2 text-[13px] font-medium text-[var(--bg)]"
+          >
+            {u.kycStatus === "rejected" ? "Submit again" : u.kycStatus === "pending" ? "View status" : "Verify your account"}
+          </Link>
+        )}
         <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
-          To change your email or identity details, contact support. They are tied to the checks
-          behind your account.
+          To change your email, contact support. It is tied to the checks behind your account.
         </p>
       </section>
 

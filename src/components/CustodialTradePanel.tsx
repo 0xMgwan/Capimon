@@ -323,9 +323,24 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
             will not trade at that price.
           </p>
         ) : insufficient ? (
-          <button disabled className="w-full rounded-full surface py-3.5 text-sm text-[var(--muted)]">
-            {side === "buy" ? `Not enough ${payTzs ? "TZS" : "USDC"}` : "More than you hold"}
-          </button>
+          /*
+           * A dead button naming the problem leaves the customer to find the
+           * remedy. On a buy the remedy is a deposit and it is one tap away, so
+           * the control becomes that instead of nothing. A sell has no such
+           * fix — they simply do not hold it — so it stays a statement.
+           */
+          side === "buy" ? (
+            <Link
+              href="/portfolio#wallet"
+              className="flex w-full items-center justify-center gap-2 rounded-full border border-[var(--color-down)]/45 bg-[var(--color-down)]/[0.06] py-3.5 text-sm font-medium text-[var(--color-down)] transition-colors hover:bg-[var(--color-down)]/[0.1]"
+            >
+              Not enough {payTzs ? "TZS" : "USDC"} · Add money
+            </Link>
+          ) : (
+            <button disabled className="w-full rounded-full surface py-3.5 text-sm text-[var(--muted)]">
+              More than you hold
+            </button>
+          )
         ) : (
           <button
             onClick={place}

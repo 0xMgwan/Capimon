@@ -195,7 +195,7 @@ export function WalletSection({ holdings }: {
       )}
 
       <div className="mt-4 grid gap-4">
-        <div className="rounded-3xl border hairline p-5 lg:flex lg:items-center lg:justify-between lg:gap-8">
+        <div id="wallet" className="scroll-mt-24 rounded-3xl border hairline p-5 lg:flex lg:items-center lg:justify-between lg:gap-8">
           <div className="lg:flex-1">
           <div className="eyebrow">Available to invest</div>
           {(() => {

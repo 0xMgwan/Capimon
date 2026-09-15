@@ -101,9 +101,16 @@ export function Nav() {
             {/* Renders nothing when signed out, so it never crowds a visitor. */}
             <NotificationBell />
             <WalletButton />
-            {/* Before connecting there is no tab bar, so the menu carries
-                navigation on phones. */}
-            {!isConnected && (
+            {/*
+              * Only while there is no tab bar.
+              *
+              * Once someone is signed in the bar along the bottom carries the
+              * same four destinations, so the menu was a second copy of the
+              * navigation sitting in the corner of every screen. The condition
+              * was `!isConnected`, which covered a connected wallet but not a
+              * shilling account — the customers who see the tab bar most.
+              */}
+            {!signedIn && (
               <button
                 onClick={() => setMenuAt(menu ? null : path)}
                 aria-label={menu ? "Close menu" : "Open menu"}

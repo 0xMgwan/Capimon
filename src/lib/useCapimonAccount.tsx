@@ -12,7 +12,7 @@ export type CustodialPosition = {
 };
 
 export type CustodialAccount = {
-  user: { id: string; email: string; username: string | null; name: string | null; phone: string | null; avatar: string | null; ntzsUserId: string | null; kycStatus: string };
+  user: { id: string; email: string; username: string | null; name: string | null; phone: string | null; avatar: string | null; ntzsUserId: string | null; kycStatus: string; nidaNumber: string | null };
   cash: number;
   /** Cost and return, derived from the prices every fill already recorded. */
   pnl?: { invested: number; unrealised: number; realised: number; unrealisedPct: number };

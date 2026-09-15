@@ -10,7 +10,18 @@ import { compact, compactUsd, ago } from "@/lib/format";
 
 type SortKey = "ticker" | "price" | "change" | "tvl" | "supply";
 
-export function MarketTable({ limit, showSearch = true }: { limit?: number; showSearch?: boolean }) {
+export function MarketTable({ limit, showSearch = true, onQuery }: {
+  limit?: number; showSearch?: boolean;
+  /**
+   * Reports what is being searched for.
+   *
+   * The DSE listing is not in this table — it has no Chainlink feed, no sector
+   * and no round history, so it sits in a card above instead. That card has to
+   * answer the same search, or it is a row that never disappears no matter what
+   * is typed.
+   */
+  onQuery?: (q: string) => void;
+}) {
   const { data, ticks, loading, error } = useMarkets();
   const { venues } = useVenues();
   const [q, setQ] = useState("");
@@ -52,7 +63,7 @@ export function MarketTable({ limit, showSearch = true }: { limit?: number; show
             </svg>
             <input
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={(e) => { setQ(e.target.value); onQuery?.(e.target.value); }}
               placeholder="Search ticker, company or sector"
               className="w-full rounded-full border hairline bg-transparent py-2.5 pl-10 pr-4 text-sm outline-none transition-colors placeholder:text-[var(--muted)] focus:border-[var(--color-accent)]"
             />

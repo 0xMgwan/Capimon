@@ -52,6 +52,29 @@ export async function PATCH(req: Request) {
     if (body.name !== undefined) patch.name = String(body.name ?? "").trim().slice(0, 80) || null;
     if (body.phone !== undefined) patch.phone = String(body.phone ?? "").replace(/[^\d]/g, "").slice(0, 15) || null;
 
+    /*
+     * The national ID is editable until it has been verified, and then it is not.
+     *
+     * Before approval it is something a customer typed and may have fumbled.
+     * After approval it is the number a reviewer matched against a document, and
+     * letting it change afterwards would leave an approved account whose
+     * identity no longer matches the evidence that approved it — which is the
+     * failure the whole check exists to prevent.
+     */
+    if (body.nidaNumber !== undefined) {
+      if (user.kycStatus === "approved") {
+        return bad(
+          "Your ID number is locked to the document we verified. Contact support to change it.",
+          "kyc_locked",
+        );
+      }
+      const nida = String(body.nidaNumber ?? "").replace(/[^\d]/g, "").slice(0, 20);
+      if (nida && nida.length !== 20) {
+        return bad("A NIDA number is 20 digits.");
+      }
+      patch.nida_number = nida || null;
+    }
+
     if (body.avatar !== undefined) {
       const avatar = body.avatar === null ? null : String(body.avatar);
       if (avatar !== null) {

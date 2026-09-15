@@ -46,6 +46,7 @@ export type SessionUser = {
   avatar: string | null;
   ntzsUserId: string | null;
   kycStatus: string;
+  nidaNumber: string | null;
 };
 
 export async function createSession(userId: string) {
@@ -87,7 +88,8 @@ export async function currentUser(): Promise<SessionUser | null> {
     await migrate();
     const rows = await db()<SessionUser[]>`
       select u.id, u.email, u.username, u.name, u.phone, u.country, u.avatar,
-             u.ntzs_user_id as "ntzsUserId", u.kyc_status as "kycStatus"
+             u.ntzs_user_id as "ntzsUserId", u.kyc_status as "kycStatus",
+             u.nida_number as "nidaNumber"
         from capx.sessions s
         join capx.users u on u.id = s.user_id
        where s.token = ${token} and s.expires_at > now()

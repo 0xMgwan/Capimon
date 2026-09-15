@@ -38,6 +38,16 @@ export function AssetPicker({
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const crdb = useCrdb();
+  /*
+   * Which way the popover opens.
+   *
+   * It used to take the trigger's width, which is fine above a full-width
+   * ticket and useless above one of three buttons in a row — the list was
+   * squeezed to a third of a card and the ticker overlapped the price. It has
+   * its own width now, which means it can run off the right of the screen, so
+   * it opens leftwards when the trigger sits in the right half.
+   */
+  const [alignRight, setAlignRight] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // useSyncExternalStore is the sanctioned way to read "are we on the client"
@@ -52,6 +62,8 @@ export function AssetPicker({
 
   useEffect(() => {
     if (!open) return;
+    const box = ref.current?.getBoundingClientRect();
+    if (box) setAlignRight(box.left + 340 > window.innerWidth - 16);
     const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
     document.addEventListener("mousedown", onDoc);
@@ -100,9 +112,9 @@ export function AssetPicker({
         >
           <Image src="/crdb.jpg" alt="" width={34} height={34} className="shrink-0 rounded-full object-cover" />
           <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-1.5">
-              <span className="text-sm font-medium">CRDB</span>
-              <span className="rounded-full bg-[var(--color-up)]/12 px-1.5 py-0.5 text-[10px] text-[var(--color-up)]">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate text-sm font-medium">CRDB</span>
+              <span className="shrink-0 rounded-full bg-[var(--color-up)]/12 px-1.5 py-0.5 text-[10px] text-[var(--color-up)]">
                 {t("Shillings")}
               </span>
             </span>
@@ -143,8 +155,8 @@ export function AssetPicker({
           >
             <AssetLogo logo={m.logo} ticker={m.ticker} color={m.color} size={34} />
             <span className="min-w-0 flex-1">
-              <span className="flex items-center gap-2">
-                <span className="text-sm font-medium">{m.ticker}</span>
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="truncate text-sm font-medium">{m.ticker}</span>
                 {v && (
                   <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
                     v.tradeable ? "bg-[var(--color-up)]/10 text-[var(--color-up)]" : "surface text-[var(--muted)]"
@@ -155,7 +167,9 @@ export function AssetPicker({
               </span>
               <span className="block truncate text-[11px] text-[var(--muted)]">{m.name}</span>
             </span>
-            <Sparkline data={m.history.slice(-20)} color={m.change >= 0 ? "var(--color-up)" : "var(--color-down)"} width={40} height={18} fill={false} />
+            <span className="shrink-0">
+              <Sparkline data={m.history.slice(-20)} color={m.change >= 0 ? "var(--color-up)" : "var(--color-down)"} width={40} height={18} fill={false} />
+            </span>
             <span className="shrink-0 text-right">
               <span className="tnum block text-sm">{usd(m.price)}</span>
               <span className={`tnum block text-[11px] ${m.change >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
@@ -224,7 +238,9 @@ export function AssetPicker({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.99 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute inset-x-0 top-full z-40 mt-2 hidden overflow-hidden rounded-2xl border hairline bg-[var(--bg)] shadow-2xl shadow-black/10 sm:block"
+              className={`absolute top-full z-40 mt-2 hidden w-[21rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border hairline bg-[var(--bg)] shadow-2xl shadow-black/10 sm:block ${
+                alignRight ? "right-0" : "left-0"
+              }`}
             >
               {search}
               {list}

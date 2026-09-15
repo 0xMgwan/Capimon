@@ -176,7 +176,7 @@ export function QuickBuy() {
                   {venue
                     ? venue.tradeable
                       ? `routing via ${venue.venues.join(" + ")}`
-                      : "no secondary market yet — mint only"
+                      : "no secondary market yet, mint only"
                     : "checking routes…"}
                 </div>
               </div>

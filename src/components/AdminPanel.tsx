@@ -138,7 +138,7 @@ export function AdminPanel() {
             : c.amount.toFixed(6)} to match what is held.`);
         }
         for (const sk of j.skipped ?? []) lines.push(sk);
-        setNote(lines.length ? lines.join(" ") : "Nothing to reconcile — balances match what is held.");
+        setNote(lines.length ? lines.join(" ") : "Nothing to reconcile. Balances match what is held.");
       }
     } catch {
       setNote("Reconciliation failed.");
@@ -217,7 +217,7 @@ export function AdminPanel() {
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <div className="text-sm font-medium">
             {!s || s.unavailable ? "Solvency unavailable"
-              : s.ok ? "Client assets are fully backed" : "SHORTFALL — trading is paused"}
+              : s.ok ? "Client assets are fully backed" : "SHORTFALL. Trading is paused"}
           </div>
           {s?.unavailable && <span className="text-xs text-[var(--muted)]">{s.unavailable}</span>}
         </div>
@@ -233,7 +233,7 @@ export function AdminPanel() {
                 </span>
                 {s.usdc.treasury < s.totals.owedUsd && (
                   <span className="rounded-full bg-[#b45309]/15 px-2.5 py-1 text-[#b45309]">
-                    backing is in the float — move it to the treasury before trading
+                    backing is in the float, move it to the treasury before trading
                   </span>
                 )}
               </div>
@@ -321,7 +321,7 @@ export function AdminPanel() {
             <span className={matched ? "text-[var(--muted)]" : "text-[var(--color-down)] font-medium"}>
               {matched
                 ? `Deposits reconcile: ${r.deposits} settled, ${usd(credited)} credited and ${usd(ledger)} in the ledger.`
-                : `Deposits do NOT reconcile — ${usd(credited)} credited against ${usd(ledger)} in the ledger (${usd(drift)} adrift).`}
+                : `Deposits do NOT reconcile: ${usd(credited)} credited against ${usd(ledger)} in the ledger (${usd(drift)} adrift).`}
             </span>
           </div>
         );
@@ -344,7 +344,7 @@ export function AdminPanel() {
               )}
             </>
           ) : (
-            <p className="mt-2 text-xs leading-relaxed text-[#b45309]">Not readable — {data.ntzs.reason}</p>
+            <p className="mt-2 text-xs leading-relaxed text-[#b45309]">Not readable. {data.ntzs.reason}</p>
           )}
           <div className="mt-3 border-t hairline pt-3 text-[11px] text-[var(--muted)]">
             Collection route: <span className="text-[var(--fg)]">{data.collectionRoute ?? "unknown"}</span>

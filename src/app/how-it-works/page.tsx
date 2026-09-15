@@ -5,7 +5,7 @@ import { B20_REGISTRY, ASSETS } from "@/lib/assets";
 
 export const metadata: Metadata = {
   title: "How it works",
-  description: "The B20 standard, Chainlink total-return feeds, multipliers and onchain policy — what CAPX is actually reading.",
+  description: "The B20 standard, Chainlink total-return feeds, multipliers and onchain policy. What CAPX is actually reading.",
 };
 
 const STEPS = [
@@ -24,19 +24,19 @@ const STEPS = [
   {
     n: "03",
     t: "Corporate actions move the multiplier",
-    b: "Splits and dividends do not rewrite balances. They adjust a WAD-precision multiplier, so one token is not permanently one share. CAPX applies the current multiplier everywhere a share count appears — portfolio quantities use scaledBalanceOf, and supply figures are multiplier-adjusted share-equivalents.",
+    b: "Splits and dividends do not rewrite balances. They adjust a WAD-precision multiplier, so one token is not permanently one share. CAPX applies the current multiplier everywhere a share count appears: portfolio quantities use scaledBalanceOf, and supply figures are multiplier-adjusted share-equivalents.",
     refs: [],
   },
   {
     n: "04",
     t: "Policies gate transfers, not holding",
-    b: "Onchain policy registries enforce allowlists and blocklists, and a transfer to a sanctioned address reverts. Holding and secondary transfer are otherwise permissionless — KYC applies at mint and redeem with the issuer, not between wallets.",
+    b: "Onchain policy registries enforce allowlists and blocklists, and a transfer to a sanctioned address reverts. Holding and secondary transfer are otherwise permissionless. KYC applies at mint and redeem with the issuer, not between wallets.",
     refs: [{ label: "Onchain registry", href: `https://basescan.org/address/${B20_REGISTRY}` }],
   },
   {
     n: "05",
     t: "CAPX reads, you sign",
-    b: "Prices, supply and balances are read straight from Base. Trades are routed by aggregating every venue on the chain — Aerodrome concentrated liquidity, Uniswap v3 and v4, PancakeSwap — because equity liquidity moves between them and no single pool tells the truth. Every fill is checked against the Chainlink mark before it is offered, and CAPX refuses to route anything more than 15% away from it.",
+    b: "Prices, supply and balances are read straight from Base. Trades are routed by aggregating every venue on the chain: Aerodrome concentrated liquidity, Uniswap v3 and v4, PancakeSwap, because equity liquidity moves between them and no single pool tells the truth. Every fill is checked against the Chainlink mark before it is offered, and CAPX refuses to route anything more than 15% away from it.",
     refs: [
       { label: "Live market API", href: "/api/markets" },
       { label: "Routable venues", href: "/api/venues" },
@@ -51,7 +51,7 @@ const FAQ = [
   },
   {
     q: "Why does an asset show zero onchain supply?",
-    a: "The Chainlink feed is live for all thirteen assets, but tokens are only minted as demand arrives. A supply of zero means nothing has been minted on Base yet — the mark is still real, there is just nothing to trade against.",
+    a: "The Chainlink feed is live for all thirteen assets, but tokens are only minted as demand arrives. A supply of zero means nothing has been minted on Base yet. The mark is still real, there is just nothing to trade against.",
   },
   {
     q: "Why can't I trade every asset?",
@@ -59,7 +59,7 @@ const FAQ = [
   },
   {
     q: "Who can use this?",
-    a: "Tokenized equities are not available to US persons. Connect your own wallet and CAPX holds nothing. Fund an account with Tanzanian shillings and CAPX holds those assets for you, recording your entitlement in its own ledger — that is custody, and it is the trade-off for not needing a wallet. Nothing here is investment advice.",
+    a: "Tokenized equities are not available to US persons. Connect your own wallet and CAPX holds nothing. Fund an account with Tanzanian shillings and CAPX holds those assets for you, recording your entitlement in its own ledger. That is custody, and it is the trade-off for not needing a wallet. Nothing here is investment advice.",
   },
 ];
 
@@ -126,7 +126,7 @@ export default function HowItWorks() {
                 ))}
               </div>
               <p className="mt-4 border-t hairline pt-4 text-[11px] leading-relaxed text-[var(--muted)]">
-                Every B20 address begins 0xb2 — they are native precompiles on Base, not deployed bytecode.
+                Every B20 address begins 0xb2. They are native precompiles on Base, not deployed bytecode.
               </p>
             </div>
           </div>

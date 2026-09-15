@@ -75,7 +75,7 @@ export function Footer() {
             holder&rsquo;s behalf. It is not a
             broker-dealer, exchange, or investment adviser, and nothing here is investment advice.
             Tokenized equities are not available to US persons. One B20 token is not permanently one
-            share — redemption applies the current onchain multiplier. Mint and redeem are performed
+            share; redemption applies the current onchain multiplier. Mint and redeem are performed
             by the issuer under KYC; secondary transfers are permissionless subject to onchain policy.
           </p>
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">

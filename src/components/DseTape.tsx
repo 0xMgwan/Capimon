@@ -75,7 +75,7 @@ export function DseTape() {
                   <span
                     key={`${q.symbol}-${i}`}
                     className="flex items-center gap-2 whitespace-nowrap rounded px-1 text-xs"
-                    title={`${q.name} — close ${tzs.format(q.close)} TZS on ${q.tradeDate}`}
+                    title={`${q.name}: close ${tzs.format(q.close)} TZS on ${q.tradeDate}`}
                   >
                     <span className="font-semibold tracking-tight">{q.symbol}</span>
                     <span className="tnum">{tzs.format(q.close)}</span>

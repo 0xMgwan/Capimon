@@ -81,7 +81,7 @@ export function JoinFlow() {
           </span>
         </h1>
         <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-[var(--muted)]">
-          Send shillings from your phone and buy tokenized equities — no wallet, no seed phrase,
+          Send shillings from your phone and buy tokenized equities. No wallet, no seed phrase,
           nothing to convert. CAPX holds the assets for you and records what you are owed.
         </p>
       </Reveal>
@@ -103,7 +103,7 @@ export function JoinFlow() {
           {/* 2 — deposit */}
           <Step n={2} active={step === 2} done={(account?.cash ?? 0) > 0 || (account?.equity ?? 0) > 0} title="Fund with mobile money">
             <p className="text-sm leading-relaxed text-[var(--muted)]">
-              You&rsquo;ll get a prompt on your phone. Approve it and your balance appears here —
+              You&rsquo;ll get a prompt on your phone. Approve it and your balance appears here,
               CAPX handles the conversion.
             </p>
             <div className="mt-4 grid gap-2.5">
@@ -172,7 +172,7 @@ export function JoinFlow() {
             <div className="rounded-3xl border hairline p-6">
               <div className="eyebrow">How a deposit works</div>
               <ol className="mt-4 space-y-4 text-sm leading-relaxed text-[var(--muted)]">
-                <li><span className="text-[var(--fg)]">You send shillings.</span> Approve the prompt on your phone — no card, no bank transfer.</li>
+                <li><span className="text-[var(--fg)]">You send shillings.</span> Approve the prompt on your phone. No card, no bank transfer.</li>
                 <li><span className="text-[var(--fg)]">They convert automatically.</span> Your shillings become USDC at the live rate.</li>
                 <li><span className="text-[var(--fg)]">Your balance appears.</span> Usually within a minute, ready to invest.</li>
                 <li><span className="text-[var(--fg)]">You buy shares.</span> CAPX places the trade onchain and records your holding.</li>

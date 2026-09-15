@@ -182,7 +182,7 @@ export function WalletSection() {
         <div className="mt-4 flex items-center gap-3 rounded-2xl border border-[#b45309]/40 bg-[#b45309]/[0.06] px-4 py-3">
           <span className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-[#b45309] border-t-transparent" />
           <p className="text-xs leading-relaxed text-[var(--muted)]">
-            A deposit is on its way. Approve the prompt on your phone if you have not already —
+            A deposit is on its way. Approve the prompt on your phone if you have not already,
             your balance updates here automatically once it clears, and you can safely leave this page.
           </p>
         </div>
@@ -212,10 +212,10 @@ export function WalletSection() {
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--muted)]">
                   {parts.length > 1 ? (
-                    <span>{parts.join(" + ")} — each spent in its own currency</span>
+                    <span>{parts.join(" + ")}, each spent in its own currency</span>
                   ) : account.cash > 0 && showTzs ? (
                     <span className="inline-flex items-center gap-1">
-                      <UsdcIcon className="h-3 w-3" />{usd(account.cash)} held — shown in shillings at today&apos;s rate
+                      <UsdcIcon className="h-3 w-3" />{usd(account.cash)} held, shown in shillings at today&apos;s rate
                     </span>
                   ) : null}
                   {account.equity > 0 && <span>· {usd(account.equity)} in shares</span>}
@@ -365,7 +365,7 @@ export function WalletSection() {
                     Minimum {minTzs.toLocaleString()} TZS
                     {account.depositRoute === "ramp" && method === "mobile_money" && " on this rail"}.
                     {method === "bank_transfer" &&
-                      " Send from the account you enter above — that is how the credit is matched to you. Bank transfers settle more slowly than mobile money."}
+                      " Send from the account you enter above. That is how the credit is matched to you. Bank transfers settle more slowly than mobile money."}
                   </p>
                 </div>
               </motion.div>

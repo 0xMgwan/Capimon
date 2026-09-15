@@ -126,8 +126,8 @@ export function MarketsView() {
       </Reveal>
 
       <p className="mt-6 text-xs leading-relaxed text-[var(--muted)]">
-        Onchain supply shows share-equivalents — raw token supply multiplied by the current B20
-        multiplier. A supply of “—” means nothing is minted yet; the Chainlink mark is
+        Onchain supply shows share-equivalents: raw token supply multiplied by the current B20
+        multiplier. A blank supply means nothing is minted yet; the Chainlink mark is
         still live. Tokenized equities are not available to US persons.
       </p>
     </div>

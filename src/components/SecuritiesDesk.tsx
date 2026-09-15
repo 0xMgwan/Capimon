@@ -151,7 +151,7 @@ export function SecuritiesDesk() {
               <p className="mt-3 text-[11px] text-[var(--muted)]">
                 {b.fresh
                   ? `${b.custodySource === "chain" ? "On-chain attestation" : "Filed attestation (not yet published on-chain)"} in force until ${dt(b.expiresAt)}. Verified ${dt(b.lastVerified)}.`
-                  : "No attestation in force — issuance is blocked until one is approved."}
+                  : "No attestation in force. Issuance is blocked until one is approved."}
               </p>
 
               {/*
@@ -170,8 +170,8 @@ export function SecuritiesDesk() {
               {b.drift !== 0 && (
                 <p className="mt-2 rounded-xl border border-[var(--color-down)]/40 bg-[var(--color-down)]/[0.06] px-3 py-2 text-[11px] text-[var(--color-down)]">
                   {b.drift > 0
-                    ? `${b.drift.toLocaleString()} more on-chain than the issuance log records — a mint happened that was never written down.`
-                    : `${Math.abs(b.drift).toLocaleString()} recorded in the issuance log but not on-chain — a mint was logged and never executed.`}
+                    ? `${b.drift.toLocaleString()} more on-chain than the issuance log records. A mint happened that was never written down.`
+                    : `${Math.abs(b.drift).toLocaleString()} recorded in the issuance log but not on-chain. A mint was logged and never executed.`}
                   {" "}Issuance is measured against the larger of the two until this is resolved.
                   {/*
                     * Only the direction the chain leads can be repaired here.
@@ -317,7 +317,7 @@ function RegisterSecurity({ onAct, busy }: { onAct: (b: Record<string, unknown>)
         * registry, and issuance stays blocked with nothing to point at.
         */}
       <Field label="Symbol" v={f.symbol} on={(v) => setF({ ...f, symbol: v.toUpperCase() })} ph="CRDB"
-        hint="The security's key in the custody registry and oracle — CRDB, not CRDBt." />
+        hint="The security's key in the custody registry and oracle: CRDB, not CRDBt." />
       <Field label="Name" v={f.name} on={(v) => setF({ ...f, name: v })} ph="CRDB Bank Plc" />
       <Field label="Token address" v={f.tokenAddress} on={(v) => setF({ ...f, tokenAddress: v })} ph="0xb200…60F"
         hint="Checked against the token on Base before it is saved." />
@@ -349,7 +349,7 @@ function FileAttestation({ onAct, busy }: { onAct: (b: Record<string, unknown>) 
     <div className="rounded-3xl border hairline p-5">
       <div className="eyebrow">File a custody attestation</div>
       <Field label="Security" v={f.security} on={(v) => setF({ ...f, security: v.toUpperCase() })} ph="CRDB"
-        hint="The registered security's symbol — CRDB, not CRDBt." />
+        hint="The registered security's symbol: CRDB, not CRDBt." />
       <Field label="Custodian" v={f.custodian} on={(v) => setF({ ...f, custodian: v })}
         ph="Who is confirming the holding"
         hint="Name the party actually standing behind this. If none has confirmed yet, say so here." />

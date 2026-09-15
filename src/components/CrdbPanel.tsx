@@ -271,7 +271,7 @@ export function CrdbPanel() {
       {tooFew && <Warn>You hold {fmtQty(held)} CRDB.</Warn>}
       {tooMany && m && (
         <Warn>
-          Only {fmtQty(m.availableShares)} CRDB available — the rest of the custody position is
+          Only {fmtQty(m.availableShares)} CRDB available. The rest of the custody position is
           already held by other customers.
         </Warn>
       )}

@@ -118,7 +118,7 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
             </div>
 
             <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
-              A wallet keeps you in <span className="text-[var(--fg)]">self-custody</span> — CAPX
+              A wallet keeps you in <span className="text-[var(--fg)]">self-custody</span>. CAPX
               holds nothing and you sign every transaction.
             </p>
           </motion.div>

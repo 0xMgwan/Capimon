@@ -112,7 +112,7 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
               </dl>
               <p className="mt-5 text-[11px] leading-relaxed text-[var(--muted)]">
                 One B20 token is not permanently one share. Redemption applies the current multiplier,
-                and the Chainlink feed publishes a total-return value — market price × multiplier —
+                and the Chainlink feed publishes a total-return value (market price × multiplier)
                 freezing through corporate actions.
               </p>
             </div>

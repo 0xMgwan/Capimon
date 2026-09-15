@@ -110,7 +110,7 @@ export function ProofOfReserves() {
                   <Row k="Last verified" v={dt(b.lastVerified)} />
                   <Row
                     k="Attestation expires"
-                    v={b.fresh ? dt(b.expiresAt) : "Expired — issuance is halted"}
+                    v={b.fresh ? dt(b.expiresAt) : "Expired. Issuance is halted"}
                     warn={!b.fresh}
                   />
                   <Row

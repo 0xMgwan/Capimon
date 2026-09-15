@@ -288,7 +288,7 @@ export function TradePanel({ asset, market }: { asset: AssetMeta; market?: Marke
             <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">
               The best route available would fill at{" "}
               <span className="tnum">{quote.executionPrice ? usd(quote.executionPrice) : "—"}</span> against an
-              oracle mark of <span className="tnum">{usd(quote.oraclePrice)}</span> — {Math.abs(impact).toFixed(1)}%
+              oracle mark of <span className="tnum">{usd(quote.oraclePrice)}</span>, {Math.abs(impact).toFixed(1)}%
               away. The venues holding this asset are too thin at this size to fill anywhere near the mark.
             </p>
             {severity === "unusable" ? (
@@ -331,7 +331,7 @@ export function TradePanel({ asset, market }: { asset: AssetMeta; market?: Marke
             {quote.supply !== undefined && quote.supply > 0 && (
               <p className="tnum mt-3 text-[11px] text-[var(--muted)]">
                 {quote.supply.toLocaleString(undefined, { maximumFractionDigits: 2 })} share-equivalents exist
-                onchain — just not routable at this size.
+                onchain, just not routable at this size.
               </p>
             )}
             <a
@@ -388,19 +388,19 @@ export function TradePanel({ asset, market }: { asset: AssetMeta; market?: Marke
       {confirmed && hash && (
         <a href={`https://basescan.org/tx/${hash}`} target="_blank" rel="noreferrer"
           className="mt-3 block text-xs text-[var(--color-up)]">
-          Settled onchain — view transaction ↗
+          Settled onchain. View transaction ↗
         </a>
       )}
 
       {quote?.fee && (
         <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
           The {quote.fee.percent.toFixed(2)}% platform fee is already reflected in the amount above
-          and is taken by the router during the swap — there is no separate approval or transaction.
+          and is taken by the router during the swap, so there is no separate approval or transaction.
         </p>
       )}
 
       <p className="mt-4 text-[11px] leading-relaxed text-[var(--muted)]">
-        This is your own wallet — the transaction is built in your browser and signed by you, and
+        This is your own wallet. The transaction is built in your browser and signed by you, and
         CAPX holds nothing.
         Not available to US persons. Nothing here is investment advice.
       </p>

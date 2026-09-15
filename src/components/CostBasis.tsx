@@ -28,7 +28,7 @@ export function CostBasis({ address }: { address: string }) {
   if (error) {
     return (
       <div className="mt-10 rounded-2xl border border-dashed hairline p-5 text-sm text-[var(--muted)]">
-        Cost basis unavailable — {error}. Positions above are unaffected.
+        Cost basis unavailable. {error}. Positions above are unaffected.
       </div>
     );
   }
@@ -60,7 +60,7 @@ export function CostBasis({ address }: { address: string }) {
         <div className="text-sm font-medium text-[#b45309]">Could not rebuild your cost basis</div>
         <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">
           {data.missedRanges} of {data.totalRanges} block ranges could not be read, so no history is
-          shown rather than a wrong one. This is RPC rate limiting — try again shortly, or point the
+          shown rather than a wrong one. This is RPC rate limiting. Try again shortly, or point the
           app at a dedicated RPC. Your positions above are read directly and are unaffected.
         </p>
       </div>
@@ -87,7 +87,7 @@ export function CostBasis({ address }: { address: string }) {
 
       {!data.complete && (
         <div className="mt-5 rounded-2xl border border-[#b45309]/40 bg-[#b45309]/[0.06] px-4 py-3 text-xs leading-relaxed text-[#b45309]">
-          Incomplete history — {data.missedRanges} of {data.totalRanges} block ranges could not be
+          Incomplete history. {data.missedRanges} of {data.totalRanges} block ranges could not be
           read, so these figures understate your activity. This is usually RPC rate limiting;
           refresh in a moment, or point the app at a dedicated RPC.
         </div>
@@ -179,7 +179,7 @@ export function CostBasis({ address }: { address: string }) {
       <p className="mt-4 text-[11px] leading-relaxed text-[var(--muted)]">
         Average-cost accounting. Swaps are priced at the USDC actually moved in the same transaction
         (&ldquo;actual fill&rdquo;); plain transfers in or out have no counter-leg, so they are marked
-        at the oracle round nearest the block. Figures are a working aid, not tax advice —
+        at the oracle round nearest the block. Figures are a working aid, not tax advice;
         {data.complete ? " history covers every B20 transfer to date." : ""}
       </p>
     </Reveal>

@@ -184,7 +184,7 @@ export function SettingsView() {
         <Row label="Verification" value={u.kycStatus === "approved" ? "Verified" : "Pending"} />
         <Row label="Country" value="Tanzania" />
         <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
-          To change your email or identity details, contact support — they are tied to the checks
+          To change your email or identity details, contact support. They are tied to the checks
           behind your account.
         </p>
       </section>

@@ -71,7 +71,7 @@ export function ProductsSection() {
           </span>
         </h2>
         <p className="mt-6 max-w-lg text-lg text-[var(--muted)]">
-          Three onchain surfaces bridging public markets and DeFi — all reading the same live state.
+          Three onchain surfaces bridging public markets and DeFi. All of them read the same live state.
         </p>
       </Reveal>
 
@@ -90,7 +90,7 @@ export function ProductsSection() {
                   CAPX Equities
                 </h3>
                 <p className="mt-3 text-[17px] leading-relaxed text-[var(--muted)]">
-                  Public companies as B20 tokens — freely transferable, composable in DeFi,
+                  Public companies as B20 tokens. Freely transferable, composable in DeFi,
                   and marked continuously by Chainlink total-return feeds.
                 </p>
                 <span className="mt-4 inline-block rounded-full surface px-3 py-1 text-[11px] text-[var(--muted)]">
@@ -134,7 +134,7 @@ export function ProductsSection() {
             <SideCard
               title="CAPX Vault"
               tag="Self-custody"
-              body="Your positions live in your own wallet. CAPX reads the chain directly — every balance on the portfolio page is an onchain read, not our ledger."
+              body="Your positions live in your own wallet. CAPX reads the chain directly, so every balance on the portfolio page is an onchain read rather than our ledger."
               stat={<Counter value={equities} format={(n) => `${Math.round(n)} assets`} />}
               statLabel="Tracked live"
               href="/portfolio"
@@ -293,7 +293,7 @@ const BELIEFS = [
   },
   {
     title: "Composability",
-    body: "A tokenized share is not an end state. It is collateral, it is a leg in a strategy, it is programmable — the same primitives DeFi already runs on.",
+    body: "A tokenized share is not an end state. It is collateral, it is a leg in a strategy, it is programmable. The same primitives DeFi already runs on.",
   },
 ];
 
@@ -328,7 +328,7 @@ const PILLARS = [
   { t: "Verifiable marks", b: "Chainlink total-return feeds publish price × multiplier onchain. CAPX reads updatedAt and flags anything stale rather than showing a confident lie." },
   { t: "Policy-aware transfers", b: "Onchain policy registries gate transfers against sanctions lists. Holding and secondary transfer are permissionless; mint and redeem run under issuer KYC." },
   { t: "Corporate actions, onchain", b: "Splits and dividends move the WAD multiplier instead of rewriting balances. CAPX applies the current multiplier everywhere a share count is shown." },
-  { t: "Custody is a choice", b: "Connect your own wallet and CAPX never holds your assets or your keys — positions are read from the chain and you sign every transaction. Accounts funded with shillings are custodial: CAPX holds those assets for you and records what you are owed." },
+  { t: "Custody is a choice", b: "Connect your own wallet and CAPX never holds your assets or your keys. Positions are read from the chain and you sign every transaction. Accounts funded with shillings are custodial: CAPX holds those assets for you and records what you are owed." },
 ];
 
 export function PillarsSection() {
@@ -395,7 +395,7 @@ export function ClosingCTA() {
             </span>
           </h2>
           <p className="mx-auto mt-7 max-w-xl text-lg text-[var(--muted)]">
-            Connect a wallet and read your positions straight off the chain — or open an account and fund it with shillings.
+            Connect a wallet and read your positions straight off the chain, or open an account and fund it with shillings.
           </p>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
             <Link href="/markets" className="rounded-full bg-[var(--fg)] px-7 py-4 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95">

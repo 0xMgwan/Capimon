@@ -365,7 +365,7 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
       </AnimatePresence>
 
       <p className="mt-4 text-[11px] leading-relaxed text-[var(--muted)]">
-        CAPX executes this trade from its treasury and credits your account — there is no wallet
+        CAPX executes this trade from its treasury and credits your account. There is no wallet
         and nothing to sign, and CAPX holds the shares on your behalf.{" "}
         <Link href="/join" className="underline underline-offset-2 hover:text-[var(--fg)]">What that means</Link>.
         Not available to US persons. Nothing here is investment advice.

@@ -6,6 +6,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { createPortal } from "react-dom";
 import { useAccount } from "wagmi";
+import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { Logo, Wordmark } from "./Logo";
 import { WalletButton } from "./WalletButton";
 import { NotificationBell } from "./NotificationBell";
@@ -16,13 +17,21 @@ const LINKS = [
   { href: "/markets", label: "Markets" },
   { href: "/portfolio", label: "Portfolio" },
   { href: "/how-it-works", label: "How it works" },
-  { href: "/join", label: "Open account" },
+  /*
+   * Only worth showing to someone who has not got one.
+   * Left in place for a signed-in customer it invites them to open a second
+   * account, which is the one thing they cannot usefully do.
+   */
+  { href: "/join", label: "Open account", hideWhenSignedIn: true },
 ];
 
 export function Nav() {
   const [scrolled, setScrolled] = useState(false);
   const path = usePathname();
   const { isConnected } = useAccount();
+  const { account } = useCapimonAccount();
+  const signedIn = !!account || isConnected;
+  const links = LINKS.filter((l) => !(l.hideWhenSignedIn && signedIn));
   // The menu belongs to the route it was opened on, so navigating closes it.
   const [menuAt, setMenuAt] = useState<string | null>(null);
   const menu = menuAt === path;
@@ -57,7 +66,7 @@ export function Nav() {
           </Link>
 
           <div className="hidden items-center gap-1 md:flex">
-            {LINKS.map((l) => {
+            {links.map((l) => {
               const active = path === l.href || path.startsWith(l.href + "/");
               return (
                 <Link
@@ -138,7 +147,7 @@ export function Nav() {
                     </button>
                   </div>
                   <div className="mt-5 grid gap-1">
-                    {LINKS.map((l) => (
+                    {links.map((l) => (
                       <Link
                         key={l.href}
                         href={l.href}

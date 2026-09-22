@@ -48,7 +48,6 @@ export function CustodialPortfolio() {
         <div className="flex items-center justify-between gap-3 text-[12px] text-[var(--muted)]">
           <span className="flex min-w-0 items-center gap-2">
             <span className="truncate">{account.user.username ? `@${account.user.username}` : account.user.email}</span>
-            <span className="shrink-0 rounded-full surface px-2 py-0.5 text-[10.5px]">{t("held by CAPX")}</span>
           </span>
           {canShowTzs && (
             <span className="inline-flex shrink-0 overflow-hidden rounded-full border hairline text-[11px]">

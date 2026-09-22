@@ -280,7 +280,7 @@ export function ProductsSection() {
             <SideCard
               title={t("CAPX Feeds")}
               tag="Oracle"
-              body="Total-return Chainlink feeds, running 24/5 and freezing through corporate actions. Every chart on this site is drawn from onchain rounds."
+              body={t("Live prices from Chainlink, updated around the clock. Every price you see comes directly from the blockchain.")}
               stat={<span className="tnum">8 dp</span>}
               statLabel="Feed precision"
               href="/how-it-works"

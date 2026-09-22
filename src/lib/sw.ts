@@ -261,6 +261,7 @@ export const SW: Record<string, string> = {
   "By sector": "Kwa sekta",
   "CAPX Equities": "CAPX Equities",
   "CAPX Feeds": "CAPX Feeds",
+  "Live prices from Chainlink, updated around the clock. Every price you see comes directly from the blockchain.": "Bei za moja kwa moja kutoka Chainlink, zinazosasishwa saa zote. Kila bei unayoiona inatoka moja kwa moja kwenye mnyororo.",
   // The brand tagline, kept as it is said rather than translated literally.
   "Capital In Motion": "Capital In Motion",
   "Your assets, your wallet. We give you access to global capital markets.": "Mali zako, mkoba wako. Tunakupa fursa ya kuingia kwenye masoko ya mitaji duniani.",

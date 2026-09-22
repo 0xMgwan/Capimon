@@ -298,3 +298,27 @@ export async function reconcileIssuance(
 
   return { recorded, issued: chain.quantity, added: drift };
 }
+
+
+/**
+ * Writes down a burn the chain has already carried out.
+ *
+ * The mirror of reconcileIssuance: the quantity is the gap between what the
+ * log records and what exists on-chain, never a number from a form, so the
+ * log can only ever be brought into line with the chain.
+ */
+export async function recordBurnFromChain(
+  security: string,
+  input: { txHash?: string | null; actor?: string | null } = {},
+): Promise<{ recorded: number; issued: number; burned: number }> {
+  const chain = await onchainSupply(security);
+  if (!chain) throw new Error(`${security} has no token address registered.`);
+  const recorded = await recordedQuantity(security);
+  const burned = recorded - chain.quantity;
+  if (burned <= 0) return { recorded, issued: chain.quantity, burned: 0 };
+  await migrate();
+  await db()`
+    insert into capx.issuance_events (security, kind, quantity, tx_hash, actor)
+    values (${security}, 'burn', ${burned}, ${input.txHash ?? null}, ${input.actor ?? "burn"})`;
+  return { recorded, issued: chain.quantity, burned };
+}

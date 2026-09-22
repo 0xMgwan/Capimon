@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Reveal, RevealWords } from "@/components/Reveal";
-import { B20_REGISTRY, ASSETS } from "@/lib/assets";
+import { ASSETS } from "@/lib/assets";
 import { useT } from "@/lib/i18n";
 
 /*
@@ -10,58 +10,71 @@ import { useT } from "@/lib/i18n";
  * content moved here because reading the language needs a hook, and a route
  * that exports `metadata` cannot be a client component.
  */
+/*
+ * Written for the person using it, not the person who built it.
+ *
+ * The earlier version explained precompiles, WAD multipliers and venue
+ * aggregation — all true, and none of it what a first-time investor needs to
+ * decide whether to trust this with their money. The machinery is still one
+ * tap away in "Check it yourself"; the steps say what happens to *you*.
+ */
 const STEPS = [
   {
     n: "01",
-    t: "The issuer mints a B20 token",
-    b: "A regulated issuer holds the underlying share and mints a matching B20 token on Base. B20 extends ERC-20 for real-world assets and is asset-agnostic. These tokens are native precompiles rather than separately deployed contracts, audited by Base and Spearbit with ongoing Cantina and HackerOne bounty coverage.",
-    refs: [{ label: "B20 specification", href: "https://docs.base.org/base-chain/specs/upgrades/beryl/b20/specification" }],
+    t: "Open an account",
+    b: "Sign up with your phone number, then verify who you are with a photo of your ID and a quick selfie. It takes a few minutes, and you only do it once.",
+    refs: [],
   },
   {
     n: "02",
-    t: "Chainlink publishes a total-return mark",
-    b: "Each asset has a Chainlink feed on Base reporting price × multiplier, WAD-scaled, running 24/5 and freezing through corporate actions. CAPX reads updatedAt on every round and flags a feed that has missed a session instead of showing you a confident number that isn't.",
-    refs: [{ label: "Chainlink on Base", href: "https://data.chain.link/base/base" }],
+    t: "Add shillings",
+    b: "Top up from M-Pesa, Airtel Money, Tigo Pesa or any Tanzanian bank. Your balance is held in shillings, so there is no currency to convert and nothing to lose on an exchange rate.",
+    refs: [],
   },
   {
     n: "03",
-    t: "Corporate actions move the multiplier",
-    b: "Splits and dividends do not rewrite balances. They adjust a WAD-precision multiplier, so one token is not permanently one share. CAPX applies the current multiplier everywhere a share count appears: portfolio quantities use scaledBalanceOf, and supply figures are multiplier-adjusted share-equivalents.",
+    t: "Buy a share",
+    b: "Pick a company — CRDB, NMB or others on the Dar es Salaam Stock Exchange, or well-known US names — and choose how much to spend. You do not need to buy a whole share: TSh 2,000 buys you a piece. The purchase is done the same day.",
     refs: [],
   },
   {
     n: "04",
-    t: "Policies gate transfers, not holding",
-    b: "Onchain policy registries enforce allowlists and blocklists, and a transfer to a sanctioned address reverts. Holding and secondary transfer are otherwise permissionless. KYC applies at mint and redeem with the issuer, not between wallets.",
-    refs: [{ label: "Onchain registry", href: `https://basescan.org/address/${B20_REGISTRY}` }],
+    t: "Your shares are held safely for you",
+    b: "The real shares are held by a licensed DSE broker. Each one is matched by a digital record on a public ledger, one for one, so what CAPX holds can be checked by anyone at any time, not just taken on trust.",
+    refs: [{ label: "See what is held", href: "/proof" }],
   },
   {
     n: "05",
-    t: "CAPX reads, you sign",
-    b: "Prices, supply and balances are read straight from Base. Trades are routed by aggregating every venue on the chain: Aerodrome concentrated liquidity, Uniswap v3 and v4, PancakeSwap, because equity liquidity moves between them and no single pool tells the truth. Every fill is checked against the Chainlink mark before it is offered, and CAPX refuses to route anything more than 15% away from it.",
-    refs: [
-      { label: "Live market API", href: "/api/markets" },
-      { label: "Routable venues", href: "/api/venues" },
-    ],
+    t: "Sell and withdraw whenever you like",
+    b: "Sell some or all of your shares and the shillings are back in your balance straight away. Withdraw to your mobile money or bank account in a couple of taps.",
+    refs: [],
   },
 ];
 
 const FAQ = [
   {
-    q: "Is one token one share?",
-    a: "No. Redemption applies the current onchain multiplier, which absorbs splits and dividends. CAPX shows the multiplier on every asset page and adjusts every share count it displays.",
+    q: "What does it cost?",
+    a: "1% when you buy and 1% when you sell. There is no account fee and no monthly charge. Mobile money and bank transfers may carry the network's own small fee, and you always see it before you confirm.",
   },
   {
-    q: "Why does an asset show zero onchain supply?",
-    a: "The Chainlink feed is live for all thirteen assets, but tokens are only minted as demand arrives. A supply of zero means nothing has been minted on Base yet. The mark is still real, there is just nothing to trade against.",
+    q: "Is my share a real share?",
+    a: "Yes. Every CRDB or NMB share in your account is a real share held for you by a licensed broker, and CAPX never sells more than it holds. You can see the totals on the proof page whenever you want.",
   },
   {
-    q: "Why can't I trade every asset?",
-    a: "Secondary trading needs minted supply and a venue holding it. Four assets route today at roughly the oracle mark; the rest have nothing minted on Base yet, so CAPX marks them mint-only rather than inventing a fill. The markets table labels each one.",
+    q: "What happens when I sell?",
+    a: "CAPX buys the shares back from you at the current price and puts the shillings, less the 1% fee, into your balance immediately. Those shares go back into CAPX's stock, ready for the next buyer.",
   },
   {
-    q: "Who can use this?",
-    a: "Tokenized equities are not available to US persons. Connect your own wallet and CAPX holds nothing. Fund an account with Tanzanian shillings and CAPX holds those assets for you, recording your entitlement in its own ledger. That is custody, and it is the trade-off for not needing a wallet. Nothing here is investment advice.",
+    q: "Where do the prices come from?",
+    a: "Tanzanian shares use the Dar es Salaam Stock Exchange's own prices, updated through the trading day. US shares follow their US market price. You pay the price shown, not a hidden markup.",
+  },
+  {
+    q: "Can I buy less than one share?",
+    a: "Yes. You choose the amount in shillings and get that share of a share. It makes it possible to start small and add as you go.",
+  },
+  {
+    q: "Who can use CAPX?",
+    a: "Anyone in Tanzania with a valid ID, a phone number and a mobile money or bank account. US shares are not available to US persons. Share prices go up and down, and nothing here is investment advice.",
   },
 ];
 
@@ -72,13 +85,13 @@ export function HowItWorksView() {
       <Reveal>
         <div className="eyebrow">{t("How it works")}</div>
         <h1 className="display mt-4 max-w-4xl text-[clamp(2.2rem,6vw,5rem)]">
-          <RevealWords text={t("No black box.")} />{" "}
+          <RevealWords text={t("From shillings")} />{" "}
           <span className="contra text-[var(--muted)]">
-            <RevealWords text={t("Just addresses.")} delay={0.12} />
+            <RevealWords text={t("to shares.")} delay={0.12} />
           </span>
         </h1>
         <p className="mt-6 max-w-xl text-lg leading-relaxed text-[var(--muted)]">
-          {t("CAPX is a thin, honest interface over machinery that already exists on Base. Here is exactly what it reads, and where you can check it yourself.")}
+          {t("Five steps, a few minutes, and a phone. Here is what happens at each one.")}
         </p>
       </Reveal>
 
@@ -112,7 +125,10 @@ export function HowItWorksView() {
         <Reveal delay={0.1}>
           <div className="lg:sticky lg:top-32 lg:self-start">
             <div className="rounded-3xl border hairline p-6">
-              <div className="eyebrow">{t("Contracts CAPX reads")}</div>
+              <div className="eyebrow">{t("Check it yourself")}</div>
+              <p className="mt-2 text-[12px] leading-relaxed text-[var(--muted)]">
+                {t("For the curious: every company on CAPX has a public address where its shares can be counted. Tap one to see it.")}
+              </p>
               <div className="scroll-thin mt-4 max-h-[420px] space-y-2.5 overflow-y-auto pr-1">
                 {ASSETS.map((a) => (
                   <div key={a.symbol} className="flex items-center justify-between gap-3 text-xs">
@@ -128,7 +144,7 @@ export function HowItWorksView() {
                 ))}
               </div>
               <p className="mt-4 border-t hairline pt-4 text-[11px] leading-relaxed text-[var(--muted)]">
-                {t("Every B20 address begins 0xb2. They are native precompiles on Base, not deployed bytecode.")}
+                {t("These records live on Base, a public network. Nobody, including CAPX, can change what they say without everyone seeing.")}
               </p>
             </div>
           </div>
@@ -152,9 +168,9 @@ export function HowItWorksView() {
           <Link href="/markets" className="rounded-full bg-[var(--fg)] px-6 py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03]">
             {t("Explore markets")} →
           </Link>
-          <a href="https://docs.base.org/base-chain/asset-issuance/tokenized-stocks-on-base" target="_blank" rel="noreferrer"
+          <a href="/proof"
             className="rounded-full border hairline px-6 py-3.5 text-sm font-medium transition-colors hover:surface">
-            {t("Base documentation")} ↗
+            {t("See what is held")} ↗
           </a>
         </div>
       </Reveal>

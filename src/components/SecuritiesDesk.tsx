@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  useIssuer, IssuerBar, predictToken, createTokenTx, tokenAbi, registryAbi, MINT_ROLE,
+  useIssuer, IssuerBar, predictToken, createTokenTx, tokenAbi, registryAbi, MINT_ROLE, BURN_ROLE,
 } from "./IssuerWallet";
 import type { Abi } from "viem";
 
@@ -12,6 +12,8 @@ type Backing = {
   recorded: number; drift: number; source: "chain" | "ledger";
   custodySource: "chain" | "filed" | "none"; custodyMismatch: string | null;
   ratioPct: number | null; headroom: number;
+  /** Tokens customers hold claims on, and the rest — the only part that can be burned. */
+  clientHeld?: number; unallocated?: number;
   fresh: boolean; expiresAt: string | null; lastVerified: string | null;
 };
 type Security = {
@@ -52,6 +54,7 @@ const DONE: Record<string, string> = {
   "approve-request": "Request approved. Mint it with the issuer wallet.",
   "reject-request": "Request rejected.",
   "complete-request": "Mint confirmed on Base and recorded. The new shares are available.",
+  "execute-burn": "Burned on Base and recorded. Supply is lower by that amount.",
   "register-security": "Saved.",
   "reconcile": "Recorded the on-chain supply.",
 };
@@ -350,9 +353,9 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
                       )}
                     </div>
                   )}
-                  <TokenSetup sec={s} isAdmin={isAdmin} w={w} sign={sign} onAct={act} busy={busy} />
+                  <TokenSetup sec={s} isAdmin={isAdmin} w={w} sign={sign} onAct={act} busy={busy} treasury={data.contracts.treasury} />
                   {s.token_address && (
-                    <RequestMint security={s.symbol} headroom={b.headroom} hasToken onAct={act} busy={busy} />
+                    <RequestMint security={s.symbol} headroom={b.headroom} unallocated={b.unallocated ?? 0} hasToken onAct={act} busy={busy} />
                   )}
                 </div>
 
@@ -742,13 +745,13 @@ function mintCmd(r: Request_, sec: Security | undefined, treasury: string | null
  * own, derived from what the chain actually says, so an interrupted setup
  * picks up where it stopped rather than starting again.
  */
-function TokenSetup({ sec, isAdmin, w, sign, onAct, busy }: {
-  sec: Security; isAdmin: boolean; w: ReturnType<typeof useIssuer>;
+function TokenSetup({ sec, isAdmin, w, sign, onAct, busy, treasury }: {
+  sec: Security; isAdmin: boolean; w: ReturnType<typeof useIssuer>; treasury: string | null;
   sign: (label: string, fn: () => Promise<void>) => Promise<void>;
   onAct: (b: Record<string, unknown>) => Promise<boolean | void>; busy: boolean;
 }) {
   const tsym = `${sec.symbol}t`;
-  const [state, setState] = useState<{ address: `0x${string}`; exists: boolean; minter: boolean } | null>(null);
+  const [state, setState] = useState<{ address: `0x${string}`; exists: boolean; minter: boolean; burner: boolean } | null>(null);
   const [tick, setTick] = useState(0);
   const issuer = w.issuer as `0x${string}` | null;
 
@@ -766,10 +769,17 @@ function TokenSetup({ sec, isAdmin, w, sign, onAct, busy }: {
             address: predicted.address, abi: tokenAbi, functionName: "hasRole", args: [MINT_ROLE, issuer],
           }).catch(() => false))
         : false;
-      if (alive) setState({ ...predicted, minter });
+      // Burning is done by the treasury, which holds the tokens, so it is the
+      // treasury that needs the burn role.
+      const burner = predicted.exists && treasury
+        ? Boolean(await w.client!.readContract({
+            address: predicted.address, abi: tokenAbi, functionName: "hasRole", args: [BURN_ROLE, treasury as `0x${string}`],
+          }).catch(() => false))
+        : false;
+      if (alive) setState({ ...predicted, minter, burner });
     })().catch(() => {});
     return () => { alive = false; };
-  }, [w.client, issuer, sec.token_address, tsym, tick]);
+  }, [w.client, issuer, sec.token_address, tsym, tick, treasury]);
 
   const link = (address: string) =>
     onAct({ action: "register-security", symbol: sec.symbol, name: sec.name, tokenAddress: address, status: sec.status, decimals: 8 });
@@ -782,6 +792,18 @@ function TokenSetup({ sec, isAdmin, w, sign, onAct, busy }: {
         <span className="text-[var(--color-up)]">✓ Token ready</span> · {tsym}{" "}
         <a href={`https://basescan.org/token/${sec.token_address}`} target="_blank" rel="noreferrer"
           className="tnum underline underline-offset-2">{sec.token_address!.slice(0, 8)}…{sec.token_address!.slice(-4)}</a> · mint role granted
+        {" · "}
+        {state?.burner ? "burning enabled" : isAdmin ? (
+          <button disabled={busy || !w.isIssuer || !treasury}
+            title={!w.isIssuer ? "Connect the issuer wallet above" : undefined}
+            onClick={() => void sign(`Enable burning on ${tsym}`, async () => {
+              await w.send({ address: state!.address, abi: tokenAbi as Abi, functionName: "grantRole", args: [BURN_ROLE, treasury as `0x${string}`] });
+              setTick((t) => t + 1);
+            })}
+            className="underline underline-offset-2 disabled:opacity-50">
+            enable burning
+          </button>
+        ) : "burning not enabled"}
       </p>
     );
   }
@@ -858,8 +880,8 @@ function TokenSetup({ sec, isAdmin, w, sign, onAct, busy }: {
  * minting while doing nothing on-chain. A request goes into the queue below,
  * where it is approved and then closed against the real transaction.
  */
-function RequestMint({ security, headroom, hasToken, onAct, busy }: {
-  security: string; headroom: number; hasToken: boolean;
+function RequestMint({ security, headroom, unallocated = 0, hasToken, onAct, busy }: {
+  security: string; headroom: number; unallocated?: number; hasToken: boolean;
   onAct: (b: Record<string, unknown>) => Promise<boolean | void>; busy: boolean;
 }) {
   const [qty, setQty] = useState("");
@@ -878,12 +900,22 @@ function RequestMint({ security, headroom, hasToken, onAct, busy }: {
       >
         Request mint
       </button>
+      {/* Burning retires inventory nobody owns — never shares a customer holds. */}
+      <button
+        onClick={() => { void onAct({ action: "request-issuance", security, kind: "burn", quantity: n }); setQty(""); }}
+        disabled={busy || !(n > 0) || n > unallocated || !hasToken}
+        title={n > unallocated ? `Only ${unallocated} are not held by customers` : undefined}
+        className="rounded-full border hairline px-4 py-2 text-[13px] font-medium hover:surface disabled:opacity-40"
+      >
+        Request burn
+      </button>
       <span className="text-[11px] text-[var(--muted)]">
         {!hasToken
           ? "No token registered yet — create it and register its address first."
           : headroom > 0
             ? `Up to ${headroom.toLocaleString()} can be minted against current custody.`
             : "Headroom is 0: every locked share already has a token. To mint more, FIMCO files a larger attestation first."}
+        {hasToken && ` Burnable: ${unallocated.toLocaleString()} (not held by customers).`}
       </span>
     </div>
   );
@@ -939,7 +971,16 @@ function RequestsSection({ data, isAdmin, onAct, busy, w, sign }: {
                     className="tnum text-[11px] underline underline-offset-2">{r.tx_hash.slice(0, 10)}…</a>
                 )}
               </div>
-              {r.status === "approved" && isAdmin && (
+              {r.status === "approved" && isAdmin && r.kind === "burn" && (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button disabled={busy} onClick={() => void onAct({ action: "execute-burn", id: r.id })}
+                    className="rounded-full bg-[var(--fg)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--bg)] disabled:opacity-40">
+                    Burn from treasury
+                  </button>
+                  <span className="text-[11px] text-[var(--muted)]">The treasury burns them; only tokens no customer holds.</span>
+                </div>
+              )}
+              {r.status === "approved" && isAdmin && r.kind === "mint" && (
                 <div className="mt-2">
                   {cmd && sec?.token_address && data.contracts.treasury ? (
                     <>

@@ -1,4 +1,5 @@
 import "server-only";
+import { after } from "next/server";
 import { parseUnits, formatUnits } from "viem";
 import { publicClient } from "./chain";
 import { treasuryWrite, treasuryAddress } from "./treasury";
@@ -164,7 +165,7 @@ export async function publishDsePrice(
 const REFRESH_AFTER_MS = 12 * 60_000;
 
 export function refreshIfStale(symbol: string) {
-  void (async () => {
+  const job = async () => {
     try {
       const current = await readOraclePrice(symbol);
       if (current) {
@@ -179,5 +180,20 @@ export function refreshIfStale(symbol: string) {
     } catch {
       /* the previous mark stands, which is the safe failure */
     }
-  })();
+  };
+  /*
+   * Run after the response, not alongside it.
+   *
+   * A bare floating promise is cut off when a serverless function returns, so
+   * the refresh usually never reached the chain. CRDB hid this because the
+   * daily cron published it anyway; NMB, registered mid-day, had no price at
+   * all until the next morning. `after` keeps the function alive until the
+   * publish lands. Outside a request (a script, the cron's own call) there is
+   * no response to wait for, so it simply runs.
+   */
+  try {
+    after(job);
+  } catch {
+    void job();
+  }
 }

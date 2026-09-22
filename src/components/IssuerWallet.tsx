@@ -21,6 +21,8 @@ import { encodeAbiParameters, keccak256, toBytes, parseAbi, type Abi } from "vie
 export const B20_FACTORY = "0xB20f000000000000000000000000000000000000" as const;
 /** keccak256("MINT_ROLE"), the role a B20 token checks before minting. */
 export const MINT_ROLE = "0x154c00819833dac601ee5ddded6fda79d9d8b506b911b3dbd54cdb95fe6c3686" as const;
+/** keccak256("BURN_ROLE"): what burn() checks, decoded from its revert. */
+export const BURN_ROLE = "0xe97b137254058bd94f28d2f3eb79e2d34074ffb488d042e3bc958e0a57d2fa22" as const;
 const VARIANT_ASSET = 0;
 
 const factoryAbi = parseAbi([

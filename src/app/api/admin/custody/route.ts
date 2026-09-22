@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, migrate, dbConfigured } from "@/lib/db";
-import { backing, canIssue, recordIssuance, reconcileIssuance } from "@/lib/custody";
+import { backing, canIssue, recordIssuance, reconcileIssuance, recordBurnFromChain } from "@/lib/custody";
 import { roleOf, ACTOR, type OpsRole } from "@/lib/adminAuth";
 import { SECURITIES_CONTRACTS } from "@/lib/assets";
 import { treasuryAddress } from "@/lib/treasury";
@@ -163,6 +163,10 @@ export async function POST(req: Request) {
               status = excluded.status,
               -- A save without a new logo keeps the old one.
               metadata = capx.securities.metadata || excluded.metadata`;
+      // A security CAPX has just registered or taken live should have a price
+      // by the time anyone opens its page, not after the morning's cron.
+      const { refreshIfStale } = await import("@/lib/oracle");
+      refreshIfStale(symbol);
       return NextResponse.json({ ok: true });
     }
 
@@ -277,6 +281,9 @@ export async function POST(req: Request) {
         if (r.kind === "mint") {
           const v = await canIssue(r.security, r.quantity);
           if (!v.ok) return NextResponse.json({ ok: false, error: v.reason }, { status: 409 });
+        } else {
+          const refusal = await burnRefusal(r.security, r.quantity);
+          if (refusal) return NextResponse.json({ ok: false, error: refusal }, { status: 409 });
         }
       }
       await sql`update capx.issuance_requests
@@ -286,6 +293,9 @@ export async function POST(req: Request) {
     }
     if (action === "complete-request") {
       return completeRequest(sql, role, body);
+    }
+    if (action === "execute-burn") {
+      return executeBurn(sql, role, body);
     }
 
     return NextResponse.json({ ok: false, error: `Unknown action "${action}".` }, { status: 400 });
@@ -318,6 +328,9 @@ async function requestIssuance(sql: Sql, role: OpsRole, body: Record<string, unk
   if (kind === "mint") {
     const v = await canIssue(security, quantity);
     if (!v.ok) return NextResponse.json({ ok: false, error: v.reason }, { status: 409 });
+  } else {
+    const refusal = await burnRefusal(security, quantity);
+    if (refusal) return NextResponse.json({ ok: false, error: refusal }, { status: 409 });
   }
   const [row] = await sql<{ id: string }[]>`
     insert into capx.issuance_requests (security, kind, quantity, note, requested_by)
@@ -379,14 +392,76 @@ async function completeRequest(sql: Sql, role: OpsRole, body: Record<string, unk
   }
 
   let added = 0;
-  if (r.kind === "mint") {
-    try {
-      added = (await reconcileIssuance(r.security, { txHash, actor: ACTOR[role] })).added;
-    } catch (e) {
-      return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "reconcile failed" }, { status: 409 });
-    }
+  try {
+    added = r.kind === "mint"
+      ? (await reconcileIssuance(r.security, { txHash, actor: ACTOR[role] })).added
+      : -(await recordBurnFromChain(r.security, { txHash, actor: ACTOR[role] })).burned;
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "reconcile failed" }, { status: 409 });
   }
   await sql`update capx.issuance_requests set status = 'executed', tx_hash = ${txHash}, executed_at = now()
              where id = ${id}::uuid`;
   return NextResponse.json({ ok: true, added, backing: await backing(r.security) });
+}
+
+
+/**
+ * Why a burn of this size may not happen, or null when it may.
+ *
+ * Only tokens nobody is owed can be burned. Every token in the treasury is
+ * either inventory or the backing for a customer's shares, and burning the
+ * second kind would leave a customer's holding backed by nothing — the one
+ * outcome this whole system exists to prevent.
+ */
+async function burnRefusal(security: string, quantity: number): Promise<string | null> {
+  if (!(quantity > 0)) return "Quantity must be greater than zero.";
+  const b = await backing(security);
+  if (quantity > b.unallocated) {
+    return `Only ${b.unallocated.toLocaleString()} ${security} can be burned: the other ` +
+      `${b.clientHeld.toLocaleString()} back customers' shares.`;
+  }
+  return null;
+}
+
+/**
+ * Burning from the treasury, which is where the tokens are.
+ *
+ * B20's burn takes tokens from the caller's own balance, and every token sits
+ * in the treasury, so the treasury signs it. It needs the token's burn role,
+ * which the issuer grants once from the desk. Checked against unallocated
+ * inventory again at the moment of burning, since customers may have bought
+ * since the request was approved.
+ */
+async function executeBurn(sql: Sql, role: OpsRole, body: Record<string, unknown>) {
+  const id = String(body.id ?? "");
+  const [r] = await sql<{ security: string; kind: string; quantity: number; token_address: string | null; decimals: number }[]>`
+    select r.security, r.kind, r.quantity::float8 as quantity, s.token_address, s.decimals
+      from capx.issuance_requests r left join capx.securities s on s.symbol = r.security
+     where r.id = ${id}::uuid and r.status = 'approved' and r.kind = 'burn'`;
+  if (!r) return NextResponse.json({ ok: false, error: "No approved burn with that id." }, { status: 404 });
+  if (!r.token_address) return NextResponse.json({ ok: false, error: `${r.security} has no token.` }, { status: 409 });
+  const refusal = await burnRefusal(r.security, r.quantity);
+  if (refusal) return NextResponse.json({ ok: false, error: refusal }, { status: 409 });
+
+  const { treasuryWrite } = await import("@/lib/treasury");
+  const { parseUnits } = await import("viem");
+  let hash: `0x${string}`;
+  try {
+    hash = await treasuryWrite({
+      address: r.token_address as `0x${string}`,
+      abi: [{ type: "function", name: "burn", stateMutability: "nonpayable",
+              inputs: [{ name: "amount", type: "uint256" }], outputs: [] }],
+      functionName: "burn",
+      args: [parseUnits(String(r.quantity), r.decimals)],
+    });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : "";
+    return NextResponse.json(
+      { ok: false, error: /e2517d3f|AccessControl|Unauthorized/i.test(m)
+          ? `The treasury does not have the burn role on ${r.security}t yet. Grant it from the security's card.`
+          : `The burn was not sent: ${m.slice(0, 200)}` },
+      { status: 409 },
+    );
+  }
+  return completeRequest(sql, role, { id, txHash: hash });
 }

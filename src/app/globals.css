@@ -191,3 +191,29 @@ body.overlay-open .grain::after { animation-play-state: paused; }
 /* Thin, unobtrusive scrollbars inside data panes. */
 .scroll-thin::-webkit-scrollbar { height: 6px; width: 6px; }
 .scroll-thin::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+/*
+ * Inputs that do not make the page jump.
+ *
+ * iOS Safari zooms into any focused field whose text is under 16px, and does
+ * not zoom back out when typing ends — so every 14px input on the site left
+ * the customer pinching the page back to size. At 16px it never zooms, and
+ * pinch-zoom stays available for anyone who wants it; disabling zoom in the
+ * viewport would fix the jump by taking that away.
+ */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* No font inflation on rotate, and no double-tap zoom delay on controls. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+a, button, input, select, textarea, label, [role="button"] {
+  touch-action: manipulation;
+}

@@ -733,8 +733,13 @@ function BankTransferCard({ bank, onDone }: { bank: BankDetails; onDone: () => v
         {t("Send from any Tanzanian bank. A different amount or a missing reference cannot be matched automatically.")}{" "}
         {t("Valid until")} {expires.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}.
       </p>
-      <button onClick={onDone} className="mt-3 text-[12px] font-medium text-[var(--muted)] hover:text-[var(--fg)]">
-        {t("I have sent it")} →
+      {/* The finishing step of the flow, so it looks like one: a real button,
+          not a muted link the eye skips past under a paragraph of guidance. */}
+      <button
+        onClick={onDone}
+        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border-2 border-[var(--fg)] py-3 text-sm font-semibold transition-colors hover:bg-[var(--fg)] hover:text-[var(--bg)] active:scale-[0.98]"
+      >
+        {t("I have sent it")} <span aria-hidden>→</span>
       </button>
     </div>
   );

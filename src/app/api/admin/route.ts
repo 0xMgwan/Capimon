@@ -1,32 +1,26 @@
 import { NextResponse } from "next/server";
-import { timingSafeEqual } from "crypto";
 import { db, migrate, dbConfigured } from "@/lib/db";
 import { checkSolvency } from "@/lib/solvency";
 import { ntzsTreasury, capabilities, collectionRoute } from "@/lib/omnibus";
 import { treasuryAddress, treasuryConfigured, treasuryHoldings } from "@/lib/treasury";
 import { ntzsConfigured } from "@/lib/ntzs";
+import { roleOf } from "@/lib/adminAuth";
 
 export const dynamic = "force-dynamic";
-
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
 
 /**
  * Operations view. Token-gated: this exposes every customer's deposits, so it
  * must never be reachable by guessing a URL.
+ *
+ * FIMCO's token reaches the client-facing half — who the customers are, what
+ * they traded, what they withdrew — because a broker of record keeps those.
+ * CAPX's own books, its treasury, solvency, deposit reconciliation and nTZS
+ * capabilities, stay with CAPX.
  */
-function authorised(req: Request) {
-  if (!ADMIN_TOKEN) return false;
-  const url = new URL(req.url);
-  const given = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "")
-    || url.searchParams.get("token") || "";
-  const a = Buffer.from(given);
-  const b = Buffer.from(ADMIN_TOKEN);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
 export async function GET(req: Request) {
   if (!dbConfigured) return NextResponse.json({ ok: false, code: "not_configured" }, { status: 503 });
-  if (!authorised(req)) {
+  const role = roleOf(req);
+  if (!role) {
     return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
   }
 
@@ -92,6 +86,18 @@ export async function GET(req: Request) {
            where l.kind = 'withdrawal' order by l.created_at desc, l.id desc limit 30`,
     ]);
 
+    /*
+     * FIMCO sees the client-facing half and nothing else: who the customers
+     * are, what they traded, what they withdrew. CAPX's treasury, solvency,
+     * deposit reconciliation and nTZS capabilities are not a broker's records.
+     */
+    if (role === "fimco") {
+      return NextResponse.json(
+        { ok: true, role, users, orders, withdrawals },
+        { headers: { "cache-control": "no-store" } },
+      );
+    }
+
     // Reported separately: an unreachable dependency is not a shortfall.
     const [solvency, ntzs, onchain, caps, route, feePos, sweeps] = await Promise.all([
       treasuryConfigured ? checkSolvency().catch(() => null) : null,
@@ -152,7 +158,8 @@ export async function GET(req: Request) {
  */
 export async function POST(req: Request) {
   if (!dbConfigured) return NextResponse.json({ ok: false, code: "not_configured" }, { status: 503 });
-  if (!authorised(req)) return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
+  // Corrections rewrite the ledger, so they stay CAPX's alone.
+  if (roleOf(req) !== "admin") return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
 
   try {
     const body = await req.json().catch(() => ({}));

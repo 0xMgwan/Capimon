@@ -564,7 +564,7 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
           securities={data.securities.map((x) => x.symbol)} />
       </div>
 
-      {portal === "fimco" && <KycSection token={token} />}
+      {portal === "fimco" && <CustomersSection token={token} />}
 
       {isAdmin && <OracleAdmin token={token} busy={busy} setBusy={setBusy} setErr={setErr} setNote={setNote} />}
 
@@ -679,100 +679,217 @@ type Kyc = {
   doc_bytes: number | null; selfie_bytes: number | null; doc_mime: string | null;
 };
 
+
+
+type AdminUser = {
+  id: string; email: string; name: string | null; phone: string | null; nida_number: string | null;
+  kyc_status: string; created_at: string; deposits: number; settled_tzs: number;
+};
+type AdminOrder = {
+  id: string; side: string; symbol: string; qty: string | null; price: string | null;
+  usdc_amount: string | null; status: string; created_at: string; email: string;
+};
+type AdminWithdrawal = { id: string; amount: string; ref: string | null; created_at: string; email: string };
+
 /**
- * Every customer's verification, for the broker of record.
+ * The client-facing records, as the tabs a broker actually works in.
  *
- * Read-only: FIMCO keeps these records for compliance, CAPX makes the decision
- * on the admin page. Images load only when a row is opened.
+ * FIMCO had verifications and nothing else, so answering "what did this
+ * customer trade" meant asking CAPX. These are the same records the CAPX desk
+ * keeps — customers, orders, verifications, holdings, withdrawals — behind one
+ * search that filters whichever tab is open.
  */
-function KycSection({ token }: { token: string }) {
-  const [rows, setRows] = useState<Kyc[] | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
+function CustomersSection({ token }: { token: string }) {
+  const [tab, setTab] = useState<"users" | "orders" | "kyc" | "holdings" | "withdrawals">("users");
   const [q, setQ] = useState("");
+  const [data, setData] = useState<{ users: AdminUser[]; orders: AdminOrder[]; withdrawals: AdminWithdrawal[] } | null>(null);
+  const [kyc, setKyc] = useState<Kyc[] | null>(null);
+  const [holders, setHolders] = useState<Holder[] | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+
   useEffect(() => {
     let alive = true;
-    fetch(`/api/admin/kyc?token=${encodeURIComponent(token)}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => { if (alive) setRows(j.ok ? j.submissions : []); })
-      .catch(() => { if (alive) setRows([]); });
+    const get = (url: string) =>
+      fetch(url, { headers: { authorization: `Bearer ${token}` }, cache: "no-store" })
+        .then((r) => r.json()).catch(() => null);
+    void Promise.all([get("/api/admin"), get("/api/admin/kyc"), get("/api/admin/holders")])
+      .then(([a, k, h]) => {
+        if (!alive) return;
+        setData(a?.ok
+          ? { users: a.users ?? [], orders: a.orders ?? [], withdrawals: a.withdrawals ?? [] }
+          : { users: [], orders: [], withdrawals: [] });
+        setKyc(k?.ok ? k.submissions : []);
+        setHolders(h?.ok ? h.holders : []);
+      });
     return () => { alive = false; };
   }, [token]);
+
+  const s = q.trim().toLowerCase();
+  const hit = (...vals: (string | null | undefined)[]) => !s || vals.some((v) => v?.toLowerCase().includes(s));
+  const users = (data?.users ?? []).filter((u) => hit(u.email, u.name, u.phone, u.nida_number));
+  const orders = (data?.orders ?? []).filter((o) => hit(o.email, o.symbol, o.side, o.status));
+  const kycRows = (kyc ?? []).filter((r) => hit(r.name, r.email, r.doc_number));
+  const holdRows = (holders ?? []).filter((h) => hit(h.email, h.name, h.username, h.asset));
+  const wdRows = (data?.withdrawals ?? []).filter((w) => hit(w.email, w.ref));
+
+  const tabs = [
+    ["users", "Users", users.length],
+    ["orders", "Orders", orders.length],
+    ["kyc", "KYC", kycRows.length],
+    ["holdings", "Holdings", holdRows.length],
+    ["withdrawals", "Withdrawals", wdRows.length],
+  ] as const;
+
   const img = (id: string, which: "doc" | "selfie") =>
     `/api/admin/kyc/image?id=${id}&which=${which}&token=${encodeURIComponent(token)}`;
-  const shown = (rows ?? []).filter((r) => {
-    const s = q.trim().toLowerCase();
-    return !s || [r.name, r.email, r.doc_number].some((v) => v?.toLowerCase().includes(s));
-  });
+  const money = (n: number, c = "TZS") => `${Math.round(n).toLocaleString()} ${c}`;
+  const loading = !data || kyc === null || holders === null;
+
   return (
     <section className="mt-8">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="eyebrow">Customers &amp; KYC</div>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, email or ID number"
-          className="w-64 max-w-full rounded-full border hairline bg-transparent px-3.5 py-1.5 text-[12px] outline-none focus:border-[var(--color-accent)]" />
+        <div className="eyebrow">Customers</div>
+        <input value={q} onChange={(e) => setQ(e.target.value)}
+          placeholder="Search name, email, ID number or security"
+          className="w-72 max-w-full rounded-full border hairline bg-transparent px-3.5 py-1.5 text-[12px] outline-none focus:border-[var(--color-accent)]" />
       </div>
-      <div className="overflow-hidden rounded-2xl border hairline">
-        {rows === null ? (
-          <p className="p-5 text-center text-sm text-[var(--muted)]">Loading…</p>
-        ) : shown.length === 0 ? (
-          <p className="p-5 text-center text-sm text-[var(--muted)]">No verifications{q ? " match" : " yet"}.</p>
-        ) : shown.map((r) => (
-          <div key={r.id} className="border-b hairline last:border-0">
-            <button onClick={() => setOpen(open === r.id ? null : r.id)}
-              className="flex w-full flex-wrap items-center gap-3 px-4 py-3 text-left hover:surface">
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{r.name ?? r.email}</span>
-                <span className="block truncate text-[11px] text-[var(--muted)]">
-                  {r.email} · {r.doc_type.replace(/_/g, " ")} {r.doc_number ?? ""} · submitted {dt(r.created_at)}
-                </span>
-              </span>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] uppercase ${
-                r.status === "approved" ? "bg-[var(--color-up)]/10 text-[var(--color-up)]"
-                : r.status === "rejected" ? "bg-[var(--color-down)]/10 text-[var(--color-down)]"
-                : "surface text-[var(--muted)]"}`}>{r.status}</span>
-            </button>
-            {open === r.id && (
-              <div className="grid gap-3 px-4 pb-4 sm:grid-cols-2">
-                {/*
-                  * The document can be a PDF or an iPhone HEIC as well as a
-                  * photo. An <img> can show neither, which is how the ID came
-                  * out as a broken image beside a working selfie. PDFs are
-                  * embedded; HEIC, which only Safari decodes, opens in a new
-                  * tab where the system viewer can.
-                  */}
-                {!r.doc_bytes ? (
-                  <p className="text-[11px] text-[var(--muted)]">No document image.</p>
-                ) : r.doc_mime === "application/pdf" ? (
-                  <div>
-                    <iframe src={img(r.id, "doc")} title="ID document (PDF)"
-                      className="h-[480px] w-full rounded-xl border hairline bg-white" />
-                    <a href={img(r.id, "doc")} target="_blank" rel="noreferrer"
-                      className="mt-1 inline-block text-[11px] underline underline-offset-2">Open PDF full size ↗</a>
-                  </div>
-                ) : /heic|heif/i.test(r.doc_mime ?? "") ? (
-                  <a href={img(r.id, "doc")} target="_blank" rel="noreferrer"
-                    className="grid h-48 place-items-center rounded-xl border hairline surface text-center text-[12px] text-[var(--muted)]">
-                    <span>HEIC photo from an iPhone<br /><span className="font-medium text-[var(--fg)] underline">Open it ↗</span><br />Safari and Preview display it; Chrome cannot.</span>
-                  </a>
-                ) : (
-                  <a href={img(r.id, "doc")} target="_blank" rel="noreferrer" title="Open full size">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={img(r.id, "doc")} alt="ID document" className="max-h-[480px] w-full rounded-xl border hairline object-contain" />
-                  </a>
-                )}
-                {r.selfie_bytes ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={img(r.id, "selfie")} alt="Selfie" className="max-h-[480px] w-full rounded-xl border hairline bg-[var(--surface-2,transparent)] object-contain" />
-                ) : <p className="text-[11px] text-[var(--muted)]">No selfie.</p>}
-                <p className="text-[11px] text-[var(--muted)] sm:col-span-2">
-                  {r.reviewed_by ? `Reviewed by ${r.reviewed_by} on ${dt(r.reviewed_at)}.` : "Awaiting review by CAPX."}
-                  {r.reason && ` Reason: ${r.reason}`}
-                </p>
-              </div>
-            )}
-          </div>
+
+      <div className="scroll-thin -mx-1 mb-2 flex gap-1.5 overflow-x-auto px-1 pb-1">
+        {tabs.map(([k, label, n]) => (
+          <button key={k} onClick={() => { setTab(k); setOpen(null); }}
+            className={`shrink-0 rounded-full border px-3.5 py-1.5 text-[12.5px] font-medium transition-colors ${
+              tab === k ? "border-[var(--fg)] bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"}`}>
+            {label} <span className="tnum opacity-60">{n}</span>
+          </button>
         ))}
       </div>
+
+      <div className="overflow-hidden rounded-2xl border hairline">
+        {loading ? (
+          <p className="p-5 text-center text-sm text-[var(--muted)]">Loading…</p>
+        ) : tab === "users" ? (
+          users.length === 0 ? <Empty q={q} what="customers" /> : users.map((u) => (
+            <div key={u.id} className="flex flex-wrap items-center gap-3 border-b hairline px-4 py-3 last:border-0">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium">{u.name ?? u.email}</span>
+                <span className="block truncate text-[11px] text-[var(--muted)]">
+                  {u.email}{u.phone ? ` · ${u.phone}` : ""}{u.nida_number ? ` · ${u.nida_number}` : ""}
+                </span>
+              </span>
+              <span className="tnum shrink-0 text-right text-[11px] text-[var(--muted)]">
+                <span className="block">{u.deposits} deposits · {money(Number(u.settled_tzs))}</span>
+                <span className="block">joined {dt(u.created_at)}</span>
+              </span>
+              <KycTag status={u.kyc_status} />
+            </div>
+          ))
+        ) : tab === "orders" ? (
+          orders.length === 0 ? <Empty q={q} what="orders" /> : orders.map((o) => (
+            <div key={o.id} className="flex flex-wrap items-center gap-3 border-b hairline px-4 py-2.5 text-[12px] last:border-0">
+              <span className={`w-10 shrink-0 font-medium ${o.side === "buy" ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                {o.side === "buy" ? "Buy" : "Sell"}
+              </span>
+              <span className="w-16 shrink-0 font-medium">{o.symbol}</span>
+              <span className="min-w-0 flex-1 truncate text-[var(--muted)]">{o.email}</span>
+              <span className="tnum shrink-0">
+                {o.qty && Number(o.qty) > 0
+                  ? `${Number(o.qty).toLocaleString("en-US", { maximumFractionDigits: 8 })}${
+                      o.price && Number(o.price) > 0 ? ` @ ${Number(o.price).toLocaleString()} TZS` : ""}`
+                  : o.usdc_amount ? `$${Number(o.usdc_amount).toFixed(2)}` : "—"}
+              </span>
+              <span className={`shrink-0 text-[11px] ${
+                o.status === "settled" ? "text-[var(--muted)]" : "text-[var(--color-down)]"}`}>{o.status}</span>
+              <span className="shrink-0 text-[11px] text-[var(--muted)]">{dt(o.created_at)}</span>
+            </div>
+          ))
+        ) : tab === "holdings" ? (
+          holdRows.length === 0 ? <Empty q={q} what="holdings" /> : holdRows.map((h) => (
+            <div key={`${h.userId}-${h.asset}`} className="flex flex-wrap items-center gap-3 border-b hairline px-4 py-2.5 text-[12px] last:border-0">
+              <span className="w-16 shrink-0 font-medium">{h.asset}</span>
+              <span className="min-w-0 flex-1 truncate">
+                <span className="block truncate">{h.name ?? h.email}</span>
+                <span className="block truncate text-[11px] text-[var(--muted)]">{h.email}</span>
+              </span>
+              <span className="tnum shrink-0 text-right">
+                <span className="block">{h.qty.toLocaleString("en-US", { maximumFractionDigits: 8 })}</span>
+                <span className="block text-[11px] text-[var(--muted)]">
+                  {h.avgCost > 0 ? `avg ${money(h.avgCost, h.currency === "TZS" ? "TZS" : "USD")}` : "—"}
+                  {" · "}{h.trades} {h.trades === 1 ? "trade" : "trades"}
+                </span>
+              </span>
+            </div>
+          ))
+        ) : tab === "withdrawals" ? (
+          wdRows.length === 0 ? <Empty q={q} what="withdrawals" /> : wdRows.map((w) => (
+            <div key={w.id} className="flex flex-wrap items-center gap-3 border-b hairline px-4 py-2.5 text-[12px] last:border-0">
+              <span className="min-w-0 flex-1 truncate">{w.email}</span>
+              <span className="tnum shrink-0">{Math.abs(Number(w.amount)).toLocaleString()} TZS</span>
+              <span className="shrink-0 text-[11px] text-[var(--muted)]">{dt(w.created_at)}</span>
+            </div>
+          ))
+        ) : (
+          kycRows.length === 0 ? <Empty q={q} what="verifications" /> : kycRows.map((r) => (
+            <div key={r.id} className="border-b hairline last:border-0">
+              <button onClick={() => setOpen(open === r.id ? null : r.id)}
+                className="flex w-full flex-wrap items-center gap-3 px-4 py-3 text-left hover:surface">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{r.name ?? r.email}</span>
+                  <span className="block truncate text-[11px] text-[var(--muted)]">
+                    {r.email} · {r.doc_type.replace(/_/g, " ")} {r.doc_number ?? ""} · {dt(r.created_at)}
+                  </span>
+                </span>
+                <KycTag status={r.status} />
+              </button>
+              {open === r.id && (
+                <div className="grid gap-3 px-4 pb-4 sm:grid-cols-2">
+                  {r.doc_bytes ? (
+                    r.doc_mime === "application/pdf" ? (
+                      <iframe src={img(r.id, "doc")} title="ID document"
+                        className="h-[420px] w-full rounded-xl border hairline bg-white" />
+                    ) : /heic|heif/i.test(r.doc_mime ?? "") ? (
+                      <a href={img(r.id, "doc")} target="_blank" rel="noreferrer"
+                        className="grid h-40 place-items-center rounded-xl border hairline surface text-center text-[12px] text-[var(--muted)]">
+                        HEIC photo — <span className="underline">open it ↗</span>
+                      </a>
+                    ) : (
+                      <a href={img(r.id, "doc")} target="_blank" rel="noreferrer">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={img(r.id, "doc")} alt="ID document"
+                          className="max-h-[420px] w-full rounded-xl border hairline object-contain" />
+                      </a>
+                    )
+                  ) : <p className="text-[11px] text-[var(--muted)]">No document image.</p>}
+                  {r.selfie_bytes ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={img(r.id, "selfie")} alt="Selfie"
+                      className="max-h-[420px] w-full rounded-xl border hairline object-contain" />
+                  ) : <p className="text-[11px] text-[var(--muted)]">No selfie.</p>}
+                  <p className="text-[11px] text-[var(--muted)] sm:col-span-2">
+                    {r.reviewed_by ? `Reviewed by ${r.reviewed_by} on ${dt(r.reviewed_at)}.` : "Awaiting review by CAPX."}
+                    {r.reason && ` Reason: ${r.reason}`}
+                  </p>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
     </section>
+  );
+}
+
+function Empty({ q, what }: { q: string; what: string }) {
+  return <p className="p-5 text-center text-sm text-[var(--muted)]">No {what}{q ? " match" : " yet"}.</p>;
+}
+
+function KycTag({ status }: { status: string }) {
+  return (
+    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] uppercase ${
+      status === "approved" ? "bg-[var(--color-up)]/10 text-[var(--color-up)]"
+      : status === "rejected" ? "bg-[var(--color-down)]/10 text-[var(--color-down)]"
+      : "surface text-[var(--muted)]"}`}>
+      {status}
+    </span>
   );
 }
 

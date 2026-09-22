@@ -428,4 +428,5 @@ export const SW: Record<string, string> = {
   "United States": "Marekani",
   "Tanzanian shares in shillings, US shares in dollars.": "Hisa za Tanzania kwa shilingi, hisa za Marekani kwa dola.",
   "Prices update live. US shares are not available to US persons.": "Bei zinasasishwa moja kwa moja. Hisa za Marekani hazipatikani kwa raia wa Marekani.",
+  "Contract details": "Maelezo ya mkataba",
 };

@@ -55,7 +55,7 @@ export function PriceChart({ data, color, height = 320, format = usd, ranges, pr
     return () => { cancelAnimationFrame(raf); mq.removeEventListener("change", apply); };
   }, []);
 
-  const h = compact ? Math.round(height * 0.7) : height;
+  const h = compact ? Math.round(height * 0.55) : height;
   const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
   const ref = useRef<SVGSVGElement>(null);
   const W = 1000;
@@ -101,9 +101,11 @@ export function PriceChart({ data, color, height = 320, format = usd, ranges, pr
 
   return (
     <div>
-      <div className="mb-3 flex items-start justify-between gap-4">
+      <div className="mb-2 flex items-start justify-between gap-3 sm:mb-3">
         <div>
-          <div className="tnum text-3xl font-medium tracking-tight sm:text-4xl">
+          {/* Smaller on phones: the page header already shows the price; this
+              one earns its place as the value under your finger when scrubbing. */}
+          <div className="tnum text-xl font-medium tracking-tight sm:text-4xl">
             {shown ? format(shown.p) : "—"}
           </div>
           <div className="mt-1 flex items-center gap-2 text-xs">
@@ -181,10 +183,10 @@ export function PriceChart({ data, color, height = 320, format = usd, ranges, pr
         )}
       </div>
 
-      <p className="mt-2 text-[11px] text-[var(--muted)]">
+      <p className="mt-1.5 text-[10.5px] text-[var(--muted)] sm:mt-2 sm:text-[11px]">
         {provenance
           ? provenance(series.length)
-          : `${series.length} onchain price rounds · Chainlink total-return feed on Base · 24/5, frozen through corporate actions`}
+          : `${series.length} price points · live US market price`}
       </p>
     </div>
   );

@@ -48,7 +48,7 @@ export function CrdbChart({ symbol = "CRDB" }: { symbol?: string }) {
       format={fmt}
       ranges={TZS_RANGES}
       provenance={(n) =>
-        `${n} exchange closes · Dar es Salaam Stock Exchange · one print a session, no weekend trading`
+        `${n} daily closes on the Dar es Salaam Stock Exchange`
       }
     />
   );

@@ -41,87 +41,60 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
   const up = (market?.change ?? 0) >= 0;
 
   return (
-    <div className="mx-auto max-w-[1400px] px-5 pb-24 pt-6 sm:px-8 sm:pt-10">
-      <Link href="/markets" className="text-sm text-[var(--muted)] transition-colors hover:text-[var(--fg)]">
-        ← All markets
+    <div className="mx-auto max-w-[1400px] px-4 pb-24 pt-3 sm:px-8 sm:pt-8">
+      <Link href="/markets" className="text-[13px] text-[var(--muted)] transition-colors hover:text-[var(--fg)]">
+        ← {t("Markets")}
       </Link>
 
-      <Reveal className="mt-6">
-        <div className="flex flex-wrap items-start justify-between gap-4 sm:gap-6">
-          <div className="flex items-center gap-4">
-            <AssetLogo logo={market?.logo ?? logo} ticker={asset.ticker} color={asset.color} size={56} />
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="font-[family-name:var(--font-display)] text-3xl font-medium tracking-[-0.045em] sm:text-4xl">
+      {/*
+        * Compact, and in the order someone uses it.
+        *
+        * On a phone the ticket used to start 1,600px down, below four stat
+        * cards stacked one per row and a box of contract addresses. The header
+        * is now one row with the price, the blurb two lines, and the page runs
+        * chart → ticket → details, with the addresses folded away. From lg the
+        * ticket stays pinned beside the chart.
+        */}
+      <Reveal className="mt-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <AssetLogo logo={market?.logo ?? logo} ticker={asset.ticker} color={asset.color} size={44} />
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <h1 className="font-[family-name:var(--font-display)] text-2xl font-medium tracking-[-0.045em] sm:text-4xl">
                   {asset.ticker}
                 </h1>
-                <span className="tnum rounded-full surface px-2.5 py-1 text-[11px] text-[var(--muted)]">{asset.symbol}</span>
-                <span className="rounded-full surface px-2.5 py-1 text-[11px] text-[var(--muted)]">{asset.exchange}</span>
+                <span className="rounded-full surface px-2 py-0.5 text-[10px] text-[var(--muted)]">{asset.exchange}</span>
               </div>
-              <p className="mt-1 text-[var(--muted)]">{asset.name} · {asset.sector}</p>
+              <p className="truncate text-[12.5px] text-[var(--muted)] sm:text-sm">{asset.name} · {asset.sector}</p>
             </div>
           </div>
 
-          <div className="w-full text-left sm:w-auto sm:text-right">
-            <div className={`tnum text-[2.25rem] font-medium tracking-tight sm:text-5xl ${tick === "up" ? "flash-up" : tick === "down" ? "flash-down" : ""}`}>
-              {market ? usd(market.price) : loading ? <span className="inline-block h-11 w-40 animate-pulse rounded surface" /> : "—"}
+          <div className="shrink-0 text-right">
+            <div className={`tnum text-[1.6rem] font-medium leading-none tracking-tight sm:text-5xl ${tick === "up" ? "flash-up" : tick === "down" ? "flash-down" : ""}`}>
+              {market ? usd(market.price) : loading ? <span className="inline-block h-7 w-24 animate-pulse rounded surface" /> : "—"}
             </div>
             {market && (
-              <div className={`tnum mt-1 text-sm ${up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
-                {up ? "▲" : "▼"} {Math.abs(market.change).toFixed(2)}% over {market.changeWindowHours}h
-                <span className="ml-2 text-[var(--muted)]">· round {ago(market.updatedAt)}</span>
+              <div className={`tnum mt-1 text-[12px] ${up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                {up ? "▲" : "▼"} {Math.abs(market.change).toFixed(2)}% · {market.changeWindowHours}h
               </div>
             )}
           </div>
         </div>
       </Reveal>
 
-      <p className="mt-6 max-w-2xl text-lg leading-relaxed text-[var(--muted)]">
+      <p className="mt-2 line-clamp-2 max-w-2xl text-[13.5px] leading-snug text-[var(--muted)] sm:mt-4 sm:text-lg sm:leading-relaxed">
         {asset.blurb}
       </p>
 
-      <div className="mt-8 grid gap-5 sm:mt-10 sm:gap-6 lg:grid-cols-[1.7fr_1fr]">
-        <Reveal>
-          <div className="rounded-3xl border hairline p-4 sm:p-7">
+      <div className="mt-3 grid gap-3 sm:mt-8 sm:gap-6 lg:grid-cols-[1.7fr_1fr]">
+        <Reveal className="lg:col-start-1 lg:row-start-1">
+          <div className="rounded-2xl border hairline p-3 sm:rounded-3xl sm:p-7">
             <PriceChart data={market?.history ?? []} color={up ? "var(--color-up)" : "var(--color-down)"} />
           </div>
-
-          <div className="mt-6 grid gap-px overflow-hidden rounded-3xl bg-[var(--border)] sm:grid-cols-2 lg:grid-cols-4">
-            <Stat label={t("Onchain supply")} value={market && market.supply > 0 ? compact(market.supply, 2) : "0"} sub="share-equivalents" />
-            <Stat label={t("Onchain value")} value={market && market.tvl > 0 ? compactUsd(market.tvl) : "$0"} sub="supply × mark" />
-            <Stat label={t("Multiplier")} value={market ? `${market.multiplier.toFixed(6)}×` : "—"} sub="corporate actions" />
-            <Stat label={t("Token decimals")} value={market ? String(market.decimals) : "—"} sub={t("B20 precision")} />
-          </div>
-
-          <Reveal delay={0.06}>
-            <div className="mt-6 rounded-3xl border hairline p-6">
-              <div className="eyebrow">{t("Onchain references")}</div>
-              <dl className="mt-4 space-y-3 text-sm">
-                <RefRow k="B20 token" v={asset.token} />
-                <RefRow k="Chainlink feed" v={asset.feed} />
-                {market && (
-                  <div className="flex items-center justify-between gap-3">
-                    <dt className="text-[var(--muted)]">{t("Latest round")}</dt>
-                    <dd className="tnum truncate text-xs">{market.roundId}</dd>
-                  </div>
-                )}
-                <div className="flex items-center justify-between gap-3">
-                  <dt className="text-[var(--muted)]">{t("Feed status")}</dt>
-                  <dd className={`tnum text-xs ${market?.stale ? "text-[var(--muted)]" : "text-[var(--color-up)]"}`}>
-                    {market ? (market.stale ? "cold — missed a session" : "live · 24/5") : "—"}
-                  </dd>
-                </div>
-              </dl>
-              <p className="mt-5 text-[11px] leading-relaxed text-[var(--muted)]">
-                One B20 token is not permanently one share. Redemption applies the current multiplier,
-                and the Chainlink feed publishes a total-return value (market price × multiplier)
-                freezing through corporate actions.
-              </p>
-            </div>
-          </Reveal>
         </Reveal>
 
-        <div id="ticket" className="scroll-mt-24 lg:sticky lg:top-32 lg:self-start">
+        <div id="ticket" className="scroll-mt-24 lg:sticky lg:top-32 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start">
           <Reveal delay={0.08}>
             <PanelBoundary label={t("Order ticket")}>
               {custodial
@@ -129,26 +102,61 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
                 : <TradePanel asset={asset} market={market} />}
             </PanelBoundary>
           </Reveal>
+        </div>
+
+        <div className="lg:col-start-1">
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] lg:grid-cols-4">
+            <Stat label={t("Onchain supply")} value={market && market.supply > 0 ? compact(market.supply, 2) : "0"} sub="share-equivalents" />
+            <Stat label={t("Onchain value")} value={market && market.tvl > 0 ? compactUsd(market.tvl) : "$0"} sub="supply × mark" />
+            <Stat label={t("Multiplier")} value={market ? `${market.multiplier.toFixed(4)}×` : "—"} sub="corporate actions" />
+            <Stat label={t("Token decimals")} value={market ? String(market.decimals) : "—"} sub={t("B20 precision")} />
+          </div>
 
           {peers.length > 0 && (
-            <Reveal delay={0.14}>
-              <div className="mt-6 rounded-3xl border hairline p-5">
-                <div className="eyebrow">Also in {asset.sector}</div>
-                <div className="mt-4 space-y-3">
-                  {peers.map((p) => (
-                    <Link key={p.symbol} href={`/markets/${p.ticker.toLowerCase()}`} className="flex items-center gap-3 transition-opacity hover:opacity-70">
-                      <AssetLogo logo={p.logo} ticker={p.ticker} color={p.color} size={32} />
-                      <span className="min-w-0 flex-1 text-sm font-medium">{p.ticker}</span>
-                      <Sparkline data={p.history.slice(-24)} color={p.change >= 0 ? "var(--color-up)" : "var(--color-down)"} width={48} height={20} fill={false} />
-                      <span className={`tnum shrink-0 text-xs ${p.change >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
-                        {p.change >= 0 ? "+" : ""}{p.change.toFixed(2)}%
-                      </span>
-                    </Link>
-                  ))}
-                </div>
+            <div className="mt-3 rounded-2xl border hairline px-3.5 py-3">
+              <div className="eyebrow">Also in {asset.sector}</div>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {peers.map((p) => (
+                  <Link key={p.symbol} href={`/markets/${p.ticker.toLowerCase()}`} className="flex items-center gap-2.5 transition-opacity hover:opacity-70">
+                    <AssetLogo logo={p.logo} ticker={p.ticker} color={p.color} size={26} />
+                    <span className="min-w-0 flex-1 text-[13px] font-medium">{p.ticker}</span>
+                    <Sparkline data={p.history.slice(-24)} color={p.change >= 0 ? "var(--color-up)" : "var(--color-down)"} width={44} height={18} fill={false} />
+                    <span className={`tnum shrink-0 text-xs ${p.change >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                      {p.change >= 0 ? "+" : ""}{p.change.toFixed(2)}%
+                    </span>
+                  </Link>
+                ))}
               </div>
-            </Reveal>
+            </div>
           )}
+
+          {/* The addresses are for checking, not for reading every visit. */}
+          <details className="group mt-3 rounded-2xl border hairline px-3.5 py-3">
+            <summary className="flex cursor-pointer list-none items-center justify-between text-[13px] font-medium">
+              {t("Contract details")}
+              <span className="text-[var(--muted)] transition-transform group-open:rotate-45">+</span>
+            </summary>
+            <dl className="mt-3 space-y-2.5 text-sm">
+              <RefRow k="B20 token" v={asset.token} />
+              <RefRow k="Chainlink feed" v={asset.feed} />
+              {market && (
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-[var(--muted)]">{t("Latest round")}</dt>
+                  <dd className="tnum truncate text-xs">{market.roundId}</dd>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-[var(--muted)]">{t("Feed status")}</dt>
+                <dd className={`tnum text-xs ${market?.stale ? "text-[var(--muted)]" : "text-[var(--color-up)]"}`}>
+                  {market ? (market.stale ? "cold — missed a session" : `live · ${ago(market.updatedAt)}`) : "—"}
+                </dd>
+              </div>
+            </dl>
+            <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
+              One token is not permanently one share: splits and dividends adjust a multiplier,
+              which is applied to every share count shown.
+            </p>
+          </details>
         </div>
       </div>
 
@@ -174,10 +182,10 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
 
 function Stat({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
-    <div className="bg-[var(--bg)] p-5">
-      <div className="eyebrow">{label}</div>
-      <div className="tnum mt-2 text-xl font-medium">{value}</div>
-      <div className="mt-1 text-[11px] text-[var(--muted)]">{sub}</div>
+    <div className="bg-[var(--bg)] px-3 py-2.5 sm:p-4">
+      <div className="eyebrow truncate">{label}</div>
+      <div className="tnum mt-1 text-[15px] font-medium sm:text-lg">{value}</div>
+      <div className="mt-0.5 truncate text-[10.5px] text-[var(--muted)]">{sub}</div>
     </div>
   );
 }

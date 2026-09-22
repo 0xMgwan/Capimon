@@ -231,6 +231,20 @@ export async function migrate() {
           created_at   timestamptz not null default now()
         )`;
 
+      /*
+       * The last good price history per DSE security.
+       *
+       * The exchange's server goes down from time to time, and every chart
+       * went blank with it. Each successful fetch is kept here and served when
+       * the exchange cannot be reached, marked with when it was fetched.
+       */
+      await sql`
+        create table if not exists capx.price_history_cache (
+          symbol     text primary key,
+          candles    jsonb not null,
+          fetched_at timestamptz not null default now()
+        )`;
+
       // Reference prices, each with where it came from and when. A price with
       // no provenance is a number somebody typed, and settlement decides what a
       // share is worth (Rule 7).

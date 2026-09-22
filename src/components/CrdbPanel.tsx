@@ -39,7 +39,11 @@ const PRESETS = [5_000, 20_000, 50_000, 100_000];
 const fmtQty = (n: number) =>
   n.toLocaleString("en-US", { maximumFractionDigits: 8 });
 
-export function CrdbPanel({ symbol = "CRDB" }: { symbol?: string }) {
+export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
+  symbol?: string;
+  /** Off on the security's own page, whose header already names it and prices it. */
+  showHeader?: boolean;
+}) {
   const { t } = useT();
   const { account, refresh } = useCapimonAccount();
   const [data, setData] = useState<{ market: Market; dse: Dse } | null>(null);
@@ -157,8 +161,8 @@ export function CrdbPanel({ symbol = "CRDB" }: { symbol?: string }) {
   }
 
   return (
-    <div className="rounded-3xl border hairline p-5 sm:p-6">
-      <div className="flex items-center gap-3">
+    <div className="rounded-2xl border hairline p-3.5 sm:rounded-3xl sm:p-6">
+      {showHeader && <div className="mb-3 flex items-center gap-3">
         <DseLogo logo={m?.logo ?? (symbol === "CRDB" ? "/crdb.jpg" : null)} symbol={symbol} size={40} />
         <div className="min-w-0">
           <div className="text-lg font-medium leading-tight">{m?.name ?? symbol}</div>
@@ -170,7 +174,7 @@ export function CrdbPanel({ symbol = "CRDB" }: { symbol?: string }) {
             <NtzsIcon className="h-3 w-3" /> {t("TZS a share")}
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Both prices, because the gap between them is the thing worth seeing:
           the oracle is what a trade settles at, the exchange is where it came

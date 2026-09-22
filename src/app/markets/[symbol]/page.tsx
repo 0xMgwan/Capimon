@@ -47,11 +47,11 @@ export default async function AssetPage({ params }: { params: Promise<{ symbol: 
     const d = await dseSecurity(symbol).catch(() => null);
     if (!d || d.status === "draft") notFound();
     return (
-      <main className="mx-auto w-full max-w-3xl px-4 pb-24 pt-8 sm:px-6 sm:pt-12">
+      <main className="mx-auto w-full max-w-3xl px-4 pb-24 pt-3 sm:px-6 sm:pt-10">
         <CrdbIntro symbol={d.symbol} name={d.name} />
         <CrdbChart symbol={d.symbol} />
-        <div className="mt-6" />
-        <CrdbPanel symbol={d.symbol} />
+        <div className="mt-3" />
+        <CrdbPanel symbol={d.symbol} showHeader={false} />
       </main>
     );
   }

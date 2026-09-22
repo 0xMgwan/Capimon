@@ -267,7 +267,7 @@ export function ProductsSection() {
         <div className="grid gap-4">
           <Reveal delay={0.08}>
             <SideCard
-              title={t("CAPX Vault")}
+              title={t("Capital In Motion")}
               tag="Self-custody"
               body={t("Your assets, your wallet. We give you access to global capital markets.")}
               stat={<Counter value={equities} format={(n) => `${Math.round(n)} assets`} />}

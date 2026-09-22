@@ -275,7 +275,10 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
         )}
         {data.securities.map((s) => {
           const b = s.backing;
-          const under = b.ratioPct !== null && b.ratioPct < 100;
+          const owed = b.clientHeld ?? 0;
+          const under = s.kind === "external"
+            ? b.underlying < owed
+            : b.ratioPct !== null && b.ratioPct < 100;
           return (
             <div key={s.symbol} className={`rounded-3xl border p-5 ${
               under ? "border-[var(--color-down)]/50 bg-[var(--color-down)]/[0.05]" : "hairline"}`}>
@@ -300,8 +303,10 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
                     </button>
                   </span>
                 </div>
-                <div className={`tnum text-2xl font-medium ${under ? "text-[var(--color-down)]" : "text-[var(--color-up)]"}`}>
-                  {b.ratioPct === null ? "—" : `${b.ratioPct.toFixed(2)}%`}
+                <div className={`text-2xl font-medium ${under ? "text-[var(--color-down)]" : "text-[var(--color-up)]"}`}>
+                  {s.kind === "external"
+                    ? (b.underlying >= owed ? "Covered" : `Short ${(owed - b.underlying).toLocaleString()}`)
+                    : b.ratioPct === null ? "—" : <span className="tnum">{b.ratioPct.toFixed(2)}%</span>}
                 </div>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-5">

@@ -55,7 +55,9 @@ export function CrdbIntro({ symbol = "CRDB", name = "CRDB Bank Plc" }: { symbol?
             {d && d.price > 0 ? d.price.toLocaleString("en-TZ", { maximumFractionDigits: 0 }) : "—"}
             <span className="ml-1 text-[11px] font-normal text-[var(--muted)]">TZS</span>
           </div>
-          {d && d.price > 0 && (fallback ? (
+          {d && d.price > 0 && (external ? (
+            <div className="mt-1 text-[12px] text-[var(--muted)]">{t("Set by CAPX")}{when ? ` · ${when}` : ""}</div>
+          ) : fallback ? (
             <div className="tnum mt-1 text-[12px] text-[#b45309]">{t("Last price")}{when ? ` · ${when}` : ""}</div>
           ) : (
             <div className={`tnum mt-1 text-[12px] ${up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
@@ -66,7 +68,7 @@ export function CrdbIntro({ symbol = "CRDB", name = "CRDB Bank Plc" }: { symbol?
       </div>
       <p className="mt-2 line-clamp-2 max-w-xl text-[13.5px] leading-snug text-[var(--muted)] sm:text-sm">
         {external
-          ? t("An offer tokenised by {issuer}. CAPX buys the token, holds it, and prices it in shillings; your balance is a claim on what CAPX holds.")
+          ? t("Tokenised by {issuer}. CAPX buys and holds the token, and prices it in shillings.")
               .replace("{issuer}", d?.issuer ?? t("its issuer"))
           : symbol === "CRDB"
             ? t("Tanzania’s largest bank by assets, listed on the Dar es Salaam Stock Exchange. One CRDBt is one share, held in custody and settled in shillings.")

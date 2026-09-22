@@ -211,12 +211,13 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
         * offering a Sell tab that always refuses would be worse than saying
         * plainly that selling opens later.
         */}
-      {m?.buyOnly ? (
+      {/* The page header carries this notice already; two of them is nagging. */}
+      {m?.buyOnly ? (showHeader ? (
         <p className="mt-4 rounded-xl border border-[#b45309]/35 bg-[#b45309]/[0.06] px-3 py-2 text-[12px] leading-snug text-[var(--muted)]">
           <span className="font-medium text-[var(--fg)]">{t("Buying only for now.")}</span>{" "}
           {t("Selling opens when the offer closes and allocation completes.")}
         </p>
-      ) : (
+      ) : null) : (
       <div className="mt-5 grid grid-cols-2 gap-1 rounded-full surface p-1">
         {(["buy", "sell"] as const).map((s) => (
           <button

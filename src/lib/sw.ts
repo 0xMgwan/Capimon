@@ -514,4 +514,9 @@ export const SW: Record<string, string> = {
   "Selling opens when the offer closes and allocation completes. The price is set by CAPX, not by an exchange.": "Kuuza kutafunguliwa ofa itakapofungwa na mgawo kukamilika. Bei inapangwa na CAPX, si soko la hisa.",
   "CAPX sets this price. A chart builds from each price CAPX publishes.": "CAPX inapanga bei hii. Chati inajengwa kutoka kila bei CAPX inayochapisha.",
   "The chart fills in day by day as CAPX republishes it.": "Chati itajaa siku baada ya siku CAPX inapochapisha upya.",
+  "Cover": "Ufunikaji",
+  "Covered": "Imefunikwa",
+  "Short": "Pungufu",
+  "Set by CAPX": "Imewekwa na CAPX",
+  "Tokenised by {issuer}. CAPX buys and holds the token, and prices it in shillings.": "Imetokenishwa na {issuer}. CAPX inanunua na kushikilia tokeni, na kuipanga bei kwa shilingi.",
 };

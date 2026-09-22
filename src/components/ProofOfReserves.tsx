@@ -87,7 +87,9 @@ export function ProofOfReserves() {
             const b = s.backing;
             // Under-covered is the only state worth shouting about; a ratio
             // above 100% is a surplus, which is fine.
-            const under = b.ratioPct !== null && b.ratioPct < 100;
+            const under = s.kind === "external"
+              ? b.underlying < b.clientHeld
+              : b.ratioPct !== null && b.ratioPct < 100;
             return (
               <div
                 key={s.symbol}
@@ -109,11 +111,23 @@ export function ProofOfReserves() {
                     <p className="mt-1 break-words text-sm text-[var(--muted)]">{s.name}</p>
                   </div>
                   <div className="sm:text-right">
-                    <div className="eyebrow">Backing</div>
-                    <div className={`tnum text-3xl font-medium ${
+                    <div className="eyebrow">{s.kind === "external" ? t("Cover") : "Backing"}</div>
+                    {/*
+                      * An external listing is covered or it is not.
+                      *
+                      * Held divided by owed reads "1,144% backed" when CAPX
+                      * holds five tokens against half a token of claims,
+                      * which is noise. What a reader needs is whether every
+                      * claim is covered, and by how much if it is not.
+                      */}
+                    <div className={`text-3xl font-medium ${
                       under ? "text-[var(--color-down)]" : "text-[var(--color-up)]"
                     }`}>
-                      {b.ratioPct === null ? "—" : `${b.ratioPct.toFixed(2)}%`}
+                      {s.kind === "external"
+                        ? (b.underlying >= b.clientHeld
+                            ? t("Covered")
+                            : `${t("Short")} ${(b.clientHeld - b.underlying).toLocaleString()}`)
+                        : b.ratioPct === null ? "—" : <span className="tnum">{b.ratioPct.toFixed(2)}%</span>}
                     </div>
                   </div>
                 </div>

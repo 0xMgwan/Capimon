@@ -108,12 +108,14 @@ export async function currentUser(): Promise<SessionUser | null> {
  * withdraw unverified. This is the check every such route now makes, in one
  * place so the next route cannot quietly omit it.
  *
- * Selling is deliberately not gated. A holder reducing a position is lowering
- * everyone's exposure, and refusing it would trap the assets of someone whose
- * verification lapsed or was rejected after they bought. Everything that adds
- * exposure or takes money out requires an approved verification.
+ * Two actions are deliberately not gated. Selling, because a holder reducing
+ * a position lowers everyone's exposure and refusing it would trap the assets
+ * of someone whose verification lapsed after they bought. And funding, because
+ * a customer can top up while their verification is reviewed — their shillings
+ * sit in their balance, and the first thing they cannot do with them is buy.
+ * Buying and taking money out both need an approved verification.
  */
-export type GatedAction = "buy" | "deposit" | "withdraw";
+export type GatedAction = "buy" | "withdraw";
 
 export function kycRefusal(
   user: { kycStatus?: string | null } | null,
@@ -122,9 +124,7 @@ export function kycRefusal(
   const status = user?.kycStatus ?? "none";
   if (status === "approved") return null;
 
-  const what = action === "buy" ? "buy shares"
-    : action === "deposit" ? "add money"
-    : "withdraw";
+  const what = action === "buy" ? "buy shares" : "withdraw";
   const reason = status === "pending"
     ? `Your verification is still being reviewed. You can ${what} as soon as it is approved.`
     : status === "rejected"

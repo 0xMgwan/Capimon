@@ -157,11 +157,6 @@ export function CustodialPortfolio() {
         ) : null}
       />
 
-      <p className="mt-4 text-[11px] leading-relaxed text-[var(--muted)]">
-        CAPX holds these assets on your behalf and this ledger records what you are owed. Prefer
-        to hold your own keys? <Link href="/markets" className="underline underline-offset-2">Connect a wallet</Link> and
-        CAPX holds nothing.
-      </p>
     </div>
   );
 }

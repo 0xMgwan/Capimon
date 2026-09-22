@@ -135,7 +135,7 @@ export function Hero() {
               {/* Three lines said what one does. A hero is a claim, not a
                   summary — the detail has a whole page of its own. */}
               <p className="max-w-md text-[15px] leading-snug text-[var(--muted)] sm:text-lg">
-                {t("Tanzanian shares in shillings, settled the same day. US shares from the same account.")}
+                {t("Invest locally and globally. Buy and sell tokenized stocks 24/7.")}
               </p>
 
               {/* Phones: one line of links — the ticket below is the call to action. */}

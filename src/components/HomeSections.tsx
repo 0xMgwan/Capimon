@@ -80,7 +80,7 @@ export function DseSection() {
             <div className="eyebrow">{t("Dar es Salaam Stock Exchange")}</div>
             <h2 className="display mt-3 text-[clamp(1.6rem,4.2vw,3.2rem)]">
               {t("Tanzanian shares,")}{" "}
-              <span className="contra text-[var(--muted)]">{t("in shillings, same day.")}</span>
+              <span className="contra text-[var(--muted)]">{t("traded 24/7, payout instant.")}</span>
             </h2>
           </div>
           <div className="flex flex-wrap gap-2 text-[12px]">
@@ -200,14 +200,14 @@ export function ProductsSection() {
       <Reveal>
         <div className="eyebrow">{t("And beyond the DSE")}</div>
         <h2 className="display mt-4 max-w-4xl text-[clamp(1.8rem,5.4vw,4.6rem)]">
-          <RevealWords text={t("The world's companies,")} />
+          <RevealWords text={t("Buy and sell leading US stocks,")} />
           <br />
           <span className="contra text-[var(--muted)]">
-            <RevealWords text={t("from the same account.")} delay={0.1} />
+            <RevealWords text={t("directly from your account.")} delay={0.1} />
           </span>
         </h2>
         <p className="mt-6 max-w-lg text-lg text-[var(--muted)]">
-          {t("The same shillings buy US equities too, priced by Chainlink and settled onchain.")}
+          {t("Expand your investment portfolio, invest in global companies in seconds.")}
         </p>
       </Reveal>
 
@@ -226,8 +226,7 @@ export function ProductsSection() {
                   {t("US equities")}
                 </h3>
                 <p className="mt-3 text-[17px] leading-relaxed text-[var(--muted)]">
-                  Public companies as B20 tokens. Freely transferable, composable in DeFi,
-                  and marked continuously by Chainlink total-return feeds.
+                  {t("Own shares in leading US companies directly from your account.")}
                 </p>
                 <span className="mt-4 inline-block rounded-full surface px-3 py-1 text-[11px] text-[var(--muted)]">
                   {t("Not available to US persons")}
@@ -268,9 +267,9 @@ export function ProductsSection() {
         <div className="grid gap-4">
           <Reveal delay={0.08}>
             <SideCard
-              title={t("CAPX Vault")}
+              title={t("Capital In Motion")}
               tag="Self-custody"
-              body="Your positions live in your own wallet. CAPX reads the chain directly, so every balance on the portfolio page is an onchain read rather than our ledger."
+              body={t("Your assets, your wallet. We give you access to global capital markets.")}
               stat={<Counter value={equities} format={(n) => `${Math.round(n)} assets`} />}
               statLabel="Tracked live"
               href="/portfolio"
@@ -281,7 +280,7 @@ export function ProductsSection() {
             <SideCard
               title={t("CAPX Feeds")}
               tag="Oracle"
-              body="Total-return Chainlink feeds, running 24/5 and freezing through corporate actions. Every chart on this site is drawn from onchain rounds."
+              body={t("Live prices from Chainlink, updated around the clock. Every price you see comes directly from the blockchain.")}
               stat={<span className="tnum">8 dp</span>}
               statLabel="Feed precision"
               href="/how-it-works"

@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { useState } from "react";
 import { passwordProblem } from "@/lib/passwordRule";
+import { useT } from "@/lib/i18n";
 import { IdCapture, type Captured } from "./IdCapture";
 
 /** The documents a Tanzanian account can be opened against. */
@@ -65,6 +66,7 @@ export function AccountForm({
   const [ids, setIds] = useState<Captured>({ doc: null, selfie: null, docKind: "image" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useT();
 
   const submit = async () => {
     setBusy(true); setError(null);
@@ -75,7 +77,7 @@ export function AccountForm({
         body: JSON.stringify(mode === "signup" ? { ...form, docType, acceptedTerms: agreed } : form),
       });
       const j = await r.json();
-      if (!j.ok) throw new Error(j.error ?? "Could not continue");
+      if (!j.ok) throw new Error(j.error ?? t("Could not continue"));
 
       /*
        * Filed straight after, on the session the registration just opened.
@@ -100,7 +102,7 @@ export function AccountForm({
 
       await onDone();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      setError(e instanceof Error ? e.message : t("Something went wrong"));
     } finally {
       setBusy(false);
     }
@@ -144,7 +146,7 @@ export function AccountForm({
                 : "text-[var(--color-up)]"
               : "text-[var(--muted)]"
           }`}>
-            {key === "password" && form.password && !passwordProblem(form.password) ? "Password looks good" : hint}
+            {key === "password" && form.password && !passwordProblem(form.password) ? t("Password looks good") : hint}
           </span>
         )}
       </label>
@@ -162,30 +164,30 @@ export function AccountForm({
               mode === m ? "bg-[var(--bg)] shadow-sm" : "text-[var(--muted)]"
             }`}
           >
-            {m === "signup" ? "New account" : "Sign in"}
+            {m === "signup" ? t("New account") : t("Sign in")}
           </button>
         ))}
       </div>
 
       <div className={`grid gap-2.5 ${compact ? "mt-4" : ""}`}>
         {mode === "signup"
-          ? field("email", "Email", { type: "email", autoComplete: "email", placeholder: "you@example.com" })
-          : field("email", "Email or username", { autoComplete: "username", placeholder: "you@example.com or @handle" })}
-        {field("password", "Password", {
+          ? field("email", t("Email"), { type: "email", autoComplete: "email", placeholder: "you@example.com" })
+          : field("email", t("Email or username"), { autoComplete: "username", placeholder: "you@example.com or @handle" })}
+        {field("password", t("Password"), {
           type: "password",
           autoComplete: mode === "signup" ? "new-password" : "current-password",
-          hint: mode === "signup" ? "10+ characters, letters and numbers" : undefined,
+          hint: mode === "signup" ? t("10+ characters, letters and numbers") : undefined,
         })}
         {mode === "signup" && (
           <>
-            {field("username", "Username", {
-              autoComplete: "username", placeholder: "optional",
-              hint: "3–20 letters, numbers or _",
+            {field("username", t("Username"), {
+              autoComplete: "username", placeholder: t("optional"),
+              hint: t("3–20 letters, numbers or _"),
             })}
-            {field("name", "Full name", { autoComplete: "name", placeholder: "As on your NIDA" })}
-            {field("phone", "Mobile money number", { inputMode: "numeric", placeholder: "255712345678" })}
+            {field("name", t("Full name"), { autoComplete: "name", placeholder: t("As on your NIDA") })}
+            {field("phone", t("Mobile money number"), { inputMode: "numeric", placeholder: "255712345678" })}
             <div>
-              <span className="eyebrow">Identity document</span>
+              <span className="eyebrow">{t("Identity document")}</span>
               <div className="mt-1.5 grid grid-cols-2 gap-1.5">
                 {DOCS.map((d) => (
                   <button
@@ -195,14 +197,14 @@ export function AccountForm({
                       docType === d.id ? "border-[var(--fg)] bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"
                     }`}
                   >
-                    {d.label}
+                    {t(d.label)}
                   </button>
                 ))}
               </div>
             </div>
-            {field("nidaNumber", DOCS.find((d) => d.id === docType)!.field, {
+            {field("nidaNumber", t(DOCS.find((d) => d.id === docType)!.field), {
               inputMode: docType === "nida" ? "numeric" : "text",
-              placeholder: DOCS.find((d) => d.id === docType)!.ph,
+              placeholder: t(DOCS.find((d) => d.id === docType)!.ph),
               hint: docType === "nida"
                 ? `${form.nidaNumber.replace(/\D/g, "").length}/20`
                 : undefined,
@@ -216,8 +218,8 @@ export function AccountForm({
           <IdCapture onChange={setIds} compact={compact} />
           <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
             {ids.doc && ids.selfie
-              ? "Both photos attached. They go to verification as soon as your account is open."
-              : "Needed to verify the account. You can add them later, but you will not be able to trade until they are checked."}
+              ? t("Both photos attached. They go to verification as soon as your account is open.")
+              : t("Needed to verify the account. You can add them later, but you will not be able to trade until they are checked.")}
           </p>
         </div>
       )}
@@ -231,15 +233,15 @@ export function AccountForm({
             className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-[var(--fg)]"
           />
           <span className="text-[12px] leading-snug text-[var(--muted)]">
-            I have read and agree to the{" "}
+            {t("I have read and agree to the")}{" "}
             <Link href="/terms" target="_blank" className="underline underline-offset-2 hover:text-[var(--fg)]">
-              terms of service
+              {t("terms of service")}
             </Link>{" "}
-            and{" "}
+            {t("and")}{" "}
             <Link href="/privacy" target="_blank" className="underline underline-offset-2 hover:text-[var(--fg)]">
-              privacy policy
+              {t("privacy policy")}
             </Link>
-            , and I am not a United States person.
+            {t(", and I am not a United States person.")}
           </span>
         </label>
       )}
@@ -249,7 +251,7 @@ export function AccountForm({
         disabled={busy || !form.email || !form.password || (mode === "signup" && !agreed)}
         className="mt-4 w-full rounded-full bg-[var(--fg)] py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
       >
-        {busy ? "Working…" : submitLabel ?? (mode === "signup" ? "Create account" : "Sign in")}
+        {busy ? t("Working…") : submitLabel ?? (mode === "signup" ? t("Create account") : t("Sign in"))}
       </button>
 
       {error && <p className="mt-3 text-xs leading-snug text-[var(--color-down)]">{error}</p>}

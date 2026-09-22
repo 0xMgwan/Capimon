@@ -25,7 +25,7 @@ export const SW: Record<string, string> = {
 
   // --- hero and landing ---
   "Own the open": "Miliki soko",
-  "market.": "huria.",
+  "market.": "Dunia.",
   "US shares in dollars. Tanzanian shares in shillings. Settled against custody published on Base.":
     "Hisa za Marekani kwa dola. Hisa za Tanzania kwa shilingi. Hulipwa dhidi ya dhamana iliyochapishwa kwenye Base.",
   "Explore markets": "Tazama masoko",

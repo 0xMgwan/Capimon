@@ -8,6 +8,7 @@ import { TickerTape } from "@/components/TickerTape";
 import { DseTape } from "@/components/DseTape";
 import { MobileTabs } from "@/components/MobileTabs";
 import { ThemeColor } from "@/components/ThemeColor";
+import { AppLaunch } from "@/components/AppLaunch";
 import { Haptics } from "@/components/Haptics";
 
 /*
@@ -120,6 +121,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <MobileTabs />
           <Haptics />
           <ThemeColor />
+          <AppLaunch />
         </Providers>
       </body>
     </html>

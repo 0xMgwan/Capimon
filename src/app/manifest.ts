@@ -6,7 +6,7 @@ import type { MetadataRoute } from "next";
  * Without a manifest, iOS guessed the app's extent from whatever page it was
  * added from — add it from /markets and every other page counted as leaving
  * the app, so it opened in a browser sheet with an X and a toolbar. Declaring
- * the whole site as the scope, and the home page as the start, makes every
+ * the whole site as the scope, and Markets as the start, makes every
  * page part of one standalone app however it was added.
  *
  * Paths are relative, so the app belongs to whichever origin it was installed
@@ -19,7 +19,8 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "CAPX · Capital in Motion",
     short_name: "CAPX",
     description: "Tanzanian and US shares, in shillings.",
-    start_url: "/",
+    // The app opens on the markets, where people act; the landing page is for visitors.
+    start_url: "/markets",
     scope: "/",
     display: "standalone",
     orientation: "portrait",

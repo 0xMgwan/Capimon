@@ -11,8 +11,14 @@ import { useT } from "@/lib/i18n";
 
 type SortKey = "ticker" | "price" | "change" | "tvl" | "supply";
 
-export function MarketTable({ limit, showSearch = true, onQuery }: {
+export function MarketTable({ limit, showSearch = true, onQuery, toolbar, between, hideRows = false }: {
   limit?: number; showSearch?: boolean;
+  /** Controls placed beside the search box, such as a market filter. */
+  toolbar?: React.ReactNode;
+  /** Rendered between the search and the rows — the DSE listings, on Markets. */
+  between?: React.ReactNode;
+  /** Keep the search but hide the US rows, when the filter is on Tanzania. */
+  hideRows?: boolean;
   /**
    * Reports what is being searched for.
    *
@@ -58,8 +64,8 @@ export function MarketTable({ limit, showSearch = true, onQuery }: {
   return (
     <div>
       {showSearch && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="relative w-full max-w-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2.5">
+          <div className="relative w-full sm:max-w-sm">
             <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" fill="none" stroke="currentColor" strokeWidth="1.8">
               <circle cx="11" cy="11" r="7" /><path d="m20 20-3.6-3.6" strokeLinecap="round" />
             </svg>
@@ -67,18 +73,22 @@ export function MarketTable({ limit, showSearch = true, onQuery }: {
               value={q}
               onChange={(e) => { setQ(e.target.value); onQuery?.(e.target.value); }}
               placeholder={t("Search ticker, company or sector")}
-              className="w-full rounded-full border hairline bg-transparent py-2.5 pl-10 pr-4 text-sm outline-none transition-colors placeholder:text-[var(--muted)] focus:border-[var(--color-accent)]"
+              className="w-full rounded-full border hairline bg-transparent py-2 pl-10 pr-4 text-sm outline-none transition-colors placeholder:text-[var(--muted)] focus:border-[var(--color-accent)]"
             />
           </div>
-          <div className="tnum text-xs text-[var(--muted)]">
+          {toolbar}
+          <div className="tnum hidden text-xs text-[var(--muted)] sm:block">
             {error ? <span className="text-[var(--color-down)]">{error}</span>
               : data ? `${rows.length} markets · updated ${ago(data.asOf)}` : "connecting to Base…"}
           </div>
         </div>
       )}
 
+      {between}
+
+      {!hideRows && <>
       {/* Phones get cards; the table needs more width than a phone has. */}
-      <div className="grid grid-cols-1 gap-2 md:hidden">
+      <div className="grid grid-cols-1 gap-1.5 md:hidden">
         {loading && !rows.length &&
           Array.from({ length: limit ?? 6 }).map((_, i) => (
             <div key={i} className="h-[68px] animate-pulse rounded-2xl surface" />
@@ -91,7 +101,7 @@ export function MarketTable({ limit, showSearch = true, onQuery }: {
             <Link
               key={m.symbol}
               href={`/markets/${m.ticker.toLowerCase()}`}
-              className="block min-w-0 rounded-2xl border hairline px-3.5 py-3 transition-colors active:surface"
+              className="block min-w-0 rounded-2xl border hairline px-3 py-2.5 transition-colors active:surface"
             >
               {/*
                 Price and move lead; the logo and company name support them.
@@ -210,6 +220,7 @@ export function MarketTable({ limit, showSearch = true, onQuery }: {
           </tbody>
         </table>
       </div>
+      </>}
     </div>
   );
 }

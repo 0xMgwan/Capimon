@@ -1,4 +1,6 @@
 import { ImageResponse } from "next/og";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 
 export const runtime = "nodejs";
 export const alt = "CAPX · Tanzanian and US shares, in shillings";
@@ -12,7 +14,30 @@ const BRAND = "#6247F5";
  * crawlers with no wallet and no patience for an RPC round trip, so nothing
  * here depends on live market data.
  */
-export default function OpengraphImage() {
+/**
+ * Company logos, read from the site's own files as data URIs.
+ *
+ * Kept in public/og as PNG and JPEG because the renderer cannot decode WebP
+ * (the format uploaded logos are stored in), and bundled rather than fetched
+ * so a slow logo server can never break every link preview.
+ */
+async function logo(file: string) {
+  try {
+    const buf = await readFile(path.join(process.cwd(), "public", "og", file));
+    return `data:image/${file.endsWith(".jpg") ? "jpeg" : "png"};base64,${buf.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
+export default async function OpengraphImage() {
+  const [crdb, nmb, aapl, nvda, tsla] = await Promise.all(
+    ["crdb.jpg", "nmb.png", "aapl.png", "nvda.png", "tsla.png"].map(logo),
+  );
+  const markets = [
+    { flag: "Dar es Salaam", unit: "in shillings", names: [["CRDB", crdb], ["NMB", nmb]] },
+    { flag: "United States", unit: "and more", names: [["AAPL", aapl], ["NVDA", nvda], ["TSLA", tsla]] },
+  ] as const;
   return new ImageResponse(
     (
       <div
@@ -46,7 +71,7 @@ export default function OpengraphImage() {
         </div>
 
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 40 }}>
-          <div style={{ display: "flex", flexDirection: "column", maxWidth: 600 }}>
+          <div style={{ display: "flex", flexDirection: "column", maxWidth: 560 }}>
             <div style={{ fontSize: 66, fontWeight: 700, letterSpacing: -3, color: "#0a0a0b", lineHeight: 1.02, display: "flex", flexDirection: "column" }}>
               <span>Tanzanian &amp; US</span>
               <span>shares,</span>
@@ -58,26 +83,36 @@ export default function OpengraphImage() {
           </div>
 
           {/* The two markets, as the product shows them. */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, width: 450 }}>
-            {[
-              { flag: "Dar es Salaam", tickers: ["CRDB", "NMB"], unit: "in shillings", tint: "#0B7D3E" },
-              { flag: "United States", tickers: ["AAPL", "NVDA", "TSLA"], unit: "+ more", tint: BRAND },
-            ].map((m) => (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, width: 500 }}>
+            {markets.map((m) => (
               <div key={m.flag} style={{
-                display: "flex", flexDirection: "column", borderRadius: 28, padding: "22px 26px",
+                display: "flex", flexDirection: "column", borderRadius: 28, padding: "20px 24px",
                 background: "#ffffff", border: "2px solid #ececec", boxShadow: "0 12px 30px rgba(0,0,0,0.06)",
               }}>
-                <div style={{ display: "flex", fontSize: 20, letterSpacing: 3, color: "#8a8a8a", textTransform: "uppercase" }}>
-                  {m.flag}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <div style={{ display: "flex", fontSize: 19, letterSpacing: 3, color: "#8a8a8a", textTransform: "uppercase" }}>
+                    {m.flag}
+                  </div>
+                  <div style={{ display: "flex", fontSize: 19, color: "#8a8a8a" }}>{m.unit}</div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
-                  {m.tickers.map((t) => (
+                  {m.names.map(([t, src]) => (
                     <div key={t} style={{
-                      display: "flex", flexShrink: 0, fontSize: 26, fontWeight: 700, color: "#fff", background: m.tint,
-                      borderRadius: 999, padding: "6px 18px",
-                    }}>{t}</div>
+                      display: "flex", alignItems: "center", gap: 9, flexShrink: 0, fontSize: 24, fontWeight: 700,
+                      color: "#0a0a0b", background: "#f4f4f2", borderRadius: 999, padding: "5px 16px 5px 5px",
+                    }}>
+                      {src ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={src} width={40} height={40} alt=""
+                          style={{ width: 40, height: 40, borderRadius: 999, background: "#fff",
+                            // A wide wordmark (CRDB's) is fitted, not cropped to its middle.
+                            objectFit: t === "CRDB" ? "contain" : "cover" }} />
+                      ) : (
+                        <div style={{ display: "flex", width: 40, height: 40, borderRadius: 999, background: "#0B7D3E" }} />
+                      )}
+                      {t}
+                    </div>
                   ))}
-                  <div style={{ display: "flex", flexShrink: 0, fontSize: 22, color: "#8a8a8a", marginLeft: 6 }}>{m.unit}</div>
                 </div>
               </div>
             ))}

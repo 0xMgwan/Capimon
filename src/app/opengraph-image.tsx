@@ -102,7 +102,7 @@ export default async function OpengraphImage() {
                       color: "#0a0a0b", background: "#f4f4f2", borderRadius: 999, padding: "5px 16px 5px 5px",
                     }}>
                       {src ? (
-                        // eslint-disable-next-line @next/next/no-img-element
+                         
                         <img src={src} width={40} height={40} alt=""
                           style={{ width: 40, height: 40, borderRadius: 999, background: "#fff",
                             // A wide wordmark (CRDB's) is fitted, not cropped to its middle.

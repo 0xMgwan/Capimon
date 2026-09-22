@@ -80,7 +80,7 @@ export function DseSection() {
             <div className="eyebrow">{t("Dar es Salaam Stock Exchange")}</div>
             <h2 className="display mt-3 text-[clamp(1.6rem,4.2vw,3.2rem)]">
               {t("Tanzanian shares,")}{" "}
-              <span className="contra text-[var(--muted)]">{t("in shillings, same day.")}</span>
+              <span className="contra text-[var(--muted)]">{t("traded 24/7, payout instant.")}</span>
             </h2>
           </div>
           <div className="flex flex-wrap gap-2 text-[12px]">

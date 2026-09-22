@@ -352,7 +352,7 @@ export const SW: Record<string, string> = {
   "Your shillings,": "Shilingi zako,",
   "at work on the DSE.": "zikifanya kazi DSE.",
   "from the same account.": "kutoka akaunti hiyo hiyo.",
-  "in shillings, same day.": "kwa shilingi, siku hiyo hiyo.",
+  "traded 24/7, payout instant.": "zinauzwa saa 24/7, malipo papo hapo.",
   "today": "leo",
   "fee": "ada",
   "settles same day in nTZS": "inakamilika siku hiyo hiyo kwa nTZS",

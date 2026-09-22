@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "nodejs";
-export const alt = "CAPX · Capital in Motion";
+export const alt = "CAPX · Tanzanian and US shares, in shillings";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -45,19 +45,51 @@ export default function OpengraphImage() {
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ fontSize: 82, fontWeight: 600, letterSpacing: -4, color: "#0a0a0b", lineHeight: 1.02 }}>
-            Own the open market.
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 40 }}>
+          <div style={{ display: "flex", flexDirection: "column", maxWidth: 600 }}>
+            <div style={{ fontSize: 66, fontWeight: 700, letterSpacing: -3, color: "#0a0a0b", lineHeight: 1.02, display: "flex", flexDirection: "column" }}>
+              <span>Tanzanian &amp; US</span>
+              <span>shares,</span>
+              <span style={{ color: "#6b6b6b", fontStyle: "italic", fontWeight: 500 }}>in shillings.</span>
+            </div>
+            <div style={{ fontSize: 26, color: "#555", marginTop: 20, lineHeight: 1.35, display: "flex" }}>
+              Buy from mobile money or your bank, from TSh 2,000. Settled the same day.
+            </div>
           </div>
-          <div style={{ fontSize: 30, color: "#6b6b6b", marginTop: 22, maxWidth: 900, lineHeight: 1.35 }}>
-            Public equities onchain as B20 tokens on Base. Live Chainlink marks, real onchain
-            supply, self-custody.
+
+          {/* The two markets, as the product shows them. */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, width: 450 }}>
+            {[
+              { flag: "Dar es Salaam", tickers: ["CRDB", "NMB"], unit: "in shillings", tint: "#0B7D3E" },
+              { flag: "United States", tickers: ["AAPL", "NVDA", "TSLA"], unit: "+ more", tint: BRAND },
+            ].map((m) => (
+              <div key={m.flag} style={{
+                display: "flex", flexDirection: "column", borderRadius: 28, padding: "22px 26px",
+                background: "#ffffff", border: "2px solid #ececec", boxShadow: "0 12px 30px rgba(0,0,0,0.06)",
+              }}>
+                <div style={{ display: "flex", fontSize: 20, letterSpacing: 3, color: "#8a8a8a", textTransform: "uppercase" }}>
+                  {m.flag}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
+                  {m.tickers.map((t) => (
+                    <div key={t} style={{
+                      display: "flex", flexShrink: 0, fontSize: 26, fontWeight: 700, color: "#fff", background: m.tint,
+                      borderRadius: 999, padding: "6px 18px",
+                    }}>{t}</div>
+                  ))}
+                  <div style={{ display: "flex", flexShrink: 0, fontSize: 22, color: "#8a8a8a", marginLeft: 6 }}>{m.unit}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 14, fontSize: 24, color: "#6b6b6b" }}>
-          <div style={{ width: 10, height: 10, borderRadius: 999, background: "#12a150", display: "flex" }} />
-          <div style={{ display: "flex" }}>DSE shares in shillings · settled same day · US equities too</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 24, color: "#6b6b6b" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div style={{ width: 10, height: 10, borderRadius: 999, background: "#12a150", display: "flex" }} />
+            <div style={{ display: "flex" }}>One account · 1% fee · no minimum</div>
+          </div>
+          <div style={{ display: "flex", fontWeight: 600, color: "#0a0a0b" }}>capx.broker</div>
         </div>
       </div>
     ),

@@ -47,7 +47,7 @@ type Issuance = { id: string; security: string; kind: string; quantity: number; 
 
 /** What each desk action tells the operator when it succeeds. */
 const DONE: Record<string, string> = {
-  "attest": "Attestation filed. It now waits for CAPX approval.",
+  "attest": "Filed. It now waits for CAPX to approve and tokenise it.",
   "approve-attestation": "Attestation approved. Publish it on-chain to open headroom.",
   "reject-attestation": "Attestation rejected.",
   "request-issuance": "Mint requested. It now waits for CAPX approval.",
@@ -150,15 +150,52 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
   };
   const [editing, setEditing] = useState<Security | null>(null);
 
+  /*
+   * Approve & tokenise: the whole of CAPX's side of a filing in one press.
+   *
+   * Approving, publishing to the registry and minting were three buttons in
+   * three places, and FIMCO's filing is already the evidence all three rest
+   * on. The mint is the gap between what the filing locks and what exists
+   * on-chain, read from the chain at the moment of minting — so a top-up
+   * filing of 1,100 against 100 in circulation mints exactly 1,000, and a
+   * filing that adds nothing mints nothing.
+   */
+  const tokenise = (a: Attestation) => sign(`Tokenise ${a.security}`, async () => {
+    const sec = data?.securities.find((x) => x.symbol === a.security);
+    const token = sec?.token_address as `0x${string}` | undefined;
+    const treasury = data?.contracts.treasury as `0x${string}` | null | undefined;
+    if (!sec || !token) throw new Error(`Create ${a.security}t on its card first, then approve.`);
+    if (!treasury || !w.client) throw new Error("No treasury or chain connection to mint into.");
+
+    if (a.status === "pending" && !(await act({ action: "approve-attestation", id: a.id }))) {
+      throw new Error("The approval did not go through.");
+    }
+    await w.send({
+      address: data!.contracts.custodyRegistry as `0x${string}`, abi: registryAbi as Abi, functionName: "attestCustody",
+      args: [a.security, a.custodian, BigInt(Math.round(a.quantity)), BigInt(Math.round(a.locked)),
+             BigInt(Math.floor(new Date(a.expires_at).getTime() / 1000)), a.doc_ref ?? ""],
+    });
+    const supply = await w.client.readContract({ address: token, abi: tokenAbi, functionName: "totalSupply" }) as bigint;
+    const target = BigInt(baseUnits(a.locked, sec.decimals));
+    const gap = target - supply;
+    if (gap <= 0n) return `${a.security}: attestation approved and published. Supply already covers it, so nothing was minted.`;
+    const hash = await w.send({ address: token, abi: tokenAbi as Abi, functionName: "mint", args: [treasury, gap] });
+    await act({ action: "reconcile", security: a.security, txHash: hash });
+    const minted = Number(gap) / 10 ** sec.decimals;
+    return sec.status === "draft"
+      ? `${a.security}: approved, published and ${minted.toLocaleString()} minted. Press Go live on its card when ready.`
+      : `${a.security}: approved, published and ${minted.toLocaleString()} minted. They are available to buy now.`;
+  });
+
   const isAdmin = data?.role === "admin";
   const w = useIssuer(data?.contracts.custodyRegistry ?? "");
 
   /** Runs a wallet-signed step with the desk's busy and error handling. */
-  const sign = async (label: string, fn: () => Promise<void>) => {
+  const sign = async (label: string, fn: () => Promise<void | string>) => {
     setBusy(true); setErr(null); setNote(null);
     try {
-      await fn();
-      setNote(`${label}: done.`);
+      const msg = await fn();
+      setNote(typeof msg === "string" ? msg : `${label}: done.`);
       await load(token);
     } catch (e) {
       const m = e as { shortMessage?: string; message?: string };
@@ -355,7 +392,32 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
                   )}
                   <TokenSetup sec={s} isAdmin={isAdmin} w={w} sign={sign} onAct={act} busy={busy} treasury={data.contracts.treasury} />
                   {s.token_address && (
-                    <RequestMint security={s.symbol} headroom={b.headroom} unallocated={b.unallocated ?? 0} hasToken onAct={act} busy={busy} />
+                    <>
+                      {isAdmin && b.headroom > 0 && (
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <button disabled={busy || !w.isIssuer}
+                            title={!w.isIssuer ? "Connect the issuer wallet above" : undefined}
+                            onClick={() => void sign(`Mint ${s.symbol}`, async () => {
+                              const token = s.token_address as `0x${string}`;
+                              const treasury = data.contracts.treasury as `0x${string}`;
+                              const units = BigInt(baseUnits(b.headroom, s.decimals));
+                              const hash = await w.send({ address: token, abi: tokenAbi as Abi, functionName: "mint", args: [treasury, units] });
+                              await act({ action: "reconcile", security: s.symbol, txHash: hash });
+                              return `${s.symbol}: ${b.headroom.toLocaleString()} minted and recorded.`;
+                            })}
+                            className="rounded-full bg-[var(--fg)] px-4 py-2 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40">
+                            Mint {b.headroom.toLocaleString()} now
+                          </button>
+                          <span className="text-[11px] text-[var(--muted)]">Custody covers {b.headroom.toLocaleString()} more than exist.</span>
+                        </div>
+                      )}
+                      {!isAdmin && (
+                        <p className="mb-2 text-[11px] text-[var(--muted)]">
+                          To add shares, file an updated holding below with the new total. CAPX approves and mints the difference.
+                        </p>
+                      )}
+                      <RequestMint security={s.symbol} headroom={b.headroom} unallocated={b.unallocated ?? 0} hasToken onAct={act} busy={busy} burnOnly />
+                    </>
                   )}
                 </div>
 
@@ -489,6 +551,11 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
               )}
               {a.status === "pending" && isAdmin && (
                 <span className="flex gap-2">
+                  <button onClick={() => void tokenise(a)} disabled={busy || !w.isIssuer}
+                    title={!w.isIssuer ? "Connect the issuer wallet above" : undefined}
+                    className="rounded-full bg-[var(--fg)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--bg)] disabled:opacity-40">
+                    Approve &amp; tokenise
+                  </button>
                   <button onClick={() => void act({ action: "approve-attestation", id: a.id })} disabled={busy}
                     className="rounded-full border hairline px-3 py-1.5 text-[12px] hover:surface disabled:opacity-50">
                     Approve
@@ -507,6 +574,14 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
                   <button
                     disabled={busy || !w.isIssuer}
                     title={!w.isIssuer ? "Connect the issuer wallet above" : undefined}
+                    onClick={() => void tokenise(a)}
+                    className="mr-2 mt-2 rounded-full bg-[var(--fg)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--bg)] disabled:opacity-40"
+                  >
+                    Publish &amp; mint
+                  </button>
+                  <button
+                    disabled={busy || !w.isIssuer}
+                    title={!w.isIssuer ? "Connect the issuer wallet above" : undefined}
                     onClick={() => void sign(`Publish ${a.security} attestation`, async () => {
                       await w.send({
                         address: data.contracts.custodyRegistry as `0x${string}`, abi: registryAbi as Abi,
@@ -517,7 +592,7 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
                     })}
                     className="mt-2 rounded-full bg-[var(--fg)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--bg)] disabled:opacity-40"
                   >
-                    Publish with issuer wallet
+                    Publish only
                   </button>
                   <details className="mt-1">
                     <summary className="cursor-pointer text-[11px] text-[var(--muted)]">Or run it with cast</summary>
@@ -665,14 +740,12 @@ function KycSection({ token }: { token: string }) {
  */
 function Pipeline() {
   const steps: [string, string, string][] = [
-    ["1", "FIMCO files", "Attests the shares it holds, with its statement reference."],
-    ["2", "CAPX approves", "Reviews the statement. FIMCO cannot approve its own filing."],
-    ["3", "Published on-chain", "The issuer key writes it to the custody registry. Headroom opens."],
-    ["4", "Mint requested", "Either party asks, inside the headroom. CAPX approves."],
-    ["5", "Issuer mints", "Tokens go to the treasury; the tx hash closes the request."],
-  ];
+    ["1", "FIMCO lists", "The company, its logo and the shares held, with the statement reference — one form."],
+    ["2", "CAPX creates the token", "Once per company, from its card, with the issuer wallet."],
+    ["3", "Approve & tokenise", "One press: approves, publishes on-chain and mints exactly what the filing adds."],
+    ["4", "Go live", "Customers can see and buy it. Adding shares later is an updated filing, then step 3."],  ];
   return (
-    <div className="mt-6 grid gap-px overflow-hidden rounded-2xl border hairline bg-[var(--border)] sm:grid-cols-5">
+    <div className="mt-6 grid gap-px overflow-hidden rounded-2xl border hairline bg-[var(--border)] sm:grid-cols-4">
       {steps.map(([n, title, body]) => (
         <div key={n} className="bg-[var(--bg)] p-3.5">
           <div className="tnum text-[11px] text-[var(--muted)]">{n}</div>
@@ -747,7 +820,7 @@ function mintCmd(r: Request_, sec: Security | undefined, treasury: string | null
  */
 function TokenSetup({ sec, isAdmin, w, sign, onAct, busy, treasury }: {
   sec: Security; isAdmin: boolean; w: ReturnType<typeof useIssuer>; treasury: string | null;
-  sign: (label: string, fn: () => Promise<void>) => Promise<void>;
+  sign: (label: string, fn: () => Promise<void | string>) => Promise<void>;
   onAct: (b: Record<string, unknown>) => Promise<boolean | void>; busy: boolean;
 }) {
   const tsym = `${sec.symbol}t`;
@@ -880,8 +953,10 @@ function TokenSetup({ sec, isAdmin, w, sign, onAct, busy, treasury }: {
  * minting while doing nothing on-chain. A request goes into the queue below,
  * where it is approved and then closed against the real transaction.
  */
-function RequestMint({ security, headroom, unallocated = 0, hasToken, onAct, busy }: {
+function RequestMint({ security, headroom, unallocated = 0, hasToken, onAct, busy, burnOnly = false }: {
   security: string; headroom: number; unallocated?: number; hasToken: boolean;
+  /** Minting now follows an attestation; only burns are requested on their own. */
+  burnOnly?: boolean;
   onAct: (b: Record<string, unknown>) => Promise<boolean | void>; busy: boolean;
 }) {
   const [qty, setQty] = useState("");
@@ -893,13 +968,13 @@ function RequestMint({ security, headroom, unallocated = 0, hasToken, onAct, bus
         inputMode="decimal" placeholder="Shares"
         className="tnum w-28 rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
       />
-      <button
+      {!burnOnly && <button
         onClick={() => { void onAct({ action: "request-issuance", security, kind: "mint", quantity: n }); setQty(""); }}
         disabled={busy || !(n > 0) || n > headroom || !hasToken}
         className="rounded-full bg-[var(--fg)] px-4 py-2 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40"
       >
         Request mint
-      </button>
+      </button>}
       {/* Burning retires inventory nobody owns — never shares a customer holds. */}
       <button
         onClick={() => { void onAct({ action: "request-issuance", security, kind: "burn", quantity: n }); setQty(""); }}
@@ -910,12 +985,16 @@ function RequestMint({ security, headroom, unallocated = 0, hasToken, onAct, bus
         Request burn
       </button>
       <span className="text-[11px] text-[var(--muted)]">
-        {!hasToken
-          ? "No token registered yet — create it and register its address first."
-          : headroom > 0
-            ? `Up to ${headroom.toLocaleString()} can be minted against current custody.`
-            : "Headroom is 0: every locked share already has a token. To mint more, FIMCO files a larger attestation first."}
-        {hasToken && ` Burnable: ${unallocated.toLocaleString()} (not held by customers).`}
+        {burnOnly
+          ? `Burnable: ${unallocated.toLocaleString()} — shares no customer holds. Burn when shares leave custody.`
+          : <>
+            {!hasToken
+              ? "No token registered yet — create it and register its address first."
+              : headroom > 0
+                ? `Up to ${headroom.toLocaleString()} can be minted against current custody.`
+                : "Headroom is 0: every locked share already has a token. To mint more, FIMCO files a larger attestation first."}
+            {hasToken && ` Burnable: ${unallocated.toLocaleString()} (not held by customers).`}
+          </>}
       </span>
     </div>
   );
@@ -924,7 +1003,7 @@ function RequestMint({ security, headroom, unallocated = 0, hasToken, onAct, bus
 /** The queue of mint and burn requests, and what each one is waiting for. */
 function RequestsSection({ data, isAdmin, onAct, busy, w, sign }: {
   data: DeskData; isAdmin: boolean; onAct: (b: Record<string, unknown>) => Promise<boolean | void>; busy: boolean;
-  w: ReturnType<typeof useIssuer>; sign: (label: string, fn: () => Promise<void>) => Promise<void>;
+  w: ReturnType<typeof useIssuer>; sign: (label: string, fn: () => Promise<void | string>) => Promise<void>;
 }) {
   const [hashes, setHashes] = useState<Record<string, string>>({});
   return (
@@ -1082,10 +1161,22 @@ function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone
   /** The logo already on file, shown until a new one is chosen. */
   const existingLogo = preset?.has_logo ? `/api/securities/logo?symbol=${encodeURIComponent(preset.symbol)}&v=${bust}` : null;
   const [logoErr, setLogoErr] = useState<string | null>(null);
+  /*
+   * A broker listing a new security says what it holds in the same form.
+   *
+   * Registering and attesting were two cards filled in one after the other,
+   * and a registration without an attestation is a security nobody can do
+   * anything with. Asking for both at once makes the draft CAPX reviews a
+   * complete one.
+   */
+  const listing = asBroker && !preset;
+  const [hold, setHold] = useState({ quantity: "", locked: "", docRef: "", expiresAt: "" });
+  const hq = Number(hold.quantity) || 0;
+  const hl = Number(hold.locked || hold.quantity) || 0;
   return (
     <div className="rounded-3xl border hairline p-5">
       <div className="flex items-center justify-between gap-2">
-        <div className="eyebrow">{preset ? `Edit ${preset.symbol}` : "Register a security"}</div>
+        <div className="eyebrow">{preset ? `Edit ${preset.symbol}` : listing ? "List a new security" : "Register a security"}</div>
         {preset && onDone && (
           <button onClick={onDone} className="text-[11px] text-[var(--muted)] underline">Cancel</button>
         )}
@@ -1130,7 +1221,7 @@ function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone
         */}
       {asBroker && (
         <p className="mb-3 text-[11px] text-[var(--muted)]">
-          No token is needed yet. Once you save, CAPX creates the token on Base with the issuer wallet and links it here.
+          No token is needed. CAPX reviews the listing, creates the token and tokenises the shares.
         </p>
       )}
       {!asBroker && !preset && (
@@ -1165,15 +1256,27 @@ function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone
             : "Square works best. Resized to 256px here before upload. Saving without one keeps the existing logo.")}
         </span>
       </label>
-{!asBroker && (
+{listing && (
+        <div className="mb-3 rounded-2xl surface p-3.5">
+          <div className="eyebrow">What FIMCO holds</div>
+          <Field label="Shares held" v={hold.quantity} on={(v) => setHold({ ...hold, quantity: v.replace(/[^0-9.]/g, "") })} ph="1000" />
+          <Field label="Of those, for tokenising" v={hold.locked} on={(v) => setHold({ ...hold, locked: v.replace(/[^0-9.]/g, "") })}
+            ph={hold.quantity || "Same as held"} hint="Leave blank to tokenise all of them." />
+          <Field label="FIMCO statement reference" v={hold.docRef} on={(v) => setHold({ ...hold, docRef: v })}
+            ph="Holding statement or CDS reference" />
+          <label className="block">
+            <span className="eyebrow">Statement valid until</span>
+            <input type="date" value={hold.expiresAt} onChange={(e) => setHold({ ...hold, expiresAt: e.target.value })}
+              className="mt-1.5 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]" />
+          </label>
+          {hl > hq && hq > 0 && <p className="mt-2 text-[11px] text-[var(--color-down)]">Tokenised cannot exceed the shares held.</p>}
+        </div>
+      )}
+      {!asBroker && (
               <Field label="Decimals" v={f.decimals} on={(v) => setF({ ...f, decimals: v })} ph="8"
         hint="Read from the token itself when an address is given." />
       )}
-      {asBroker ? (
-        <p className="mb-3 text-[11px] text-[var(--muted)]">
-          Registered as a draft. CAPX takes it live once custody is attested and the token exists.
-        </p>
-      ) : (
+      {asBroker ? null : (
       <label className="mb-3 block">
         <span className="eyebrow">Status</span>
         <div className="mt-1.5 flex gap-2">
@@ -1195,12 +1298,26 @@ function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone
       </label>
       )}
       <button
-        onClick={() => void onAct({ action: "register-security", ...f, decimals: Number(f.decimals), ...(logo ? { logo } : {}) })
-          .then((ok) => { if (ok !== false) onDone?.(); })}
-        disabled={busy || !f.symbol || !f.name}
+        onClick={() => void (async () => {
+          const ok = await onAct({ action: "register-security", ...f, decimals: Number(f.decimals), ...(logo ? { logo } : {}) });
+          if (ok === false) return;
+          if (listing) {
+            const filed = await onAct({
+              action: "attest", security: f.symbol, custodian: PRIMARY_BROKER, quantity: hq, locked: hl, docRef: hold.docRef,
+              expiresAt: new Date(`${hold.expiresAt}T23:59:59Z`).toISOString(), listing: true,
+            });
+            if (filed === false) return;
+            setF({ symbol: "", name: "", tokenAddress: "", decimals: "8", status: "draft" });
+            setHold({ quantity: "", locked: "", docRef: "", expiresAt: "" });
+            setLogo(null);
+          }
+          onDone?.();
+        })()}
+        disabled={busy || !f.symbol || !f.name
+          || (listing && (!(hq > 0) || hl > hq || !hold.docRef.trim() || !hold.expiresAt))}
         className="mt-2 w-full rounded-full bg-[var(--fg)] py-2.5 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40"
       >
-        {preset ? "Save changes" : "Save"}
+        {preset ? "Save changes" : listing ? `List ${f.symbol || "security"} for CAPX review` : "Save"}
       </button>
     </div>
   );
@@ -1228,7 +1345,12 @@ function FileAttestation({ onAct, busy, lockToBroker = false, securities = [] }:
   const isBroker = lockToBroker || (!other && f.custodian === PRIMARY_BROKER);
   return (
     <div className="rounded-3xl border hairline p-5">
-      <div className="eyebrow">File a custody attestation</div>
+      <div className="eyebrow">{lockToBroker ? "Update a holding" : "File a custody attestation"}</div>
+      {lockToBroker && (
+        <p className="mt-1 text-[11px] text-[var(--muted)]">
+          For a company already listed. Enter the new total FIMCO holds, not the increase — CAPX mints the difference.
+        </p>
+      )}
       <Field label="Security" v={f.security} on={(v) => setF({ ...f, security: v.toUpperCase() })} ph="CRDB"
         hint={securities.length ? `Registered: ${securities.join(", ")}. The security, not the token: CRDB, not CRDBt.` : "The registered security's symbol: CRDB, not CRDBt."} />
       {lockToBroker ? (
@@ -1264,7 +1386,7 @@ function FileAttestation({ onAct, busy, lockToBroker = false, securities = [] }:
         )}
       </label>
       )}
-      <Field label="Shares held" v={f.quantity} on={(v) => setF({ ...f, quantity: v.replace(/[^0-9.]/g, "") })} ph="100" />
+      <Field label={lockToBroker ? "Total shares now held" : "Shares held"} v={f.quantity} on={(v) => setF({ ...f, quantity: v.replace(/[^0-9.]/g, "") })} ph="100" />
       <Field label="Of those, locked" v={f.locked} on={(v) => setF({ ...f, locked: v.replace(/[^0-9.]/g, "") })} ph="100" />
       <Field label={isBroker ? `${PRIMARY_BROKER} statement reference` : "Custodian reference"} v={f.docRef}
         on={(v) => setF({ ...f, docRef: v })}

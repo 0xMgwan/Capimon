@@ -34,6 +34,7 @@ export const tokenAbi = parseAbi([
   "function mint(address to, uint256 amount)",
   "function grantRole(bytes32 role, address account)",
   "function hasRole(bytes32 role, address account) view returns (bool)",
+  "function totalSupply() view returns (uint256)",
 ]);
 export const registryAbi = parseAbi([
   "function admin() view returns (address)",

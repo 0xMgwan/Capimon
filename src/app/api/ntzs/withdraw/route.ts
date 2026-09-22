@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { type PayoutDest } from "@/lib/ntzs";
 import { withdrawalQuote, createWithdrawal, lookupRecipient, NtzsError, ntzsConfigured,
          rampQuote, rampOfframp, getSwapRate } from "@/lib/ntzs";
 import { currentUser } from "@/lib/auth";
@@ -78,6 +79,25 @@ async function chooseRail(amountTzs: number, rampAvailable: boolean) {
  */
 
 /** Price a withdrawal and confirm the destination. */
+/**
+ * The payout destination from a request: a bank when a bank code is given,
+ * otherwise the phone number. Returns an error message instead when neither
+ * is usable.
+ */
+function readDest(get: (k: string) => string | null, fallbackPhone: string | null | undefined):
+  { dest: PayoutDest; label: string } | { error: string } {
+  const bankCode = (get("bankCode") ?? "").trim().toUpperCase();
+  if (bankCode) {
+    const accountNumber = (get("accountNumber") ?? "").replace(/[^\d]/g, "");
+    if (!/^[A-Z0-9_]{2,16}$/.test(bankCode)) return { error: "Choose a bank." };
+    if (accountNumber.length < 6) return { error: "Enter the bank account number to pay into." };
+    return { dest: { bankCode, accountNumber }, label: `${bankCode} account ending ${accountNumber.slice(-4)}` };
+  }
+  const phoneNumber = (get("phoneNumber") ?? fallbackPhone ?? "").replace(/[^\d]/g, "");
+  if (!phoneNumber) return { error: "A mobile money number is required." };
+  return { dest: { phoneNumber }, label: phoneNumber };
+}
+
 export async function GET(req: Request) {
   const gate = requireDb();
   if (gate) return gate;
@@ -89,8 +109,10 @@ export async function GET(req: Request) {
 
     const u = new URL(req.url);
     const amountTzs = Math.round(Number(u.searchParams.get("amountTzs")));
-    const phoneNumber = (u.searchParams.get("phoneNumber") ?? user.phone ?? "").replace(/[^\d]/g, "");
-    if (!phoneNumber) return bad("A mobile money number is required.");
+    const parsed = readDest((k) => u.searchParams.get(k), user.phone);
+    if ("error" in parsed) return bad(parsed.error);
+    const { dest } = parsed;
+    const phoneNumber = dest.phoneNumber ?? "";
     if (!Number.isFinite(amountTzs) || amountTzs < MIN_TZS) {
       return bad(`The minimum withdrawal is ${MIN_TZS.toLocaleString()} TZS.`);
     }
@@ -101,7 +123,8 @@ export async function GET(req: Request) {
     }
 
     const caps = await capabilities();
-    const viaRamp = await chooseRail(amountTzs, caps.ramp.available);
+    // Ramp pays phones only, so a bank payout always takes the disbursement rail.
+    const viaRamp = dest.bankCode ? false : await chooseRail(amountTzs, caps.ramp.available);
 
     let quoteId: string | null = null;
     let feeTzs = 0;
@@ -116,14 +139,17 @@ export async function GET(req: Request) {
       feeTzs = Number(q.totalFeeTzs ?? q.feeTzs ?? q.feeAmountTzs ?? 0);
       if (!quoteId) quoteShape = Object.keys(q ?? {}).join(", ").slice(0, 200);
     } else {
-      const q = await withdrawalQuote({ userId: await omnibusUserId(), amountTzs, phoneNumber });
+      const q = await withdrawalQuote({ userId: await omnibusUserId(), amountTzs, ...dest });
       quoteId = q.quoteId ?? null;
-      feeTzs = Number(q.totalFeeTzs ?? 0);
+      // The documented quote carries fees.totalFeeTzs; older responses a flat field.
+      feeTzs = Number(q.fees?.totalFeeTzs ?? q.totalFeeTzs ?? 0);
       quotedName = q.recipientName ?? null;
       if (!quoteId) quoteShape = Object.keys(q ?? {}).join(", ").slice(0, 200);
     }
 
-    const recipient = await lookupRecipient(phoneNumber).catch(() => ({ name: null }));
+    const recipient = phoneNumber
+      ? await lookupRecipient(phoneNumber).catch(() => ({ name: null }))
+      : { name: null };
     const quote = { quoteId, totalFeeTzs: feeTzs, recipientName: quotedName };
 
     /*
@@ -147,7 +173,7 @@ export async function GET(req: Request) {
       feeTzs: quote.totalFeeTzs ?? 0,
       // Fail-soft: no name available is normal, never a reason to block.
       recipientName: quote.recipientName ?? recipient.name ?? null,
-      phoneNumber,
+      phoneNumber, destination: parsed.label,
     }, { headers: { "cache-control": "no-store" } });
   } catch (e) {
     const err = e instanceof NtzsError ? e : null;
@@ -171,9 +197,11 @@ export async function POST(req: Request) {
     const body = await req.json();
     const quoteId = String(body.quoteId ?? "");
     const amountTzs = Math.round(Number(body.amountTzs));
-    const phoneNumber = String(body.phoneNumber ?? "").replace(/[^\d]/g, "");
     if (!quoteId) return bad("A quote is required — price the withdrawal first.", "quote_required");
-    if (!phoneNumber) return bad("A mobile money number is required.");
+    const parsed = readDest((k) => (body[k] == null ? null : String(body[k])), null);
+    if ("error" in parsed) return bad(parsed.error);
+    const { dest, label } = parsed;
+    const phoneNumber = dest.phoneNumber ?? "";
 
     // Re-check against the ledger: the quote may be seconds old.
     const funds = await spendableTzs(user.id);
@@ -183,7 +211,7 @@ export async function POST(req: Request) {
 
     // Same rail choice as the quote, for the same reasons.
     const caps = await capabilities();
-    const viaRamp = await chooseRail(amountTzs, caps.ramp.available);
+    const viaRamp = dest.bankCode ? false : await chooseRail(amountTzs, caps.ramp.available);
 
     /*
      * Debit before paying out, and refund if the payout does not happen.
@@ -205,11 +233,11 @@ export async function POST(req: Request) {
     await record([
       ...(fromTzs > 0
         ? [{ userId: user.id, kind: "withdrawal" as const, asset: "TZS", amount: (-fromTzs).toString(),
-             ref: `withdrawal:${quoteId}`, metadata: { phoneNumber, quoteId, rail } }]
+             ref: `withdrawal:${quoteId}`, metadata: { destination: label, ...dest, quoteId, rail } }]
         : []),
       ...(fromUsdc > 0
         ? [{ userId: user.id, kind: "withdrawal" as const, asset: "USDC", amount: (-fromUsdc).toString(),
-             ref: `withdrawal:${quoteId}:usdc`, metadata: { phoneNumber, quoteId, amountTzs: remainderTzs } }]
+             ref: `withdrawal:${quoteId}:usdc`, metadata: { destination: label, ...dest, quoteId, amountTzs: remainderTzs } }]
         : []),
     ]);
 
@@ -243,11 +271,11 @@ export async function POST(req: Request) {
         await ensureNtzsHasTzs(amountTzs);
 
         const omnibus = await omnibusUserId();
-        const fresh = await withdrawalQuote({ userId: omnibus, amountTzs, phoneNumber });
+        const fresh = await withdrawalQuote({ userId: omnibus, amountTzs, ...dest });
         const freshId = fresh.quoteId ?? quoteId;
 
         result = await createWithdrawal({
-          userId: omnibus, quoteId: freshId, amountTzs, phoneNumber,
+          userId: omnibus, quoteId: freshId, amountTzs, ...dest,
         });
       }
     } catch (payoutError) {
@@ -278,11 +306,11 @@ export async function POST(req: Request) {
     await notify({
       userId: user.id, kind: "withdrawal", ref: `withdrawal:${ref}`,
       title: `${amountTzs.toLocaleString()} TZS sent`,
-      body: `On its way to ${phoneNumber}.`,
+      body: `On its way to ${label}.`,
     });
     return NextResponse.json({
       ok: true, withdrawalId: ref, amountTzs, status: result.status ?? "submitted",
-      note: "On its way to your mobile money account.",
+      note: dest.bankCode ? `On its way to your ${label}.` : "On its way to your mobile money account.",
     });
   } catch (e) {
     const err = e instanceof NtzsError ? e : null;

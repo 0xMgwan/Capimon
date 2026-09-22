@@ -92,7 +92,12 @@ export function WalletSection({ holdings }: {
   const [bankDetails, setBankDetails] = useState<BankDetails | null>(null);
   const [hiddenRef, setHiddenRef] = useState<string | null>(null);
   const [payerAccount, setPayerAccount] = useState("");
-  const [quote, setQuote] = useState<{ quoteId: string; feeTzs: number; recipientName: string | null } | null>(null);
+  /* Payouts go to a phone or, via nTZS's FI codes, straight to a bank account. */
+  const [wdTo, setWdTo] = useState<"mobile" | "bank">("mobile");
+  const [wdBank, setWdBank] = useState("");
+  const [wdAccount, setWdAccount] = useState("");
+  const [banks, setBanks] = useState<{ code: string; name: string }[]>([]);
+  const [quote, setQuote] = useState<{ quoteId: string; feeTzs: number; recipientName: string | null; destination?: string } | null>(null);
 
   const loadDeposits = useCallback(async () => {
     try {
@@ -103,6 +108,14 @@ export function WalletSection({ holdings }: {
       /* the balance above is still accurate */
     }
   }, []);
+
+  useEffect(() => {
+    if (wdTo !== "bank" || banks.length) return;
+    let alive = true;
+    fetch("/api/ntzs/banks", { cache: "no-store" }).then((r) => r.json())
+      .then((j) => { if (alive && j.ok) setBanks(j.banks ?? []); }).catch(() => {});
+    return () => { alive = false; };
+  }, [wdTo, banks.length]);
 
   const pendingCount = deposits.filter((d) => IN_FLIGHT.has(d.status)).length;
 
@@ -161,11 +174,13 @@ export function WalletSection({ holdings }: {
   const priceWithdraw = async () => {
     setBusy(true); setError(null); setNotice(null);
     try {
-      const r = await fetch(`/api/ntzs/withdraw?amountTzs=${wdAmount}&phoneNumber=${encodeURIComponent(phoneToUse)}`,
-        { cache: "no-store" });
+      const dest = wdTo === "bank"
+        ? `bankCode=${encodeURIComponent(wdBank)}&accountNumber=${encodeURIComponent(wdAccount)}`
+        : `phoneNumber=${encodeURIComponent(phoneToUse)}`;
+      const r = await fetch(`/api/ntzs/withdraw?amountTzs=${wdAmount}&${dest}`, { cache: "no-store" });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error);
-      setQuote({ quoteId: j.quoteId, feeTzs: j.feeTzs ?? 0, recipientName: j.recipientName ?? null });
+      setQuote({ quoteId: j.quoteId, feeTzs: j.feeTzs ?? 0, recipientName: j.recipientName ?? null, destination: j.destination });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not price that withdrawal");
     } finally {
@@ -180,7 +195,10 @@ export function WalletSection({ holdings }: {
       const r = await fetch("/api/ntzs/withdraw", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ quoteId: quote.quoteId, amountTzs: wdAmount, phoneNumber: phoneToUse }),
+        body: JSON.stringify({
+          quoteId: quote.quoteId, amountTzs: wdAmount,
+          ...(wdTo === "bank" ? { bankCode: wdBank, accountNumber: wdAccount } : { phoneNumber: phoneToUse }),
+        }),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.note ? `${j.error} ${j.note}` : j.error);
@@ -407,7 +425,16 @@ export function WalletSection({ holdings }: {
                 className="overflow-hidden"
               >
                 <div className="mt-4 border-t hairline pt-4">
-                  <div className="eyebrow flex items-center gap-1.5"><NtzsIcon className="h-3.5 w-3.5" /> {t("Send to mobile money")}</div>
+                  <div className="flex rounded-full surface p-1">
+                    {([["mobile", "Mobile money"], ["bank", "Bank"]] as const).map(([k, label]) => (
+                      <button key={k} onClick={() => { setWdTo(k); setQuote(null); }}
+                        className={`flex-1 rounded-full py-2 text-[13px] font-medium transition-colors ${
+                          wdTo === k ? "bg-[var(--bg)] shadow-sm" : "text-[var(--muted)]"}`}>
+                        {t(label)}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="eyebrow mt-4 flex items-center gap-1.5"><NtzsIcon className="h-3.5 w-3.5" /> {t(wdTo === "bank" ? "Send to a bank account" : "Send to mobile money")}</div>
                   <input
                     value={String(wdAmount)}
                     onChange={(e) => { setWdAmount(Number(e.target.value.replace(/\D/g, "")) || 0); setQuote(null); }}
@@ -415,18 +442,40 @@ export function WalletSection({ holdings }: {
                     aria-label="Amount to withdraw"
                     className="tnum mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
                   />
-                  <input
-                    value={phoneToUse}
-                    onChange={(e) => { setPhone(e.target.value); setQuote(null); }}
-                    inputMode="numeric" placeholder={t("Mobile money number")}
-                    className="mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
-                  />
+                  {wdTo === "bank" ? (
+                    <>
+                      <select
+                        value={wdBank} onChange={(e) => { setWdBank(e.target.value); setQuote(null); }}
+                        className="mt-2 w-full rounded-xl border hairline bg-[var(--bg)] px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+                      >
+                        <option value="">{t("Choose your bank")}</option>
+                        {banks.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}
+                      </select>
+                      <input
+                        value={wdAccount}
+                        onChange={(e) => { setWdAccount(e.target.value.replace(/[^\d]/g, "")); setQuote(null); }}
+                        inputMode="numeric" placeholder={t("Account number")}
+                        className="tnum mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+                      />
+                    </>
+                  ) : (
+                    <input
+                      value={phoneToUse}
+                      onChange={(e) => { setPhone(e.target.value); setQuote(null); }}
+                      inputMode="numeric" placeholder={t("Mobile money number")}
+                      className="mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+                    />
+                  )}
 
                   {quote ? (
                     <div className="mt-3 rounded-xl surface p-3 text-xs">
                       <div className="flex justify-between gap-3">
                         <span className="text-[var(--muted)]">{t("Sending to")}</span>
-                        <span className="truncate">{quote.recipientName ?? phoneToUse}</span>
+                        {/* Name and account both, as the BoT disclosure rule asks. */}
+                        <span className="truncate text-right">
+                          {quote.recipientName ?? ""}{quote.recipientName && quote.destination ? " · " : ""}
+                          {quote.destination ?? phoneToUse}
+                        </span>
                       </div>
                       <div className="tnum mt-1.5 flex justify-between gap-3">
                         <span className="text-[var(--muted)]">Fee</span><span>{TZS(quote.feeTzs)}</span>
@@ -445,7 +494,8 @@ export function WalletSection({ holdings }: {
                   ) : (
                     <button
                       onClick={priceWithdraw}
-                      disabled={busy || wdAmount < MIN_WITHDRAW || !phoneToUse || wdAmount > account.tzs + (account.cashTzs ?? 0)}
+                      disabled={busy || wdAmount < MIN_WITHDRAW || wdAmount > account.tzs + (account.cashTzs ?? 0)
+                                || (wdTo === "bank" ? !wdBank || wdAccount.length < 6 : !phoneToUse)}
                       className="mt-3 w-full rounded-full bg-[var(--fg)] py-3 text-sm font-medium text-[var(--bg)] disabled:opacity-50"
                     >
                       {busy ? "Pricing…" : "Continue"}

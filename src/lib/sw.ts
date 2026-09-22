@@ -382,4 +382,8 @@ export const SW: Record<string, string> = {
   "in dollars": "kwa dola",
   "Browse US stocks": "Tazama hisa za Marekani",
   "Send from the account you enter above. You will get an account and a reference to pay from your bank app; it usually lands within about 10 minutes.": "Tuma kutoka akaunti uliyoandika hapo juu. Utapata akaunti na kumbukumbu ya kulipa kupitia programu ya benki yako; kwa kawaida hufika ndani ya dakika 10 hivi.",
+  "Send to a bank account": "Tuma kwenye akaunti ya benki",
+  "Choose your bank": "Chagua benki yako",
+  "Mobile money": "Pesa ya simu",
+  "Bank": "Benki",
 };

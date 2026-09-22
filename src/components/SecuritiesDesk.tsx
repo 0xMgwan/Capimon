@@ -370,6 +370,8 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
           securities={data.securities.map((x) => x.symbol)} />
       </div>
 
+      {portal === "fimco" && <KycSection token={token} />}
+
       {isAdmin && <OracleAdmin token={token} busy={busy} setBusy={setBusy} setErr={setErr} setNote={setNote} />}
 
       <section className="mt-8">
@@ -460,6 +462,87 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
         </div>
       </section>
     </div>
+  );
+}
+
+type Kyc = {
+  id: string; user_id: string; email: string; name: string | null;
+  doc_type: string; doc_number: string | null; status: string; reason: string | null;
+  reviewed_by: string | null; reviewed_at: string | null; created_at: string;
+  doc_bytes: number | null; selfie_bytes: number | null;
+};
+
+/**
+ * Every customer's verification, for the broker of record.
+ *
+ * Read-only: FIMCO keeps these records for compliance, CAPX makes the decision
+ * on the admin page. Images load only when a row is opened.
+ */
+function KycSection({ token }: { token: string }) {
+  const [rows, setRows] = useState<Kyc[] | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/admin/kyc?token=${encodeURIComponent(token)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (alive) setRows(j.ok ? j.submissions : []); })
+      .catch(() => { if (alive) setRows([]); });
+    return () => { alive = false; };
+  }, [token]);
+  const img = (id: string, which: "doc" | "selfie") =>
+    `/api/admin/kyc/image?id=${id}&which=${which}&token=${encodeURIComponent(token)}`;
+  const shown = (rows ?? []).filter((r) => {
+    const s = q.trim().toLowerCase();
+    return !s || [r.name, r.email, r.doc_number].some((v) => v?.toLowerCase().includes(s));
+  });
+  return (
+    <section className="mt-8">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="eyebrow">Customers &amp; KYC</div>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, email or ID number"
+          className="w-64 max-w-full rounded-full border hairline bg-transparent px-3.5 py-1.5 text-[12px] outline-none focus:border-[var(--color-accent)]" />
+      </div>
+      <div className="overflow-hidden rounded-2xl border hairline">
+        {rows === null ? (
+          <p className="p-5 text-center text-sm text-[var(--muted)]">Loading…</p>
+        ) : shown.length === 0 ? (
+          <p className="p-5 text-center text-sm text-[var(--muted)]">No verifications{q ? " match" : " yet"}.</p>
+        ) : shown.map((r) => (
+          <div key={r.id} className="border-b hairline last:border-0">
+            <button onClick={() => setOpen(open === r.id ? null : r.id)}
+              className="flex w-full flex-wrap items-center gap-3 px-4 py-3 text-left hover:surface">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium">{r.name ?? r.email}</span>
+                <span className="block truncate text-[11px] text-[var(--muted)]">
+                  {r.email} · {r.doc_type.replace(/_/g, " ")} {r.doc_number ?? ""} · submitted {dt(r.created_at)}
+                </span>
+              </span>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] uppercase ${
+                r.status === "approved" ? "bg-[var(--color-up)]/10 text-[var(--color-up)]"
+                : r.status === "rejected" ? "bg-[var(--color-down)]/10 text-[var(--color-down)]"
+                : "surface text-[var(--muted)]"}`}>{r.status}</span>
+            </button>
+            {open === r.id && (
+              <div className="grid gap-3 px-4 pb-4 sm:grid-cols-2">
+                {r.doc_bytes ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={img(r.id, "doc")} alt="ID document" className="w-full rounded-xl border hairline object-contain" />
+                ) : <p className="text-[11px] text-[var(--muted)]">No document image.</p>}
+                {r.selfie_bytes ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={img(r.id, "selfie")} alt="Selfie" className="w-full rounded-xl border hairline object-contain" />
+                ) : <p className="text-[11px] text-[var(--muted)]">No selfie.</p>}
+                <p className="text-[11px] text-[var(--muted)] sm:col-span-2">
+                  {r.reviewed_by ? `Reviewed by ${r.reviewed_by} on ${dt(r.reviewed_at)}.` : "Awaiting review by CAPX."}
+                  {r.reason && ` Reason: ${r.reason}`}
+                </p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

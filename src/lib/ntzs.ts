@@ -241,21 +241,36 @@ export async function createDeposit(input: {
 
 /* --------------------------------------------------------- disbursements -- */
 
+/**
+ * Where a payout goes: a mobile wallet, or a bank account.
+ *
+ * Exactly one, as the API requires. Banks are named by nTZS's canonical FI
+ * codes (CRDB, NMB, NBC, …) and ride the disbursement rail only — ramp takes
+ * a phone number and nothing else.
+ */
+export type PayoutDest =
+  | { phoneNumber: string; bankCode?: never; accountNumber?: never }
+  | { bankCode: string; accountNumber: string; phoneNumber?: never };
+
+function destBody(d: PayoutDest) {
+  return d.bankCode ? { bankCode: d.bankCode, accountNumber: d.accountNumber } : { phoneNumber: d.phoneNumber };
+}
+
 /** Price a payout before executing it. `amountTzs` is what the recipient gets. */
-export async function withdrawalQuote(input: { userId: string; amountTzs: number; phoneNumber: string }) {
+export async function withdrawalQuote(input: { userId: string; amountTzs: number } & PayoutDest) {
   const amount = Math.round(input.amountTzs);
-  return call<{ quoteId?: string | null; recipientName?: string | null; totalFeeTzs?: number;
-                [k: string]: unknown }>("/api/v1/withdrawals/quote", {
+  return call<{ quoteId?: string | null; recipientName?: string | null; bankName?: string | null;
+                totalFeeTzs?: number; fees?: { totalFeeTzs?: number }; [k: string]: unknown }>("/api/v1/withdrawals/quote", {
     // Both spellings, for the same reason as the ramp quote: the deployment has
     // asked for `tzsAmount` where the spec says otherwise, and the values are
     // identical so whichever it reads is correct.
     method: "POST",
-    body: { userId: input.userId, amountTzs: amount, tzsAmount: amount, phoneNumber: input.phoneNumber },
+    body: { userId: input.userId, amountTzs: amount, tzsAmount: amount, ...destBody(input) },
   });
 }
 
 /** Execute against a quote. Terms must match it exactly or it is rejected. */
-export async function createWithdrawal(input: { userId: string; quoteId: string; amountTzs: number; phoneNumber: string }) {
+export async function createWithdrawal(input: { userId: string; quoteId: string; amountTzs: number } & PayoutDest) {
   return call<{ id?: string; status?: string; [k: string]: unknown }>("/api/v1/withdrawals", {
     method: "POST",
     body: {
@@ -263,10 +278,30 @@ export async function createWithdrawal(input: { userId: string; quoteId: string;
       quoteId: input.quoteId,
       amountTzs: Math.round(input.amountTzs),
       tzsAmount: Math.round(input.amountTzs),
-      phoneNumber: input.phoneNumber,
+      ...destBody(input),
     },
     idempotent: true,
   });
+}
+
+/**
+ * Banks a payout can go to.
+ *
+ * Undocumented but present — the route answers 401 rather than 404 without a
+ * key — and the docs point to "the full list in the API reference" without
+ * publishing it. Read loosely because its shape is not written down anywhere.
+ */
+export async function withdrawalBanks(): Promise<{ code: string; name: string }[]> {
+  const r = await call<unknown>("/api/v1/withdrawals/banks");
+  const list = Array.isArray(r) ? r
+    : Array.isArray((r as { banks?: unknown[] })?.banks) ? (r as { banks: unknown[] }).banks
+    : Array.isArray((r as { data?: unknown[] })?.data) ? (r as { data: unknown[] }).data : [];
+  return list.map((b) => {
+    if (typeof b === "string") return { code: b, name: b };
+    const o = b as Record<string, unknown>;
+    const code = String(o.code ?? o.bankCode ?? o.fiCode ?? o.id ?? "");
+    return { code, name: String(o.name ?? o.bankName ?? o.label ?? code) };
+  }).filter((b) => b.code);
 }
 
 export async function getWithdrawal(id: string) {

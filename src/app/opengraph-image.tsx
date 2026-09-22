@@ -38,93 +38,68 @@ export default async function OpengraphImage() {
     { flag: "Dar es Salaam", unit: "in shillings", names: [["CRDB", crdb], ["NMB", nmb]] },
     { flag: "United States", unit: "and more", names: [["AAPL", aapl], ["NVDA", nvda], ["TSLA", tsla]] },
   ] as const;
+  /*
+   * Everything that matters sits in the centre 630px.
+   *
+   * WhatsApp's compose box, and several other apps, crop the preview to a
+   * centred square; the side-by-side layout lost its headline and half its
+   * logos there. Centred, the square shows the whole message and the full
+   * card simply has more background either side.
+   */
+  const dot = (src: string | null, name: string) => (
+    <div key={name} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+      {src ? (
+        <img src={src} width={68} height={68} alt=""
+          style={{ width: 68, height: 68, borderRadius: 999, background: "#fff", border: "2px solid #ececec",
+                   objectFit: name === "CRDB" ? "contain" : "cover" }} />
+      ) : (
+        <div style={{ display: "flex", width: 68, height: 68, borderRadius: 999, background: "#0B7D3E" }} />
+      )}
+      <div style={{ display: "flex", fontSize: 18, fontWeight: 700, color: "#0a0a0b" }}>{name}</div>
+    </div>
+  );
+  const group = (label: string, items: readonly (readonly [string, string | null])[]) => (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+      <div style={{ display: "flex", gap: 14 }}>{items.map(([n, src]) => dot(src, n))}</div>
+      <div style={{ display: "flex", fontSize: 15, letterSpacing: 2.5, color: "#8a8a8a", textTransform: "uppercase" }}>{label}</div>
+    </div>
+  );
+
   return new ImageResponse(
     (
-      <div
-        style={{
-          width: "100%", height: "100%", display: "flex", flexDirection: "column",
-          justifyContent: "space-between", background: "#ffffff", padding: 72,
-          fontFamily: "sans-serif",
-        }}
-      >
-        {/* Soft brand wash, mirroring the hero */}
-        <div style={{
-          position: "absolute", top: -160, left: -120, width: 620, height: 620,
-          borderRadius: 999, background: "rgba(98,71,245,0.16)", filter: "blur(80px)", display: "flex",
-        }} />
-        <div style={{
-          position: "absolute", bottom: -200, right: -140, width: 640, height: 640,
-          borderRadius: 999, background: "rgba(52,209,191,0.14)", filter: "blur(90px)", display: "flex",
-        }} />
+      <div style={{
+        width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center",
+        justifyContent: "center", background: "#ffffff", fontFamily: "sans-serif", position: "relative",
+      }}>
+        {/* Brand washes out at the edges — the part a square crop discards. */}
+        <div style={{ position: "absolute", top: -180, left: -160, width: 640, height: 640, borderRadius: 999,
+          background: "rgba(98,71,245,0.16)", filter: "blur(90px)", display: "flex" }} />
+        <div style={{ position: "absolute", bottom: -220, right: -160, width: 660, height: 660, borderRadius: 999,
+          background: "rgba(52,209,191,0.14)", filter: "blur(90px)", display: "flex" }} />
 
-        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          <svg width="72" height="72" viewBox="0 0 64 64">
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <svg width="54" height="54" viewBox="0 0 64 64">
             <path d="M43 12.95A22 22 0 1 0 43 51.05" fill="none" stroke="#0a0a0b" strokeWidth="9.5" />
             <path d="M22 27.6H44V19l17 13-17 13v-8.6H22Z" fill={BRAND} />
           </svg>
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ fontSize: 58, fontWeight: 700, letterSpacing: -3, color: "#0a0a0b", lineHeight: 1 }}>
-              CAPX
-            </div>
-            <div style={{ width: 250, height: 5, background: BRAND, borderRadius: 999, marginTop: 10, display: "flex" }} />
-          </div>
+          <div style={{ display: "flex", fontSize: 44, fontWeight: 700, letterSpacing: -2, color: "#0a0a0b" }}>CAPX</div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 40 }}>
-          <div style={{ display: "flex", flexDirection: "column", maxWidth: 560 }}>
-            <div style={{ fontSize: 66, fontWeight: 700, letterSpacing: -3, color: "#0a0a0b", lineHeight: 1.02, display: "flex", flexDirection: "column" }}>
-              <span>Tanzanian &amp; US</span>
-              <span>shares,</span>
-              <span style={{ color: "#6b6b6b", fontStyle: "italic", fontWeight: 500 }}>in shillings.</span>
-            </div>
-            <div style={{ fontSize: 26, color: "#555", marginTop: 20, lineHeight: 1.35, display: "flex" }}>
-              Buy from mobile money or your bank, from TSh 2,000. Settled the same day.
-            </div>
-          </div>
-
-          {/* The two markets, as the product shows them. */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, width: 500 }}>
-            {markets.map((m) => (
-              <div key={m.flag} style={{
-                display: "flex", flexDirection: "column", borderRadius: 28, padding: "20px 24px",
-                background: "#ffffff", border: "2px solid #ececec", boxShadow: "0 12px 30px rgba(0,0,0,0.06)",
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <div style={{ display: "flex", fontSize: 19, letterSpacing: 3, color: "#8a8a8a", textTransform: "uppercase" }}>
-                    {m.flag}
-                  </div>
-                  <div style={{ display: "flex", fontSize: 19, color: "#8a8a8a" }}>{m.unit}</div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
-                  {m.names.map(([t, src]) => (
-                    <div key={t} style={{
-                      display: "flex", alignItems: "center", gap: 9, flexShrink: 0, fontSize: 24, fontWeight: 700,
-                      color: "#0a0a0b", background: "#f4f4f2", borderRadius: 999, padding: "5px 16px 5px 5px",
-                    }}>
-                      {src ? (
-                         
-                        <img src={src} width={40} height={40} alt=""
-                          style={{ width: 40, height: 40, borderRadius: 999, background: "#fff",
-                            // A wide wordmark (CRDB's) is fitted, not cropped to its middle.
-                            objectFit: t === "CRDB" ? "contain" : "cover" }} />
-                      ) : (
-                        <div style={{ display: "flex", width: 40, height: 40, borderRadius: 999, background: "#0B7D3E" }} />
-                      )}
-                      {t}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: 26,
+          fontSize: 56, fontWeight: 700, letterSpacing: -2.5, lineHeight: 1.04, color: "#0a0a0b" }}>
+          <span>Tanzanian &amp; US shares,</span>
+          <span style={{ color: "#6b6b6b", fontStyle: "italic", fontWeight: 500 }}>in shillings.</span>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 24, color: "#6b6b6b" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div style={{ width: 10, height: 10, borderRadius: 999, background: "#12a150", display: "flex" }} />
-            <div style={{ display: "flex" }}>One account · 1% fee · no minimum</div>
-          </div>
-          <div style={{ display: "flex", fontWeight: 600, color: "#0a0a0b" }}>capx.broker</div>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 30, marginTop: 34 }}>
+          {group("Dar es Salaam", markets[0].names)}
+          <div style={{ display: "flex", width: 2, height: 76, background: "#ececec", marginTop: 4 }} />
+          {group("United States", markets[1].names)}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 34, fontSize: 22, color: "#555" }}>
+          <div style={{ width: 9, height: 9, borderRadius: 999, background: "#12a150", display: "flex" }} />
+          <div style={{ display: "flex" }}>From TSh 2,000 · mobile money or bank · capx.broker</div>
         </div>
       </div>
     ),

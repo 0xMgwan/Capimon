@@ -11,13 +11,13 @@
  * silently does nothing on half the devices is worse than one that is known not
  * to work on them.
  *
- * For iOS there is a real mechanism from 17.4: a `<label>` bound to a checkbox
- * with the `switch` attribute plays the system haptic when toggled. That is a
+ * For iOS there is a real mechanism from iOS 18: a `<label>` wrapping a
+ * checkbox with the `switch` attribute plays the system haptic when toggled. That is a
  * side effect of a form control rather than an API, so the element is created
  * once, kept off-screen and out of the accessibility tree, and clicked rather
  * than rendered.
  *
- * Below 17.4 there is no web API that reaches the Taptic Engine. Not a
+ * Below iOS 18 there is no web API that reaches the Taptic Engine. Not a
  * restricted one, not a permissioned one — none. What can be offered instead is
  * a very short, very quiet click through Web Audio, which is sound rather than
  * touch. It is off unless someone turns it on, because a finance app that
@@ -38,38 +38,39 @@ const PATTERN: Record<Feel, number | number[]> = {
   error: [22, 55, 22, 55, 22],
 };
 
-let iosSwitch: HTMLInputElement | null = null;
+/**
+ * The iOS system haptic, via a switch control.
+ *
+ * Toggling an `<input type="checkbox" switch>` plays the Taptic Engine on
+ * iOS 18 and later — but only when it happens inside a genuine tap's `click`
+ * event, which is why the global listener fires on click for iOS. The earlier
+ * version ran on pointerdown, which Safari does not treat as a user gesture,
+ * so it toggled the switch silently.
+ *
+ * A fresh label-wrapped switch is made, clicked and removed each time. Keeping
+ * one around looked tidier but is not the pattern Safari responds to reliably.
+ */
+let inHaptic = false;
 
 function iosHaptic() {
-  if (typeof document === "undefined") return false;
+  if (typeof document === "undefined" || inHaptic) return false;
+  inHaptic = true;
   try {
-    if (!iosSwitch) {
-      const input = document.createElement("input");
-      input.type = "checkbox";
-      // The attribute is what produces the haptic; without it this is an
-      // ordinary checkbox and nothing happens.
-      input.setAttribute("switch", "");
-      input.setAttribute("aria-hidden", "true");
-      input.tabIndex = -1;
-      input.style.cssText =
-        "position:fixed;top:-100px;left:-100px;width:1px;height:1px;opacity:0;pointer-events:none";
-
-      const label = document.createElement("label");
-      label.setAttribute("aria-hidden", "true");
-      label.style.cssText = input.style.cssText;
-      const id = "capx-haptic-switch";
-      input.id = id;
-      label.htmlFor = id;
-
-      document.body.append(input, label);
-      iosSwitch = input;
-      (iosSwitch as HTMLInputElement & { _label?: HTMLLabelElement })._label = label;
-    }
-    const label = (iosSwitch as HTMLInputElement & { _label?: HTMLLabelElement })._label;
-    label?.click();
+    const label = document.createElement("label");
+    label.ariaHidden = "true";
+    label.style.display = "none";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.setAttribute("switch", "");
+    label.appendChild(input);
+    document.head.appendChild(label);
+    label.click();
+    document.head.removeChild(label);
     return true;
   } catch {
     return false;
+  } finally {
+    inHaptic = false;
   }
 }
 
@@ -100,8 +101,8 @@ export function haptic(feel: Feel = "light") {
       return;
     }
     if (isIosSafari()) {
-      // 17.4 and up feel this. Older devices get the audio click only if the
-      // person asked for it.
+      // iOS 18 and up feel this. Older devices get the audio click only if
+      // the person asked for it.
       const played = iosHaptic();
       if (!played || (needsTapSound() && tapSoundEnabled())) tick();
     }
@@ -136,11 +137,10 @@ export function needsTapSound() {
   if (typeof navigator === "undefined") return false;
   if (typeof navigator.vibrate === "function") return false;
   if (!isIosSafari()) return false;
-  // 17.4 brought the switch control's haptic. Below it, nothing.
+  // The switch control gained its haptic in iOS 18. Below it, nothing.
   const m = /OS (\d+)_(\d+)/.exec(navigator.userAgent);
   if (!m) return true;
-  const major = Number(m[1]), minor = Number(m[2]);
-  return major < 17 || (major === 17 && minor < 4);
+  return Number(m[1]) < 18;
 }
 
 let audio: AudioContext | null = null;

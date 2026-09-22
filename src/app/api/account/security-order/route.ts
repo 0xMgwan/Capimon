@@ -48,6 +48,21 @@ export async function POST(req: Request) {
       );
     }
 
+    /*
+     * A venue that does not buy back yet.
+     *
+     * A tokenised IPO can be subscribed to and not sold until its allocation
+     * completes. Accepting a sell would credit shillings for something CAPX
+     * cannot itself turn back into money.
+     */
+    if (side === "sell" && market.buyOnly) {
+      return NextResponse.json(
+        { ok: false, code: "sell_closed",
+          error: `${SEC} cannot be sold yet. ${market.issuer ?? "The issuer"} opens selling once the offer closes and allocation completes.` },
+        { status: 409 },
+      );
+    }
+
     // Gate buys, never sells — a sell returns shares and can only improve
     // backing, so blocking it would trap a customer behind a shortfall they are
     // trying to exit.

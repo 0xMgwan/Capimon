@@ -28,7 +28,21 @@ export async function GET() {
       // The logo is served on its own route; inlining it would put tens of
       // kilobytes of base64 into every read of this list.
       const { logo, ...metadata } = (r.metadata ?? {}) as Record<string, unknown>;
-      return { ...r, metadata, hasLogo: !!logo, backing: await backing(r.symbol) };
+      const kind = metadata.kind === "external" ? "external" : "dse";
+      /* An external listing is backed by what the treasury holds, not by an
+         attestation, so its holding is reported alongside. */
+      let held: number | null = null;
+      if (kind === "external") {
+        const { treasuryHoldings } = await import("@/lib/treasury");
+        const t = await treasuryHoldings().catch(() => null);
+        held = t?.holdings.find((h) => h.asset === r.symbol)?.qty ?? 0;
+      }
+      return {
+        ...r, metadata, hasLogo: !!logo, kind,
+        issuer: (metadata.issuer as string) ?? null, venue: (metadata.venue as string) ?? null,
+        buyOnly: metadata.buyOnly === true, held,
+        backing: await backing(r.symbol),
+      };
     }));
 
     return NextResponse.json({ ok: true, securities }, { headers: { "cache-control": "no-store" } });

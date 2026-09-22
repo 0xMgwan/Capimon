@@ -12,6 +12,8 @@ type Backing = {
 type Security = {
   symbol: string; name: string; token_address: string | null;
   chain_id: number; status: string; backing: Backing;
+  /** "external": a token another issuer made, which CAPX buys and holds. */
+  kind?: "dse" | "external"; issuer?: string | null; buyOnly?: boolean; held?: number | null;
 };
 
 const dt = (s: string | null) =>
@@ -122,6 +124,35 @@ export function ProofOfReserves() {
                   * a figure failed to load. The last cell spans the row when
                   * there is nothing to pair it with.
                   */}
+                {/*
+                  * An external listing is backed by a balance, not a statement.
+                  *
+                  * There is no custodian attestation to show: CAPX bought the
+                  * issuer's token and holds it, so what matters is how much it
+                  * holds against what customers are owed — both readable on
+                  * Base by anyone.
+                  */}
+                {s.kind === "external" ? (
+                  <>
+                    <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-3">
+                      <Cell label={t("Held by CAPX")} value={(s.held ?? b.underlying).toLocaleString()} />
+                      <Cell label={t("Held by customers")} value={b.clientHeld.toLocaleString()} />
+                      <Cell label={t("Available to buy")} value={Math.max(0, (s.held ?? 0) - b.clientHeld).toLocaleString()} />
+                    </div>
+                    <dl className="mt-4 grid min-w-0 gap-1.5 text-[13px] sm:grid-cols-2">
+                      <Row k={t("Token issued by")} v={s.issuer ?? "—"} />
+                      <Row k={t("Selling")} v={s.buyOnly ? t("Opens when the offer closes") : t("Open")} warn={s.buyOnly} />
+                      <Row
+                        k="Token"
+                        v={s.token_address ? `${s.token_address.slice(0, 10)}…${s.token_address.slice(-6)}` : "—"}
+                      />
+                    </dl>
+                    <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
+                      {t("CAPX buys this token and holds it. The balance above is read from Base, and customers' claims are recorded in CAPX's ledger.")}
+                    </p>
+                  </>
+                ) : (
+                  <>
                 <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-3 lg:grid-cols-5 [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1">
                   <Cell label={t("Underlying shares")} value={b.underlying.toLocaleString()} />
                   <Cell label={t("Locked in custody")} value={b.locked.toLocaleString()} />
@@ -146,6 +177,8 @@ export function ProofOfReserves() {
                     v={s.token_address ? `${s.token_address.slice(0, 10)}…${s.token_address.slice(-6)}` : "Not deployed"}
                   />
                 </dl>
+                  </>
+                )}
 
                 {under && (
                   <p className="mt-4 rounded-2xl border border-[var(--color-down)]/40 p-3 text-xs leading-relaxed text-[var(--color-down)]">

@@ -436,4 +436,12 @@ export const SW: Record<string, string> = {
   "The DSE's price history is unavailable right now. The chart returns as soon as the exchange is back.": "Historia ya bei ya DSE haipatikani sasa hivi. Chati itarudi mara soko litakaporejea.",
   "First price published by CAPX on": "Bei ya kwanza iliyochapishwa na CAPX tarehe",
   "The chart fills in day by day, and shows the full DSE history once the exchange is back.": "Chati itajaa siku baada ya siku, na itaonyesha historia kamili ya DSE soko likirejea.",
+  "Buying only for now.": "Kwa sasa ni kununua tu.",
+  "Selling opens when the offer closes and allocation completes.": "Kuuza kutafunguliwa ofa itakapofungwa na mgawo kukamilika.",
+  "Held by CAPX": "Inashikiliwa na CAPX",
+  "Token issued by": "Tokeni imetolewa na",
+  "Selling": "Kuuza",
+  "Opens when the offer closes": "Kutafunguliwa ofa itakapofungwa",
+  "Open": "Wazi",
+  "CAPX buys this token and holds it. The balance above is read from Base, and customers' claims are recorded in CAPX's ledger.": "CAPX inanunua tokeni hii na kuishikilia. Salio hapo juu linasomwa kutoka Base, na madai ya wateja yameandikwa kwenye daftari la CAPX.",
 };

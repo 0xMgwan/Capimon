@@ -124,6 +124,22 @@ export async function POST(req: Request) {
        * Checked here anyway: only raster images, and small enough that a
        * listing of every security stays a light response.
        */
+      /*
+       * What kind of listing this is.
+       *
+       * "external" is a token CAPX buys and holds rather than mints — a
+       * tokenised IPO, or another issuer's equity. It has no attestation and
+       * no mint; its backing is the treasury's balance. `buyOnly` closes the
+       * sell side while a venue does not allow selling back.
+       */
+      const kind = body.kind === "external" ? "external" : "dse";
+      const listing = {
+        kind,
+        ...(body.issuer ? { issuer: String(body.issuer).slice(0, 120) } : {}),
+        ...(body.venue ? { venue: String(body.venue).slice(0, 200) } : {}),
+        buyOnly: body.buyOnly === true,
+      };
+
       let logo: string | null = null;
       if (body.logo) {
         logo = String(body.logo);
@@ -142,7 +158,7 @@ export async function POST(req: Request) {
         await sql`
           insert into capx.securities (symbol, name, token_address, decimals, chain_id, status, metadata)
           values (${symbol}, ${name}, ${tokenAddress}, ${decimals}, 8453, 'draft',
-                  ${sql.json({ ...(logo ? { logo } : {}), registeredBy: ACTOR[role] })})
+                  ${sql.json({ ...listing, ...(logo ? { logo } : {}), registeredBy: ACTOR[role] })})
           on conflict (symbol) do update
             set name = excluded.name,
                 token_address = coalesce(capx.securities.token_address, excluded.token_address),
@@ -154,7 +170,7 @@ export async function POST(req: Request) {
         insert into capx.securities (symbol, name, token_address, decimals, chain_id, status, metadata)
         values (${symbol}, ${name}, ${tokenAddress}, ${decimals},
                 ${Number(body.chainId ?? 8453)}, ${String(body.status ?? "draft")},
-                ${sql.json(logo ? { logo } : {})})
+                ${sql.json({ ...listing, ...(logo ? { logo } : {}) })})
         on conflict (symbol) do update
           set name = excluded.name,
               token_address = coalesce(excluded.token_address, capx.securities.token_address),

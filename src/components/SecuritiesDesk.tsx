@@ -364,8 +364,8 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
 
       <RequestsSection data={data} isAdmin={isAdmin} onAct={act} busy={busy} w={w} sign={sign} />
 
-      <div className={`mt-8 grid gap-4 ${isAdmin ? "lg:grid-cols-2" : ""}`}>
-        {isAdmin && <RegisterSecurity onAct={act} busy={busy} w={w} sign={sign} />}
+      <div className="mt-8 grid gap-4 lg:grid-cols-2">
+        <RegisterSecurity onAct={act} busy={busy} w={w} sign={sign} asBroker={!isAdmin} />
         <FileAttestation onAct={act} busy={busy} lockToBroker={!isAdmin}
           securities={data.securities.map((x) => x.symbol)} />
       </div>
@@ -712,11 +712,13 @@ async function squareLogo(file: File): Promise<string> {
   }
 }
 
-function RegisterSecurity({ onAct, busy, w, sign }: {
+function RegisterSecurity({ onAct, busy, w, sign, asBroker = false }: {
   onAct: (b: Record<string, unknown>) => Promise<void>; busy: boolean;
+  /** FIMCO's portal: registers drafts, cannot create tokens or go live. */
+  asBroker?: boolean;
   w: ReturnType<typeof useIssuer>; sign: (label: string, fn: () => Promise<void>) => Promise<void>;
 }) {
-  const [f, setF] = useState({ symbol: "", name: "", tokenAddress: "", decimals: "8", status: "live" });
+  const [f, setF] = useState({ symbol: "", name: "", tokenAddress: "", decimals: "8", status: asBroker ? "draft" : "live" });
   const [logo, setLogo] = useState<string | null>(null);
   const [logoErr, setLogoErr] = useState<string | null>(null);
   return (
@@ -745,7 +747,12 @@ function RegisterSecurity({ onAct, busy, w, sign }: {
         * derived from the symbol, so a token that already exists is found and
         * filled in rather than created twice.
         */}
-      {f.symbol && f.name && !f.tokenAddress && (
+      {f.symbol && f.name && !f.tokenAddress && asBroker && (
+        <p className="-mt-1 mb-3 text-[11px] text-[var(--muted)]">
+          Leave blank if there is no token yet. CAPX creates it with the issuer wallet once the security is registered.
+        </p>
+      )}
+      {f.symbol && f.name && !f.tokenAddress && !asBroker && (
         <div className="-mt-1 mb-3 rounded-xl surface p-3 text-[12px]">
           <div className="flex flex-wrap items-center gap-2">
             <span className="flex-1">No token yet. Create <span className="font-medium">{f.symbol}t</span> on Base with the issuer wallet.</span>
@@ -797,6 +804,11 @@ function RegisterSecurity({ onAct, busy, w, sign }: {
       </label>
       <Field label="Decimals" v={f.decimals} on={(v) => setF({ ...f, decimals: v })} ph="8"
         hint="Read from the token itself when an address is given." />
+      {asBroker ? (
+        <p className="mb-3 text-[11px] text-[var(--muted)]">
+          Registered as a draft. CAPX takes it live once custody is attested and the token exists.
+        </p>
+      ) : (
       <label className="mb-3 block">
         <span className="eyebrow">Status</span>
         <div className="mt-1.5 flex gap-2">
@@ -816,6 +828,7 @@ function RegisterSecurity({ onAct, busy, w, sign }: {
           Draft keeps it off the public proof page. A security customers can buy should be live.
         </span>
       </label>
+      )}
       <button
         onClick={() => void onAct({ action: "register-security", ...f, decimals: Number(f.decimals), ...(logo ? { logo } : {}) })}
         disabled={busy || !f.symbol || !f.name}

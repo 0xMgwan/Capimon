@@ -8,7 +8,7 @@ import { treasuryAddress } from "@/lib/treasury";
 export const dynamic = "force-dynamic";
 
 /** What FIMCO may do. Everything else on this route is CAPX's. */
-const FIMCO_ACTIONS = new Set(["attest", "request-issuance"]);
+const FIMCO_ACTIONS = new Set(["attest", "request-issuance", "register-security"]);
 
 /** Attestations and issuance history for the custody desk. */
 export async function GET(req: Request) {
@@ -130,6 +130,24 @@ export async function POST(req: Request) {
         if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(logo) || logo.length > 200_000) {
           return NextResponse.json({ ok: false, error: "The logo must be a PNG, JPEG or WebP under about 150 KB." }, { status: 400 });
         }
+      }
+
+      /*
+       * FIMCO can put a security on the desk but not in front of customers:
+       * what it registers is a draft, an existing security keeps its status,
+       * and a token address already set is not replaced. Going live and
+       * choosing the token are CAPX's calls.
+       */
+      if (role === "fimco") {
+        await sql`
+          insert into capx.securities (symbol, name, token_address, decimals, chain_id, status, metadata)
+          values (${symbol}, ${name}, ${tokenAddress}, ${decimals}, 8453, 'draft',
+                  ${sql.json({ ...(logo ? { logo } : {}), registeredBy: ACTOR[role] })})
+          on conflict (symbol) do update
+            set name = excluded.name,
+                token_address = coalesce(capx.securities.token_address, excluded.token_address),
+                metadata = capx.securities.metadata || excluded.metadata`;
+        return NextResponse.json({ ok: true });
       }
 
       await sql`

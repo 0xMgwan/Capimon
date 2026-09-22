@@ -436,4 +436,61 @@ export const SW: Record<string, string> = {
   "The DSE's price history is unavailable right now. The chart returns as soon as the exchange is back.": "Historia ya bei ya DSE haipatikani sasa hivi. Chati itarudi mara soko litakaporejea.",
   "First price published by CAPX on": "Bei ya kwanza iliyochapishwa na CAPX tarehe",
   "The chart fills in day by day, and shows the full DSE history once the exchange is back.": "Chati itajaa siku baada ya siku, na itaonyesha historia kamili ya DSE soko likirejea.",
+
+  // --- footer ---
+  "Invest": "Wekeza",
+  "Company": "Kampuni",
+  // Bank names, left as they are said.
+  "CRDB Bank": "CRDB Bank",
+  "NMB Bank": "NMB Bank",
+  "Public markets, rebuilt as open infrastructure. Priced by live oracles, held in your own wallet.":
+    "Masoko ya umma, yaliyojengwa upya kama miundombinu huria. Bei kutoka oracle za moja kwa moja, zinashikiliwa kwenye mkoba wako mwenyewe.",
+  "CAPX lets you buy shares listed on the Dar es Salaam Stock Exchange, and US shares, with Tanzanian shillings. Shares bought through a CAPX account are held on your behalf by CAPX with a licensed DSE broker. CAPX is not an exchange or an investment adviser, and nothing here is investment advice. Share prices can fall as well as rise. US shares are not available to US persons.":
+    "CAPX inakuwezesha kununua hisa zilizoorodheshwa kwenye Soko la Hisa la Dar es Salaam, na hisa za Marekani, kwa shilingi za Tanzania. Hisa zinazonunuliwa kupitia akaunti ya CAPX zinashikiliwa kwa niaba yako na CAPX pamoja na dalali wa DSE mwenye leseni. CAPX si soko la hisa wala mshauri wa uwekezaji, na hakuna chochote hapa ni ushauri wa uwekezaji. Bei za hisa zinaweza kushuka au kupanda. Hisa za Marekani hazipatikani kwa raia wa Marekani.",
+  // The brand tagline, kept as it is said rather than translated literally.
+  "Capital in Motion": "Capital in Motion",
+
+  // --- account creation (AccountForm, JoinFlow) ---
+  // The onboarding funnel had no translation coverage at all until now; it is
+  // the one place a new customer cannot fall back to fluent English if the
+  // rest of the site is read in Swahili. The consent sentence is legal text —
+  // worth the same native-reviewer pass the file header already asks for.
+  "New account": "Akaunti mpya",
+  "Email or username": "Barua pepe au jina la mtumiaji",
+  "Password": "Nenosiri",
+  "10+ characters, letters and numbers": "Herufi 10+, herufi na namba",
+  "Username": "Jina la mtumiaji",
+  "optional": "si lazima",
+  "3–20 letters, numbers or _": "Herufi 3–20, namba au _",
+  "Full name": "Jina kamili",
+  "As on your NIDA": "Kama ilivyo kwenye NIDA yako",
+  "20 digits": "Tarakimu 20",
+  "e.g. AB123456": "mfano AB123456",
+  "Password looks good": "Nenosiri ni zuri",
+  "Both photos attached. They go to verification as soon as your account is open.":
+    "Picha zote mbili zimeambatishwa. Zinakwenda kwa uthibitishaji mara akaunti yako itakapofunguliwa.",
+  "Needed to verify the account. You can add them later, but you will not be able to trade until they are checked.":
+    "Zinahitajika kuthibitisha akaunti. Unaweza kuziongeza baadaye, lakini hutaweza kufanya biashara mpaka zikaguliwe.",
+  "I have read and agree to the": "Nimesoma na ninakubali",
+  "terms of service": "masharti ya huduma",
+  "and": "na",
+  "privacy policy": "sera ya faragha",
+  ", and I am not a United States person.": ", na mimi si raia wa Marekani.",
+  "Working…": "Inafanya kazi…",
+  "Create account": "Fungua akaunti",
+  "Could not continue": "Imeshindwa kuendelea",
+  "Something went wrong": "Hitilafu imetokea",
+  "Shillings in.": "Weka shilingi.",
+  "Shares out.": "Pata hisa.",
+  "Send shillings from your phone and buy tokenized equities. No wallet, no seed phrase, nothing to convert. CAPX holds the assets for you and records what you are owed.":
+    "Tuma shilingi kutoka kwenye simu yako kisha ununue hisa za kidijitali. Hakuna mkoba, hakuna seed phrase, hakuna cha kubadilisha. CAPX inashikilia mali kwa niaba yako na kurekodi unachodai.",
+  "Account open": "Akaunti imefunguliwa",
+  "Create your account": "Fungua akaunti yako",
+  "Signed in as": "Umeingia kama",
+  "You’ll get a prompt on your phone. Approve it and your balance appears here, CAPX handles the conversion.":
+    "Utapata ombi kwenye simu yako. Likubali na salio lako litaonekana hapa, CAPX hushughulikia ubadilishaji.",
+  "min 500": "kiwango cha chini 500",
+  "You send shillings.": "Unatuma shilingi.",
+  "Your shillings become USDC at the live rate.": "Shilingi zako zinabadilika kuwa USDC kwa kiwango cha wakati huo.",
+  "Your balance appears.": "Salio lako linaonekana.",
 };

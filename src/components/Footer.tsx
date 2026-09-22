@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { Lockup } from "./Logo";
+import { useT } from "@/lib/i18n";
 
 /*
  * Links a customer would look for. The developer ones — the B20 spec, the
@@ -29,6 +32,7 @@ const COLS = [
 ] as { title: string; links: { label: string; href: string; ext?: boolean }[] }[];
 
 export function Footer() {
+  const { t } = useT();
   return (
     <footer className="border-t hairline">
       <div className="mx-auto max-w-[1400px] px-5 py-10 sm:px-8 sm:py-16">
@@ -41,26 +45,25 @@ export function Footer() {
           <div>
             <Lockup />
             <p className="mt-3 max-w-xs text-[15px] leading-snug text-[var(--muted)] sm:text-[17px]">
-              Public markets, rebuilt as open infrastructure. Priced by live oracles,
-              held in your own wallet.
+              {t("Public markets, rebuilt as open infrastructure. Priced by live oracles, held in your own wallet.")}
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4 md:contents">
           {COLS.map((c) => (
             <div key={c.title}>
-              <div className="eyebrow">{c.title}</div>
+              <div className="eyebrow">{t(c.title)}</div>
               <ul className="mt-2.5 space-y-1.5 md:mt-4 md:space-y-2.5">
                 {c.links.map((l) => (
                   <li key={l.label}>
                     {"ext" in l && l.ext ? (
                       <a href={l.href} target="_blank" rel="noreferrer"
                         className="block text-[13px] leading-[1.35] text-[var(--muted)] transition-colors hover:text-[var(--fg)] sm:text-sm sm:leading-snug">
-                        {l.label}&nbsp;↗
+                        {t(l.label)}&nbsp;↗
                       </a>
                     ) : (
                       <Link href={l.href} className="block text-[13px] leading-[1.35] text-[var(--muted)] transition-colors hover:text-[var(--fg)] sm:text-sm sm:leading-snug">
-                        {l.label}
+                        {t(l.label)}
                       </Link>
                     )}
                   </li>
@@ -73,15 +76,11 @@ export function Footer() {
 
         <div className="mt-14 border-t hairline pt-6">
           <p className="max-w-3xl text-[11px] leading-relaxed text-[var(--muted)]">
-            CAPX lets you buy shares listed on the Dar es Salaam Stock Exchange, and US shares,
-            with Tanzanian shillings. Shares bought through a CAPX account are held on your behalf
-            by CAPX with a licensed DSE broker. CAPX is not an exchange or an investment adviser,
-            and nothing here is investment advice. Share prices can fall as well as rise. US shares
-            are not available to US persons.
+            {t("CAPX lets you buy shares listed on the Dar es Salaam Stock Exchange, and US shares, with Tanzanian shillings. Shares bought through a CAPX account are held on your behalf by CAPX with a licensed DSE broker. CAPX is not an exchange or an investment adviser, and nothing here is investment advice. Share prices can fall as well as rise. US shares are not available to US persons.")}
           </p>
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
             <span className="tnum text-xs text-[var(--muted)]">CAPX © {new Date().getFullYear()}</span>
-            <span className="eyebrow">Capital in Motion</span>
+            <span className="eyebrow">{t("Capital in Motion")}</span>
           </div>
         </div>
       </div>

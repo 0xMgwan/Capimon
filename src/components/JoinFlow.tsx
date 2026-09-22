@@ -66,7 +66,7 @@ export function JoinFlow() {
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true); setError(null);
-    try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : "Something went wrong"); }
+    try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : t("Something went wrong")); }
     finally { setBusy(false); }
   };
 
@@ -93,23 +93,22 @@ export function JoinFlow() {
       <Reveal>
         <div className="eyebrow">{t("Open an account")}</div>
         <h1 className="display mt-3 max-w-3xl text-[clamp(1.8rem,6vw,4.5rem)]">
-          <RevealWords text="Shillings in." />{" "}
+          <RevealWords text={t("Shillings in.")} />{" "}
           <span className="contra text-[var(--muted)]">
-            <RevealWords text="Shares out." delay={0.1} />
+            <RevealWords text={t("Shares out.")} delay={0.1} />
           </span>
         </h1>
         <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-[var(--muted)]">
-          Send shillings from your phone and buy tokenized equities. No wallet, no seed phrase,
-          nothing to convert. CAPX holds the assets for you and records what you are owed.
+          {t("Send shillings from your phone and buy tokenized equities. No wallet, no seed phrase, nothing to convert. CAPX holds the assets for you and records what you are owed.")}
         </p>
       </Reveal>
 
       <div className="mt-12 grid gap-10 lg:grid-cols-[minmax(0,520px)_1fr] lg:gap-16">
         <div>
           {/* 1 — account */}
-          <Step n={1} active={step === 1} done={signedIn} title={signedIn ? "Account open" : "Create your account"}>
+          <Step n={1} active={step === 1} done={signedIn} title={signedIn ? t("Account open") : t("Create your account")}>
             {signedIn ? (
-              <p className="text-sm text-[var(--muted)]">Signed in as {account.user.email}.</p>
+              <p className="text-sm text-[var(--muted)]">{t("Signed in as")} {account.user.email}.</p>
             ) : (
               <AccountForm mode={mode} onModeChange={setMode} onDone={async () => {
                 await load();
@@ -145,11 +144,10 @@ export function JoinFlow() {
           {/* 3 — deposit */}
           <Step n={3} active={step === 3} done={funded} title={t("Fund with mobile money")}>
             <p className="text-sm leading-relaxed text-[var(--muted)]">
-              You&rsquo;ll get a prompt on your phone. Approve it and your balance appears here,
-              CAPX handles the conversion.
+              {t("You’ll get a prompt on your phone. Approve it and your balance appears here, CAPX handles the conversion.")}
             </p>
             <div className="mt-4 grid gap-2.5">
-              <Field label={t("Amount (TZS)")} value={String(amountTzs)} onChange={(v) => setAmountTzs(Number(v.replace(/\D/g, "")) || 0)} inputMode="numeric" hint="min 500" />
+              <Field label={t("Amount (TZS)")} value={String(amountTzs)} onChange={(v) => setAmountTzs(Number(v.replace(/\D/g, "")) || 0)} inputMode="numeric" hint={t("min 500")} />
               <Field
                 label={t("Mobile money number")}
                 value={form.phone || account?.user.phone || ""}
@@ -173,7 +171,7 @@ export function JoinFlow() {
               disabled={busy || !signedIn || amountTzs < 500 || !(form.phone || account?.user.phone)}
               className="mt-4 w-full rounded-full bg-[var(--fg)] py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
             >
-              {busy ? "Sending prompt…" : `Deposit ${TZS(amountTzs)}`}
+              {busy ? t("Sending prompt…") : `${t("Deposit")} ${TZS(amountTzs)}`}
             </button>
           </Step>
 
@@ -190,7 +188,7 @@ export function JoinFlow() {
               </div>
             </div>
             <Link href="/markets" className="mt-4 block rounded-full bg-[var(--fg)] py-3.5 text-center text-sm font-medium text-[var(--bg)]">
-              Browse markets →
+              {t("Explore markets")} →
             </Link>
           </Step>
         </div>
@@ -214,9 +212,9 @@ export function JoinFlow() {
             <div className="rounded-3xl border hairline p-6">
               <div className="eyebrow">{t("How a deposit works")}</div>
               <ol className="mt-4 space-y-4 text-sm leading-relaxed text-[var(--muted)]">
-                <li><span className="text-[var(--fg)]">You send shillings.</span> {t("Approve the prompt on your phone. No card, no bank transfer.")}</li>
-                <li><span className="text-[var(--fg)]">{t("They convert automatically.")}</span> Your shillings become USDC at the live rate.</li>
-                <li><span className="text-[var(--fg)]">Your balance appears.</span> {t("Usually within a minute, ready to invest.")}</li>
+                <li><span className="text-[var(--fg)]">{t("You send shillings.")}</span> {t("Approve the prompt on your phone. No card, no bank transfer.")}</li>
+                <li><span className="text-[var(--fg)]">{t("They convert automatically.")}</span> {t("Your shillings become USDC at the live rate.")}</li>
+                <li><span className="text-[var(--fg)]">{t("Your balance appears.")}</span> {t("Usually within a minute, ready to invest.")}</li>
                 <li><span className="text-[var(--fg)]">{t("You buy shares.")}</span> {t("CAPX places the trade onchain and records your holding.")}</li>
               </ol>
               <p className="mt-5 border-t hairline pt-4 text-[11px] leading-relaxed text-[var(--muted)]">

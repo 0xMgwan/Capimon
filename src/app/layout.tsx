@@ -7,6 +7,7 @@ import { Footer } from "@/components/Footer";
 import { TickerTape } from "@/components/TickerTape";
 import { DseTape } from "@/components/DseTape";
 import { MobileTabs } from "@/components/MobileTabs";
+import { ThemeColor } from "@/components/ThemeColor";
 import { Haptics } from "@/components/Haptics";
 
 /*
@@ -68,10 +69,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0b" },
-  ],
+  // The page's own light background; ThemeColor switches it with the theme.
+  themeColor: "#fcfcfb",
   width: "device-width",
   initialScale: 1,
   // Fills the notch area on phones; zoom stays enabled for accessibility.
@@ -98,7 +97,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             paint so the first frame never flashes the wrong theme. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{if(localStorage.getItem('capx-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}`,
+            __html: `try{if(localStorage.getItem('capx-theme')==='dark'){document.documentElement.classList.add('dark');var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content','#0b0c0b')}}catch(e){}`,
           }}
         />
         {/* Motion emits inline initial styles; without JS they would hide content. */}
@@ -120,6 +119,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Footer />
           <MobileTabs />
           <Haptics />
+          <ThemeColor />
         </Providers>
       </body>
     </html>

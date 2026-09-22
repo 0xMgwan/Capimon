@@ -23,8 +23,9 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    background_color: "#ffffff",
-    theme_color: "#ffffff",
+    // The light theme's background, so the launch screen matches the first paint.
+    background_color: "#fcfcfb",
+    theme_color: "#fcfcfb",
     categories: ["finance", "business"],
     icons: [
       { src: "/api/app-icon?size=192", sizes: "192x192", type: "image/png", purpose: "any" },

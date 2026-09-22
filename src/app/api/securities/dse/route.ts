@@ -34,6 +34,9 @@ export async function GET() {
       changePct: q?.changePct ?? 0,
       tradeDate: q?.tradeDate ?? fallback?.updatedAt?.slice(0, 10) ?? null,
       source: q ? "dse" : fallback ? "oracle" : "none",
+      // When the shown price was set: the exchange's session, or the oracle's
+      // last publication when the exchange is unreachable.
+      asOf: q ? null : fallback?.updatedAt ?? null,
       feeBps: feeEnabled ? FEE_BPS : 0,
     };
   }));

@@ -16,6 +16,17 @@ export function CrdbIntro({ symbol = "CRDB", name = "CRDB Bank Plc" }: { symbol?
   const { t } = useT();
   const d = useDse().find((x) => x.symbol === symbol);
   const up = (d?.changePct ?? 0) >= 0;
+  /* The exchange's feed is down and the price is the oracle's last one. */
+  const fallback = d?.source === "oracle";
+  // Just the time when it is from today, the date otherwise — short enough
+  // to sit under the price without squeezing the company name.
+  const when = (() => {
+    if (!d?.asOf) return null;
+    const at = new Date(d.asOf);
+    return at.toDateString() === new Date().toDateString()
+      ? at.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+      : at.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  })();
   return (
     <div className="mb-3">
       <Link href="/markets" className="text-[13px] text-[var(--muted)] transition-colors hover:text-[var(--fg)]">
@@ -39,11 +50,13 @@ export function CrdbIntro({ symbol = "CRDB", name = "CRDB Bank Plc" }: { symbol?
             {d && d.price > 0 ? d.price.toLocaleString("en-TZ", { maximumFractionDigits: 0 }) : "—"}
             <span className="ml-1 text-[11px] font-normal text-[var(--muted)]">TZS</span>
           </div>
-          {d && d.price > 0 && (
+          {d && d.price > 0 && (fallback ? (
+            <div className="tnum mt-1 text-[12px] text-[#b45309]">{t("Last price")}{when ? ` · ${when}` : ""}</div>
+          ) : (
             <div className={`tnum mt-1 text-[12px] ${up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
               {up ? "▲" : "▼"} {Math.abs(d.changePct).toFixed(2)}% {t("today")}
             </div>
-          )}
+          ))}
         </div>
       </div>
       <p className="mt-2 line-clamp-2 max-w-xl text-[13.5px] leading-snug text-[var(--muted)] sm:text-sm">
@@ -51,6 +64,23 @@ export function CrdbIntro({ symbol = "CRDB", name = "CRDB Bank Plc" }: { symbol?
           ? t("Tanzania’s largest bank by assets, listed on the Dar es Salaam Stock Exchange. One CRDBt is one share, held in custody and settled in shillings.")
           : t("Listed on the Dar es Salaam Stock Exchange. One {sym}t is one share, held in custody and settled in shillings.").replace("{sym}", symbol)}
       </p>
+      {/*
+        * Said plainly when the exchange is down.
+        *
+        * Without this the page read "0.00% today", which looks like a live
+        * price that simply has not moved. The price is real — it is the one
+        * trades settle at — but it is the last one published, not today's.
+        */}
+      {fallback && (
+        <div className="mt-2.5 flex items-start gap-2 rounded-xl border border-[#b45309]/35 bg-[#b45309]/[0.06] px-3 py-2 text-[12px] leading-snug">
+          <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[#b45309]" />
+          <span className="text-[var(--muted)]">
+            <span className="font-medium text-[var(--fg)]">{t("DSE data is temporarily unavailable.")}</span>{" "}
+            {t("This is the last price CAPX published")}{when ? ` (${when})` : ""}{". "}
+            {t("Buying and selling continue at this price.")}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

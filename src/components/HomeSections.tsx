@@ -152,9 +152,13 @@ function DseCard({ d }: { d: DseListing }) {
           <div className="tnum text-lg font-medium">
             {d.price > 0 ? `TSh ${d.price.toLocaleString("en-TZ", { maximumFractionDigits: 0 })}` : "—"}
           </div>
-          <div className={`tnum text-[11px] ${up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
-            {up ? "▲" : "▼"} {Math.abs(d.changePct).toFixed(2)}% {t("today")}
-          </div>
+          {d.source === "oracle" ? (
+            <div className="text-[11px] text-[#b45309]">{t("Last price")}</div>
+          ) : (
+            <div className={`tnum text-[11px] ${up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+              {up ? "▲" : "▼"} {Math.abs(d.changePct).toFixed(2)}% {t("today")}
+            </div>
+          )}
         </div>
       </div>
 

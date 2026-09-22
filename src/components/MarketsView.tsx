@@ -65,7 +65,7 @@ export function MarketsView() {
               </span>
               <span className="block truncate text-[11px] leading-tight text-[var(--muted)]">{d.name}</span>
             </span>
-            <DseTag price={d.price} changePct={d.changePct} />
+            <DseTag price={d.price} changePct={d.changePct} last={d.source === "oracle"} />
           </Link>
         ))}
       </div>
@@ -123,7 +123,7 @@ export function MarketsView() {
 
 
 /** The live DSE mark, so the card is not just a link to find out. */
-function DseTag({ price, changePct }: { price: number; changePct: number }) {
+function DseTag({ price, changePct, last = false }: { price: number; changePct: number; last?: boolean }) {
   if (!(price > 0)) return <div className="h-8 w-20 shrink-0 animate-pulse rounded surface" />;
   const d = { price, changePct };
   const up = d.changePct >= 0;
@@ -133,9 +133,14 @@ function DseTag({ price, changePct }: { price: number; changePct: number }) {
         {d.price.toLocaleString("en-TZ", { maximumFractionDigits: 0 })}
         <span className="ml-1 text-[10px] font-normal text-[var(--muted)]">TZS</span>
       </div>
-      <div className={`tnum text-[11px] ${up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
-        {up ? "▲" : "▼"} {Math.abs(d.changePct).toFixed(2)}%
-      </div>
+      {last ? (
+        // The exchange is down; this is the last published price, not a flat day.
+        <div className="text-[11px] text-[#b45309]">last price</div>
+      ) : (
+        <div className={`tnum text-[11px] ${up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+          {up ? "▲" : "▼"} {Math.abs(d.changePct).toFixed(2)}%
+        </div>
+      )}
     </div>
   );
 }

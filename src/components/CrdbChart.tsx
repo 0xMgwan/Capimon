@@ -20,12 +20,14 @@ const fmt = (n: number) =>
 export function CrdbChart({ symbol = "CRDB" }: { symbol?: string }) {
   const { t } = useT();
   const [candles, setCandles] = useState<Candle[] | null>(null);
+  /** Set when the series is the saved copy, because the exchange is down. */
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     fetch(`/api/securities/${encodeURIComponent(symbol.toLowerCase())}/history`)
       .then((r) => r.json())
-      .then((d) => { if (alive && d.ok) setCandles(d.candles ?? []); })
+      .then((d) => { if (alive && d.ok) { setCandles(d.candles ?? []); setCachedAt(d.cachedAt ?? null); } })
       .catch(() => { if (alive) setCandles([]); });
     return () => { alive = false; };
   }, [symbol]);
@@ -36,7 +38,7 @@ export function CrdbChart({ symbol = "CRDB" }: { symbol?: string }) {
   if (candles.length < 2) {
     return (
       <div className="rounded-3xl border hairline p-6 text-sm text-[var(--muted)]">
-        {t("No price history available from the exchange right now.")}
+        {t("The DSE's price history is unavailable right now. The chart returns as soon as the exchange is back.")}
       </div>
     );
   }
@@ -48,7 +50,9 @@ export function CrdbChart({ symbol = "CRDB" }: { symbol?: string }) {
       format={fmt}
       ranges={TZS_RANGES}
       provenance={(n) =>
-        `${n} daily closes on the Dar es Salaam Stock Exchange`
+        cachedAt
+          ? `${n} daily closes · saved ${new Date(cachedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}, while DSE data is unavailable`
+          : `${n} daily closes on the Dar es Salaam Stock Exchange`
       }
     />
   );

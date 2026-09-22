@@ -61,9 +61,13 @@ export function TickerTape() {
                       <DseLogo logo={d.logo} symbol={d.symbol} size={14} />
                       <span className="font-semibold tracking-tight">{d.symbol}</span>
                       <span className="tnum">TSh {d.price.toLocaleString("en-TZ", { maximumFractionDigits: 0 })}</span>
-                      <span className={`tnum text-[11px] ${up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
-                        {up ? "▲" : "▼"} {Math.abs(d.changePct).toFixed(2)}%
-                      </span>
+                      {d.source === "oracle" ? (
+                        <span className="text-[11px] text-[#b45309]">last</span>
+                      ) : (
+                        <span className={`tnum text-[11px] ${up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                          {up ? "▲" : "▼"} {Math.abs(d.changePct).toFixed(2)}%
+                        </span>
+                      )}
                     </Link>
                   );
                 }

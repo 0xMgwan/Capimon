@@ -11,6 +11,10 @@ import { useEffect, useState } from "react";
 export type DseListing = {
   symbol: string; name: string; logo: string | null; status: string;
   price: number; changePct: number; tradeDate: string | null; feeBps: number;
+  /** "dse" when live from the exchange, "oracle" when the exchange is down. */
+  source?: "dse" | "oracle" | "none";
+  /** When the fallback price was published. */
+  asOf?: string | null;
 };
 
 let cache: DseListing[] | null = null;

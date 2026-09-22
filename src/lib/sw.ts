@@ -429,4 +429,9 @@ export const SW: Record<string, string> = {
   "Tanzanian shares in shillings, US shares in dollars.": "Hisa za Tanzania kwa shilingi, hisa za Marekani kwa dola.",
   "Prices update live. US shares are not available to US persons.": "Bei zinasasishwa moja kwa moja. Hisa za Marekani hazipatikani kwa raia wa Marekani.",
   "Contract details": "Maelezo ya mkataba",
+  "Last price": "Bei ya mwisho",
+  "DSE data is temporarily unavailable.": "Taarifa za DSE hazipatikani kwa muda.",
+  "This is the last price CAPX published": "Hii ni bei ya mwisho iliyochapishwa na CAPX",
+  "Buying and selling continue at this price.": "Kununua na kuuza kunaendelea kwa bei hii.",
+  "The DSE's price history is unavailable right now. The chart returns as soon as the exchange is back.": "Historia ya bei ya DSE haipatikani sasa hivi. Chati itarudi mara soko litakaporejea.",
 };

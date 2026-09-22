@@ -20,6 +20,6 @@ export async function GET(req: Request) {
   if (!m) return new NextResponse("not found", { status: 404 });
 
   return new NextResponse(new Uint8Array(Buffer.from(m[2], "base64")), {
-    headers: { "content-type": m[1], "cache-control": "public, max-age=3600" },
+    headers: { "content-type": m[1], "cache-control": "public, max-age=300" },
   });
 }

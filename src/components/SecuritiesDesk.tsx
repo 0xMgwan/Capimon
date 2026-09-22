@@ -100,7 +100,8 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
     return () => clearInterval(id);
   }, [data, token, load]);
 
-  const act = async (body: Record<string, unknown>) => {
+  /** Runs a desk action; resolves true when it succeeded. */
+  const act = async (body: Record<string, unknown>): Promise<boolean> => {
     setBusy(true); setErr(null); setNote(null);
     try {
       const r = await fetch("/api/admin/custody", {
@@ -114,12 +115,15 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
       if (!j.ok) throw new Error(j.error ?? "Action failed");
       setNote("Done.");
       await load(token);
+      return true;
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Action failed");
+      return false;
     } finally {
       setBusy(false);
     }
   };
+  const [editing, setEditing] = useState<Security | null>(null);
 
   const isAdmin = data?.role === "admin";
   const w = useIssuer(data?.contracts.custodyRegistry ?? "");
@@ -207,6 +211,15 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
                   <span>
                     <span className="text-xl font-medium">{s.symbol}</span>
                     <span className="ml-2 text-sm text-[var(--muted)]">{s.name}</span>
+                    <button
+                      onClick={() => {
+                        setEditing(s);
+                        requestAnimationFrame(() => document.getElementById("register-form")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+                      }}
+                      className="ml-3 rounded-full border hairline px-2.5 py-0.5 text-[11px] text-[var(--muted)] hover:text-[var(--fg)]"
+                    >
+                      Edit
+                    </button>
                   </span>
                 </div>
                 <div className={`tnum text-2xl font-medium ${under ? "text-[var(--color-down)]" : "text-[var(--color-up)]"}`}>
@@ -274,7 +287,12 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
               )}
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
-                <RequestMint security={s.symbol} headroom={b.headroom} hasToken={!!s.token_address} onAct={act} busy={busy} />
+                <div className="w-full">
+                  <TokenSetup sec={s} isAdmin={isAdmin} w={w} sign={sign} onAct={act} busy={busy} />
+                  {s.token_address && (
+                    <RequestMint security={s.symbol} headroom={b.headroom} hasToken onAct={act} busy={busy} />
+                  )}
+                </div>
 
                 {/*
                   * Status was set once at registration and never again, so
@@ -365,7 +383,10 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
       <RequestsSection data={data} isAdmin={isAdmin} onAct={act} busy={busy} w={w} sign={sign} />
 
       <div className="mt-8 grid gap-4 lg:grid-cols-2">
-        <RegisterSecurity onAct={act} busy={busy} w={w} sign={sign} asBroker={!isAdmin} />
+        <div id="register-form">
+          <RegisterSecurity key={editing?.symbol ?? "new"} onAct={act} busy={busy} w={w} sign={sign}
+            asBroker={!isAdmin} preset={editing} onDone={() => setEditing(null)} />
+        </div>
         <FileAttestation onAct={act} busy={busy} lockToBroker={!isAdmin}
           securities={data.securities.map((x) => x.symbol)} />
       </div>
@@ -650,6 +671,124 @@ function mintCmd(r: Request_, sec: Security | undefined, treasury: string | null
 }
 
 /**
+ * Getting a security its token, one step at a time, read from the chain.
+ *
+ * Creating a token is three things — the factory call, linking the address to
+ * the security here, and granting the issuer the mint role — and two of them
+ * need a signature. Run as one button, a dismissed or failed second signature
+ * left a token on Base that the desk knew nothing about. Each step is now its
+ * own, derived from what the chain actually says, so an interrupted setup
+ * picks up where it stopped rather than starting again.
+ */
+function TokenSetup({ sec, isAdmin, w, sign, onAct, busy }: {
+  sec: Security; isAdmin: boolean; w: ReturnType<typeof useIssuer>;
+  sign: (label: string, fn: () => Promise<void>) => Promise<void>;
+  onAct: (b: Record<string, unknown>) => Promise<boolean | void>; busy: boolean;
+}) {
+  const tsym = `${sec.symbol}t`;
+  const [state, setState] = useState<{ address: `0x${string}`; exists: boolean; minter: boolean } | null>(null);
+  const [tick, setTick] = useState(0);
+  const issuer = w.issuer as `0x${string}` | null;
+
+  useEffect(() => {
+    if (!w.client || !issuer) return;
+    let alive = true;
+    (async () => {
+      // A linked token is the one to check; otherwise the address the factory
+      // would give this symbol, which is where an interrupted create landed.
+      const predicted = sec.token_address
+        ? { address: sec.token_address as `0x${string}`, exists: true }
+        : await predictToken(w.client!, issuer, tsym);
+      const minter = predicted.exists
+        ? Boolean(await w.client!.readContract({
+            address: predicted.address, abi: tokenAbi, functionName: "hasRole", args: [MINT_ROLE, issuer],
+          }).catch(() => false))
+        : false;
+      if (alive) setState({ ...predicted, minter });
+    })().catch(() => {});
+    return () => { alive = false; };
+  }, [w.client, issuer, sec.token_address, tsym, tick]);
+
+  const link = (address: string) =>
+    onAct({ action: "register-security", symbol: sec.symbol, name: sec.name, tokenAddress: address, status: sec.status, decimals: 8 });
+
+  const linked = !!sec.token_address;
+  const done = linked && state?.minter;
+  if (done) {
+    return (
+      <p className="mb-2 text-[11px] text-[var(--muted)]">
+        <span className="text-[var(--color-up)]">✓ Token ready</span> · {tsym}{" "}
+        <a href={`https://basescan.org/token/${sec.token_address}`} target="_blank" rel="noreferrer"
+          className="tnum underline underline-offset-2">{sec.token_address!.slice(0, 8)}…{sec.token_address!.slice(-4)}</a> · mint role granted
+      </p>
+    );
+  }
+  if (!isAdmin) {
+    return (
+      <p className="mb-2 text-[11px] text-[var(--muted)]">
+        {linked ? `${tsym} is linked; CAPX is finishing its setup.` : `Waiting for CAPX to create ${tsym} on Base.`}
+      </p>
+    );
+  }
+
+  const steps: [string, boolean][] = [
+    [`Create ${tsym}`, !!state?.exists],
+    [`Link to ${sec.symbol}`, linked],
+    ["Grant mint role", !!state?.minter],
+  ];
+  const needWallet = !w.isIssuer;
+  return (
+    <div className="mb-3 rounded-xl surface p-3 text-[12px]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        {steps.map(([label, ok], i) => (
+          <span key={label} className={ok ? "text-[var(--color-up)]" : "text-[var(--muted)]"}>
+            {ok ? "✓" : `${i + 1}.`} {label}
+          </span>
+        ))}
+      </div>
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        {!state ? (
+          <span className="text-[var(--muted)]">{issuer ? "Checking Base…" : "Reading the issuer from the registry…"}</span>
+        ) : !state.exists ? (
+          <button disabled={busy || needWallet} title={needWallet ? "Connect the issuer wallet above" : undefined}
+            onClick={() => void sign(`Create ${tsym}`, async () => {
+              await w.send(createTokenTx(sec.name, tsym, issuer!));
+              // Linked at once, so a later step failing cannot orphan the token.
+              await link(state.address);
+            })}
+            className="rounded-full bg-[var(--fg)] px-3.5 py-1.5 font-medium text-[var(--bg)] disabled:opacity-40">
+            Create {tsym}
+          </button>
+        ) : !linked ? (
+          <>
+            <span>{tsym} exists at <span className="tnum">{state.address.slice(0, 8)}…{state.address.slice(-4)}</span>.</span>
+            <button disabled={busy} onClick={() => void link(state.address)}
+              className="rounded-full bg-[var(--fg)] px-3.5 py-1.5 font-medium text-[var(--bg)] disabled:opacity-40">
+              Link it to {sec.symbol}
+            </button>
+          </>
+        ) : (
+          <>
+            <span>Next, allow the issuer to mint {tsym}.</span>
+            <button disabled={busy || needWallet} title={needWallet ? "Connect the issuer wallet above" : undefined}
+              onClick={() => void sign(`Grant mint role on ${tsym}`, async () => {
+                await w.send({ address: state.address, abi: tokenAbi as Abi, functionName: "grantRole", args: [MINT_ROLE, issuer!] });
+                setTick((t) => t + 1);
+              })}
+              className="rounded-full bg-[var(--fg)] px-3.5 py-1.5 font-medium text-[var(--bg)] disabled:opacity-40">
+              Grant mint role
+            </button>
+          </>
+        )}
+        {needWallet && state && !(linked && !state.exists) && (
+          <span className="text-[11px] text-[var(--muted)]">Signing steps need the issuer wallet connected above.</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Asking for more tokens.
  *
  * There is no bare "Mint" button any more. The old one only wrote a line in
@@ -659,7 +798,7 @@ function mintCmd(r: Request_, sec: Security | undefined, treasury: string | null
  */
 function RequestMint({ security, headroom, hasToken, onAct, busy }: {
   security: string; headroom: number; hasToken: boolean;
-  onAct: (b: Record<string, unknown>) => Promise<void>; busy: boolean;
+  onAct: (b: Record<string, unknown>) => Promise<boolean | void>; busy: boolean;
 }) {
   const [qty, setQty] = useState("");
   const n = Number(qty) || 0;
@@ -690,7 +829,7 @@ function RequestMint({ security, headroom, hasToken, onAct, busy }: {
 
 /** The queue of mint and burn requests, and what each one is waiting for. */
 function RequestsSection({ data, isAdmin, onAct, busy, w, sign }: {
-  data: DeskData; isAdmin: boolean; onAct: (b: Record<string, unknown>) => Promise<void>; busy: boolean;
+  data: DeskData; isAdmin: boolean; onAct: (b: Record<string, unknown>) => Promise<boolean | void>; busy: boolean;
   w: ReturnType<typeof useIssuer>; sign: (label: string, fn: () => Promise<void>) => Promise<void>;
 }) {
   const [hashes, setHashes] = useState<Record<string, string>>({});
@@ -818,18 +957,33 @@ async function squareLogo(file: File): Promise<string> {
   }
 }
 
-function RegisterSecurity({ onAct, busy, w, sign, asBroker = false }: {
-  onAct: (b: Record<string, unknown>) => Promise<void>; busy: boolean;
+function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone }: {
+  onAct: (b: Record<string, unknown>) => Promise<boolean | void>; busy: boolean;
+  /** An existing security being edited: its fields and logo are loaded. */
+  preset?: Security | null;
+  onDone?: () => void;
   /** FIMCO's portal: registers drafts, cannot create tokens or go live. */
   asBroker?: boolean;
-  w: ReturnType<typeof useIssuer>; sign: (label: string, fn: () => Promise<void>) => Promise<void>;
+  w?: ReturnType<typeof useIssuer>; sign?: (label: string, fn: () => Promise<void>) => Promise<void>;
 }) {
-  const [f, setF] = useState({ symbol: "", name: "", tokenAddress: "", decimals: "8", status: asBroker ? "draft" : "live" });
+  // Fixed per mount, so the preview is fresh after a replacement but stable while editing.
+  const [bust] = useState(() => Date.now() % 1e6);
+  const [f, setF] = useState({
+    symbol: preset?.symbol ?? "", name: preset?.name ?? "", tokenAddress: preset?.token_address ?? "",
+    decimals: String(preset?.decimals ?? 8), status: preset?.status ?? (asBroker ? "draft" : "live"),
+  });
   const [logo, setLogo] = useState<string | null>(null);
+  /** The logo already on file, shown until a new one is chosen. */
+  const existingLogo = preset?.has_logo ? `/api/securities/logo?symbol=${encodeURIComponent(preset.symbol)}&v=${bust}` : null;
   const [logoErr, setLogoErr] = useState<string | null>(null);
   return (
     <div className="rounded-3xl border hairline p-5">
-      <div className="eyebrow">Register a security</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="eyebrow">{preset ? `Edit ${preset.symbol}` : "Register a security"}</div>
+        {preset && onDone && (
+          <button onClick={onDone} className="text-[11px] text-[var(--muted)] underline">Cancel</button>
+        )}
+      </div>
       {/*
         * The symbol is a key, not a label.
         *
@@ -839,8 +993,14 @@ function RegisterSecurity({ onAct, busy, w, sign, asBroker = false }: {
         * the desk simply reports no attestation in force while one sits on the
         * registry, and issuance stays blocked with nothing to point at.
         */}
-      <Field label="Symbol" v={f.symbol} on={(v) => setF({ ...f, symbol: v.toUpperCase() })} ph="CRDB"
-        hint="The security's key in the custody registry and oracle: CRDB, not CRDBt." />
+      {preset ? (
+        <p className="mb-3 mt-2 text-[12px] text-[var(--muted)]">
+          Symbol <span className="font-medium text-[var(--fg)]">{preset.symbol}</span> — the key everything else is stored under, so it cannot change.
+        </p>
+      ) : (
+        <Field label="Symbol" v={f.symbol} on={(v) => setF({ ...f, symbol: v.toUpperCase() })} ph="CRDB"
+          hint="The security's key in the custody registry and oracle: CRDB, not CRDBt." />
+      )}
       <Field label="Name" v={f.name} on={(v) => setF({ ...f, name: v })} ph="CRDB Bank Plc" />
       {/*
         * The token address is filled in, not typed.
@@ -867,37 +1027,17 @@ function RegisterSecurity({ onAct, busy, w, sign, asBroker = false }: {
           No token is needed yet. Once you save, CAPX creates the token on Base with the issuer wallet and links it here.
         </p>
       )}
-      {f.symbol && f.name && !f.tokenAddress && !asBroker && (
-        <div className="-mt-1 mb-3 rounded-xl surface p-3 text-[12px]">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="flex-1">No token yet. Create <span className="font-medium">{f.symbol}t</span> on Base with the issuer wallet.</span>
-            <button
-              disabled={busy || !w.isIssuer}
-              title={!w.isIssuer ? "Connect the issuer wallet above" : undefined}
-              onClick={() => void sign(`Create ${f.symbol}t`, async () => {
-                if (!w.client || !w.address) throw new Error("Connect the issuer wallet.");
-                const tsym = `${f.symbol}t`;
-                const issuer = w.address as `0x${string}`;
-                const p = await predictToken(w.client, issuer, tsym);
-                if (!p.exists) await w.send(createTokenTx(f.name, tsym, issuer));
-                const has = await w.client.readContract({ address: p.address, abi: tokenAbi, functionName: "hasRole", args: [MINT_ROLE, issuer] });
-                if (!has) await w.send({ address: p.address, abi: tokenAbi as Abi, functionName: "grantRole", args: [MINT_ROLE, issuer] });
-                setF((cur) => ({ ...cur, tokenAddress: p.address }));
-                await onAct({ action: "register-security", ...f, tokenAddress: p.address, decimals: 8, ...(logo ? { logo } : {}) });
-              })}
-              className="rounded-full bg-[var(--fg)] px-3.5 py-1.5 font-medium text-[var(--bg)] disabled:opacity-40"
-            >
-              Create token
-            </button>
-          </div>
-        </div>
+      {!asBroker && !preset && (
+        <p className="-mt-1 mb-3 text-[11px] text-[var(--muted)]">
+          Save first. The security&rsquo;s card above then walks through creating its token, linking it and granting the mint role.
+        </p>
       )}
       <label className="mb-3 block">
         <span className="eyebrow">Logo</span>
         <div className="mt-1.5 flex items-center gap-3">
-          {logo ? (
+          {logo || existingLogo ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logo} alt="" className="h-12 w-12 rounded-full border hairline object-cover" />
+            <img src={logo ?? existingLogo ?? ""} alt="" className="h-12 w-12 rounded-full border hairline object-cover" />
           ) : (
             <span className="grid h-12 w-12 place-items-center rounded-full border border-dashed hairline text-[10px] text-[var(--muted)]">none</span>
           )}
@@ -914,7 +1054,9 @@ function RegisterSecurity({ onAct, busy, w, sign, asBroker = false }: {
           {logo && <button onClick={() => setLogo(null)} className="text-[11px] text-[var(--muted)] underline">Remove</button>}
         </div>
         <span className="mt-1 block text-[11px] text-[var(--muted)]">
-          {logoErr ?? "Square works best. Resized to 256px here before upload. Saving without one keeps the existing logo."}
+          {logoErr ?? (existingLogo && !logo
+            ? "This is the logo on file. Choose a file to replace it."
+            : "Square works best. Resized to 256px here before upload. Saving without one keeps the existing logo.")}
         </span>
       </label>
 {!asBroker && (
@@ -947,11 +1089,12 @@ function RegisterSecurity({ onAct, busy, w, sign, asBroker = false }: {
       </label>
       )}
       <button
-        onClick={() => void onAct({ action: "register-security", ...f, decimals: Number(f.decimals), ...(logo ? { logo } : {}) })}
+        onClick={() => void onAct({ action: "register-security", ...f, decimals: Number(f.decimals), ...(logo ? { logo } : {}) })
+          .then((ok) => { if (ok !== false) onDone?.(); })}
         disabled={busy || !f.symbol || !f.name}
         className="mt-2 w-full rounded-full bg-[var(--fg)] py-2.5 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40"
       >
-        Save
+        {preset ? "Save changes" : "Save"}
       </button>
     </div>
   );
@@ -968,7 +1111,7 @@ function RegisterSecurity({ onAct, busy, w, sign, asBroker = false }: {
 export const PRIMARY_BROKER = "FIMCO";
 
 function FileAttestation({ onAct, busy, lockToBroker = false, securities = [] }: {
-  onAct: (b: Record<string, unknown>) => Promise<void>; busy: boolean;
+  onAct: (b: Record<string, unknown>) => Promise<boolean | void>; busy: boolean;
   /** FIMCO's own portal files as FIMCO; there is no party to choose. */
   lockToBroker?: boolean; securities?: string[];
 }) {

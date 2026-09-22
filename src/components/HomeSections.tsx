@@ -226,8 +226,7 @@ export function ProductsSection() {
                   {t("US equities")}
                 </h3>
                 <p className="mt-3 text-[17px] leading-relaxed text-[var(--muted)]">
-                  Public companies as B20 tokens. Freely transferable, composable in DeFi,
-                  and marked continuously by Chainlink total-return feeds.
+                  {t("Own shares in leading US companies directly from your account.")}
                 </p>
                 <span className="mt-4 inline-block rounded-full surface px-3 py-1 text-[11px] text-[var(--muted)]">
                   {t("Not available to US persons")}

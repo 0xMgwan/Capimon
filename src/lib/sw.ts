@@ -348,6 +348,7 @@ export const SW: Record<string, string> = {
   "Tanzanian shares,": "Nunua Hisa za Tanzania,",
   "Expand your investment portfolio, invest in global companies in seconds.": "Panua uwekezaji wako, wekeza kwenye kampuni za dunia kwa sekunde chache.",
   "Buy and sell leading US stocks,": "Nunua na Kuuza hisa za Marekani,",
+  "Own shares in leading US companies directly from your account.": "Miliki hisa za kampuni maarufu za Marekani moja kwa moja kutoka akaunti yako.",
   "US equities": "Hisa za Marekani",
   "Your shillings,": "Shilingi zako,",
   "at work on the DSE.": "zikifanya kazi DSE.",

@@ -99,7 +99,6 @@ export function WalletButton() {
               <div className="eyebrow">{t("Signed in")}</div>
               <div className="mt-1 truncate text-sm">{account.user.email}</div>
               <div className="tnum mt-2 text-sm">{usd(account.total)}</div>
-              <div className="mt-0.5 text-[11px] text-[var(--muted)]">held by CAPX for you</div>
             </div>
             <a href="/portfolio" className="mt-1 block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">{t("Portfolio")}</a>
             <a href="/settings" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">{t("Settings")}</a>

@@ -111,36 +111,31 @@ export function SettingsView() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl px-5 pb-16 pt-6 sm:px-8 sm:pt-9">
-      <div className="eyebrow">Settings</div>
-      <h1 className="display mt-1.5 text-[clamp(1.5rem,3.4vw,2.1rem)]">{t("Your account.")}</h1>
-      <div className="mt-4"><KycPrompt /></div>
+    <div className="mx-auto max-w-2xl px-4 pb-10 pt-3 sm:px-8 sm:pt-9">
+      <h1 className="display text-[clamp(1.35rem,3.4vw,2.1rem)]">{t("Your account.")}</h1>
+      <div className="mt-3"><KycPrompt /></div>
 
       {/* Identity */}
-      <section className="mt-8 rounded-3xl border hairline p-5">
-        <div className="flex items-center gap-4">
-          <Avatar src={u.avatar} name={u.name} email={u.email} size={64} />
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[15px] font-medium">{u.name ?? u.email}</div>
-            <div className="truncate text-xs text-[var(--muted)]">
-              {u.username ? `@${u.username}` : "No username yet"}
-            </div>
+      {/* One row, as an app's account header: the photo is the button. */}
+      <section className="mt-3 flex items-center gap-3 rounded-2xl border hairline p-3">
+        <button onClick={() => fileRef.current?.click()} disabled={busy} aria-label={u.avatar ? "Change photo" : "Add photo"}
+          className="shrink-0 rounded-full disabled:opacity-50">
+          <Avatar src={u.avatar} name={u.name} email={u.email} size={48} />
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[15px] font-medium">{u.name ?? u.email}</div>
+          <div className="truncate text-xs text-[var(--muted)]">
+            {u.username ? `@${u.username}` : "No username yet"}
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            onClick={() => fileRef.current?.click()}
-            disabled={busy}
-            className="rounded-full border hairline px-4 py-2 text-[13px] font-medium transition-colors hover:surface disabled:opacity-50"
-          >
+        <div className="flex shrink-0 flex-col items-end gap-0.5 text-[12px]">
+          <button onClick={() => fileRef.current?.click()} disabled={busy}
+            className="font-medium underline-offset-2 hover:underline disabled:opacity-50">
             {u.avatar ? "Change photo" : "Add photo"}
           </button>
           {u.avatar && (
-            <button
-              onClick={() => void save({ avatar: null })}
-              disabled={busy}
-              className="rounded-full border hairline px-4 py-2 text-[13px] text-[var(--muted)] transition-colors hover:surface disabled:opacity-50"
-            >
+            <button onClick={() => void save({ avatar: null })} disabled={busy}
+              className="text-[var(--muted)] underline-offset-2 hover:underline disabled:opacity-50">
               Remove
             </button>
           )}
@@ -155,36 +150,47 @@ export function SettingsView() {
       </section>
 
       {/* Editable details */}
-      <section className="mt-4 rounded-3xl border hairline p-5">
-        <Field label="Username" hint="3–20 characters. Letters, numbers or underscore.">
+      <section className="mt-3 rounded-2xl border hairline p-3.5 sm:p-5">
+        <div className="grid grid-cols-2 gap-2.5">
+        <Field label="Username" hint="3–20 letters, numbers or _">
           <input
             value={val(username, u.username)}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="yourname"
-            className="w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+            className="w-full rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
           />
         </Field>
+        <Field label={t("Display name")}>
+          <input
+            value={val(name, u.name)}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t("Your name")}
+            className="w-full rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+          />
+        </Field>
+        </div>
         {/* A language choice is an account preference, so it lives with the
             others rather than hidden in a corner of the nav. */}
-        <Field label={t("Language")}>
-          <div className="flex gap-2">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <span className="eyebrow">{t("Language")}</span>
+          <div className="flex rounded-full surface p-0.5">
             {([["en", "English"], ["sw", "Kiswahili"]] as const).map(([code, label]) => (
               <button
                 key={code}
                 onClick={() => setLang(code)}
-                className={`flex-1 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
-                  lang === code ? "border-[var(--fg)] bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"
+                className={`rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors ${
+                  lang === code ? "bg-[var(--bg)] shadow-sm" : "text-[var(--muted)]"
                 }`}
               >
                 {label}
               </button>
             ))}
           </div>
-        </Field>
+        </div>
         {showTapSound && (
           <Field
             label={t("Tap feedback")}
-            hint={t("This iPhone is older than iOS 17.4, which is the first version a website can use the Taptic Engine. A short click can be played instead. It is sound, not vibration.")}
+            hint={t("This iPhone is older than iOS 18, the first version a website can use the Taptic Engine. A short click can be played instead. It is sound, not vibration.")}
           >
             <button
               onClick={() => {
@@ -201,14 +207,7 @@ export function SettingsView() {
             </button>
           </Field>
         )}
-        <Field label={t("Display name")}>
-          <input
-            value={val(name, u.name)}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={t("Your name")}
-            className="w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
-          />
-        </Field>
+
         <Field
           label={t("National ID (NIDA)")}
           hint={t(u.kycStatus === "approved"
@@ -221,7 +220,7 @@ export function SettingsView() {
             disabled={u.kycStatus === "approved"}
             inputMode="numeric"
             placeholder="20 digits"
-            className="tnum w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)] disabled:opacity-50"
+            className="tnum w-full rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)] disabled:opacity-50"
           />
         </Field>
         <Field label={t("Mobile money number")} hint={t("Used for deposits and withdrawals.")}>
@@ -230,7 +229,7 @@ export function SettingsView() {
             onChange={(e) => setPhone(e.target.value)}
             inputMode="numeric"
             placeholder="255…"
-            className="tnum w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+            className="tnum w-full rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
           />
         </Field>
         <button
@@ -241,7 +240,7 @@ export function SettingsView() {
             ...(nida !== null ? { nidaNumber: nida } : {}),
           })}
           disabled={busy || (username === null && name === null && phone === null && nida === null)}
-          className="mt-2 w-full rounded-full bg-[var(--fg)] py-3 text-sm font-medium text-[var(--bg)] transition-transform active:scale-95 disabled:opacity-40"
+          className="mt-1 w-full rounded-full bg-[var(--fg)] py-2.5 text-sm font-medium text-[var(--bg)] transition-transform active:scale-95 disabled:opacity-40"
         >
           {t(busy ? "Saving…" : "Save changes")}
         </button>
@@ -253,7 +252,7 @@ export function SettingsView() {
       </section>
 
       {/* Fixed details. Shown because people need to check them, not edit them. */}
-      <section className="mt-4 rounded-3xl border hairline p-5">
+      <section className="mt-3 rounded-2xl border hairline px-3.5 py-1.5 sm:px-5">
         <Row label={t("Email")} value={u.email} />
         <Row
           label={t("Verification")}
@@ -268,19 +267,19 @@ export function SettingsView() {
         {u.kycStatus !== "approved" && (
           <Link
             href="/verify"
-            className="mt-3 inline-flex rounded-full bg-[var(--fg)] px-4 py-2 text-[13px] font-medium text-[var(--bg)]"
+            className="my-2 inline-flex rounded-full bg-[var(--fg)] px-4 py-2 text-[13px] font-medium text-[var(--bg)]"
           >
             {t(u.kycStatus === "rejected" ? "Submit again" : u.kycStatus === "pending" ? "View status" : "Verify your account")}
           </Link>
         )}
-        <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
-          To change your email, contact support. It is tied to the checks behind your account.
+        <p className="pb-2 pt-1 text-[11px] leading-relaxed text-[var(--muted)]">
+          To change your email, contact support.
         </p>
       </section>
 
       <button
         onClick={() => void signOut()}
-        className="mt-4 w-full rounded-full border border-[var(--color-down)]/40 py-3 text-sm font-medium text-[var(--color-down)] transition-colors hover:bg-[var(--color-down)]/[0.06]"
+        className="mt-3 w-full rounded-full border border-[var(--color-down)]/40 py-2.5 text-sm font-medium text-[var(--color-down)] transition-colors hover:bg-[var(--color-down)]/[0.06]"
       >
         {t("Sign out")}
       </button>
@@ -290,17 +289,17 @@ export function SettingsView() {
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <label className="mb-4 block">
+    <label className="mb-3 block min-w-0">
       <span className="eyebrow">{label}</span>
-      <span className="mt-1.5 block">{children}</span>
-      {hint && <span className="mt-1 block text-[11px] text-[var(--muted)]">{hint}</span>}
+      <span className="mt-1 block">{children}</span>
+      {hint && <span className="mt-0.5 block text-[10.5px] leading-snug text-[var(--muted)]">{hint}</span>}
     </label>
   );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 border-b hairline py-2.5 last:border-0">
+    <div className="flex items-baseline justify-between gap-3 border-b hairline py-2 last:border-0">
       <span className="eyebrow">{label}</span>
       <span className="min-w-0 truncate text-sm">{value}</span>
     </div>

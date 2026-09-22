@@ -62,6 +62,9 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
   },
   robots: { index: true, follow: true },
+  /* Home-screen app on iOS: full screen, its own title, a status bar that
+     sits above the page rather than over it. */
+  appleWebApp: { capable: true, title: "CAPX", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
@@ -105,7 +108,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <Providers>
-          <div className="sticky top-0 z-50">
+          <div className="safe-t sticky top-0 z-50 bg-[var(--bg)]">
             {/* The full DSE board, from tablets up. On a phone two tapes ate the
                 top of the screen; the main ticker already leads with the
                 listings CAPX trades. */}

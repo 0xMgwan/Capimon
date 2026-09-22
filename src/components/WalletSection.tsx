@@ -217,7 +217,7 @@ export function WalletSection({ holdings }: {
   // No heading of its own any more. Sitting directly under "Your book" it was
   // a second title introducing the same page, and the cards say what they are.
   return (
-    <section className="mt-5">
+    <section className="mt-3">
 
       {deposits.some((d) => IN_FLIGHT.has(d.status)) && (
         <div className="mt-4 flex items-center gap-3 rounded-2xl border border-[#b45309]/40 bg-[#b45309]/[0.06] px-4 py-3">
@@ -229,8 +229,8 @@ export function WalletSection({ holdings }: {
         </div>
       )}
 
-      <div className="mt-4 grid gap-4">
-        <div id="wallet" className="scroll-mt-24 rounded-3xl border hairline p-4 sm:p-5 lg:flex lg:items-center lg:justify-between lg:gap-8">
+      <div className="mt-3 grid gap-3">
+        <div id="wallet" className="scroll-mt-24 rounded-2xl border hairline p-3 sm:rounded-3xl sm:p-5 lg:flex lg:items-center lg:justify-between lg:gap-8">
           {/*
             * The big number is gone.
             *
@@ -249,7 +249,7 @@ export function WalletSection({ holdings }: {
               ].filter(Boolean) as string[];
               if (!parts.length) return null;
               return (
-                <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-[var(--muted)]">
+                <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11.5px] text-[var(--muted)] lg:mb-0">
                   <NtzsIcon className="h-4 w-4" />
                   <span className="tnum text-[var(--fg)]">{parts.join(" + ")}</span>
                   {parts.length > 1 && <span>{t("each spent in its own currency")}</span>}
@@ -259,14 +259,20 @@ export function WalletSection({ holdings }: {
             })()}
           </div>
 
-          <div className="mt-3 grid gap-2 lg:mt-0 lg:w-[360px] lg:shrink-0">
+          {/*
+            * One row of four, as a banking app's action bar.
+            *
+            * Add money used to take a full-width row of its own above three
+            * more, which spent two rows of a phone screen on buttons. The
+            * primary action keeps its fill; the row is what saves the space.
+            */}
+          <div className="grid grid-cols-4 gap-1.5 lg:mt-0 lg:w-[420px] lg:shrink-0">
             <button
               onClick={() => setPanel((p) => (p === "deposit" ? "none" : "deposit"))}
-              className="w-full rounded-full bg-[var(--fg)] py-3 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95"
+              className="w-full whitespace-nowrap rounded-full bg-[var(--fg)] py-2.5 text-[13px] font-medium text-[var(--bg)] transition-transform active:scale-95"
             >
-              {t(panel === "deposit" ? "Cancel" : "Add money")}
+              {t(panel === "deposit" ? "Cancel" : "Add")}
             </button>
-            <div className="grid grid-cols-3 gap-2">
               <AssetPicker
                 markets={buyable}
                 venues={venues}
@@ -275,9 +281,9 @@ export function WalletSection({ holdings }: {
                   <button
                     onClick={open}
                     disabled={buyable.length === 0}
-                    className="w-full whitespace-nowrap rounded-full border hairline py-3 text-center text-[13px] font-medium transition-colors hover:surface disabled:opacity-40"
+                    className="w-full whitespace-nowrap rounded-full border hairline py-2.5 text-center text-[13px] font-medium transition-colors hover:surface disabled:opacity-40"
                   >
-                    {t("Buy shares")}
+                    {t("Buy")}
                   </button>
                 )}
               />
@@ -289,9 +295,9 @@ export function WalletSection({ holdings }: {
                   trigger={(open) => (
                     <button
                       onClick={open}
-                      className="w-full whitespace-nowrap rounded-full border hairline py-3 text-center text-[13px] font-medium transition-colors hover:surface"
+                      className="w-full whitespace-nowrap rounded-full border hairline py-2.5 text-center text-[13px] font-medium transition-colors hover:surface"
                     >
-                      {t("Sell shares")}
+                      {t("Sell")}
                     </button>
                   )}
                 />
@@ -299,9 +305,9 @@ export function WalletSection({ holdings }: {
                 <button
                   disabled
                   title={t("You have no shares to sell yet")}
-                  className="whitespace-nowrap rounded-full border hairline py-3 text-[13px] font-medium opacity-40"
+                  className="w-full whitespace-nowrap rounded-full border hairline py-2.5 text-[13px] font-medium opacity-40"
                 >
-                  {t("Sell shares")}
+                  {t("Sell")}
                 </button>
               )}
               <button
@@ -310,16 +316,16 @@ export function WalletSection({ holdings }: {
                 title={belowMinWithdraw
                   ? `Withdrawals start at ${MIN_WITHDRAW.toLocaleString()} TZS`
                   : undefined}
-                className="whitespace-nowrap rounded-full border hairline py-3 text-[13px] font-medium transition-colors hover:surface disabled:opacity-40"
+                className="w-full whitespace-nowrap rounded-full border hairline py-2.5 text-[13px] font-medium transition-colors hover:surface disabled:opacity-40"
               >
                 {t(panel === "withdraw" ? "Cancel" : "Withdraw")}
               </button>
-            </div>
-
+          </div>
+          <div>
             {/* A disabled button needs a reason, and the reason is one line. */}
             {belowMinWithdraw && (
-              <p className="mt-2 text-[11px] text-[var(--muted)]">
-                Withdrawals minimum {MIN_WITHDRAW.toLocaleString()} TZS.
+              <p className="mt-1.5 text-[11px] text-[var(--muted)]">
+                {t("Withdrawals start at")} {MIN_WITHDRAW.toLocaleString()} TZS.
               </p>
             )}
           </div>

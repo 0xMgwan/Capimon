@@ -174,8 +174,8 @@ export const SW: Record<string, string> = {
   "Tap feedback": "Mrejesho wa kugusa",
   "Click on": "Mlio umewashwa",
   "Click off": "Mlio umezimwa",
-  "This iPhone is older than iOS 17.4, which is the first version a website can use the Taptic Engine. A short click can be played instead. It is sound, not vibration.":
-    "iPhone hii ni ya zamani kuliko iOS 17.4, ambayo ndiyo toleo la kwanza tovuti inaweza kutumia Taptic Engine. Badala yake mlio mfupi unaweza kupigwa. Ni sauti, si mtetemo.",
+  "This iPhone is older than iOS 18, the first version a website can use the Taptic Engine. A short click can be played instead. It is sound, not vibration.":
+    "iPhone hii ni ya zamani kuliko iOS 18, ambayo ndiyo toleo la kwanza tovuti inaweza kutumia Taptic Engine. Badala yake mlio mfupi unaweza kupigwa. Ni sauti, si mtetemo.",
   "Legal": "Kisheria",
   "These terms describe how CAPX actually operates today. They have not yet been reviewed by a licensed Tanzanian advocate, and will be updated when they are. If anything here conflicts with Tanzanian law, the law applies.":
     "Masharti haya yanaeleza jinsi CAPX inavyofanya kazi leo. Bado hayajakaguliwa na wakili aliyesajiliwa Tanzania, na yatasasishwa yatakapokaguliwa. Kama kitu chochote hapa kinapingana na sheria za Tanzania, sheria ndiyo inayotumika.",
@@ -419,4 +419,7 @@ export const SW: Record<string, string> = {
   "These records live on Base, a public network. Nobody, including CAPX, can change what they say without everyone seeing.": "Rekodi hizi ziko kwenye Base, mtandao wa umma. Hakuna mtu, ikiwemo CAPX, anayeweza kubadilisha kilichoandikwa bila kila mtu kuona.",
   "And more": "Na zaidi",
   "US equities, from the same account": "Hisa za Marekani, kutoka akaunti hiyo hiyo",
+  "Add": "Weka",
+  "Withdrawals start at": "Kutoa pesa kunaanzia",
+  "Return shows after your first buy": "Faida inaonekana baada ya ununuzi wako wa kwanza",
 };

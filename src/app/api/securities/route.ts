@@ -19,7 +19,10 @@ export async function GET() {
                               decimals: number; chain_id: number; status: string;
                               metadata: Record<string, unknown> }[]>`
       select symbol, name, token_address, decimals, chain_id, status, metadata
-        from capx.securities order by symbol`;
+        from capx.securities
+       -- A draft is not public: the desk says so, and this is where it holds.
+       where status <> 'draft'
+       order by (symbol = 'CRDB') desc, symbol`;
 
     const securities = await Promise.all(rows.map(async (r) => {
       // The logo is served on its own route; inlining it would put tens of

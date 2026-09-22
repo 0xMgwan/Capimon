@@ -55,9 +55,18 @@ export function Nav() {
 
   return (
     <header>
+      {/*
+        * Fixed height, whatever the scroll.
+        *
+        * The bar used to shrink its padding from 16px to 10px once the page
+        * passed 24px. It sits in the flow, so everything under it jumped up
+        * 12px at the very moment scrolling began — and that jump could carry
+        * the scroll position back across the threshold, flipping the bar
+        * between sizes. That was the glitch at the top of the page that the
+        * middle and bottom never had. Scrolling now only changes the border.
+        */}
       <motion.div
-        animate={{ paddingTop: scrolled ? 10 : 16, paddingBottom: scrolled ? 10 : 16 }}
-        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        style={{ paddingTop: 12, paddingBottom: 12 }}
         className={`bg-[var(--bg)] transition-colors duration-300 md:bg-[var(--nav)] md:backdrop-blur-xl ${
           scrolled ? "border-b hairline" : "border-b border-transparent"
         }`}

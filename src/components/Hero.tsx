@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { motion, useScroll, useTransform, useReducedMotion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useMarkets } from "@/lib/useMarkets";
 import { Counter } from "./Counter";
@@ -30,12 +30,16 @@ function useStillBackdrop() {
 
 export function Hero() {
   const ref = useRef<HTMLElement>(null);
-  const reduced = useReducedMotion();
   const still = useStillBackdrop();
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end start"] });
-  const y = useTransform(scrollYProgress, [0, 1], ["0%", "22%"]);
-  const opacity = useTransform(scrollYProgress, [0, 0.75], [1, 0]);
-  const scale = useTransform(scrollYProgress, [0, 1], [1, 1.12]);
+  /*
+   * No scroll-linked motion.
+   *
+   * The hero used to drift down, fade out and scale its backdrop with every
+   * scroll event. The backdrop is three heavily blurred layers, and rescaling
+   * them each frame is exactly the work a phone drops frames on — which is why
+   * the first screen of scrolling stuttered and the rest of the page did not.
+   * The page now scrolls like a page; the entrance animations stay.
+   */
 
   const { t } = useT();
   const { data } = useMarkets();
@@ -48,26 +52,26 @@ export function Hero() {
   const movers = [...(data?.markets ?? [])].sort((a, b) => Math.abs(b.change) - Math.abs(a.change)).slice(0, 2);
 
   return (
-    <section ref={ref} className="relative isolate flex min-h-[76vh] flex-col justify-center overflow-hidden [@supports(height:100dvh)]:min-h-[76dvh] sm:min-h-[88vh] sm:[@supports(height:100dvh)]:min-h-[88dvh]">
+    <section ref={ref} className="relative isolate flex min-h-[76vh] flex-col justify-center overflow-hidden [@supports(height:100svh)]:min-h-[76svh] sm:min-h-[88vh] sm:[@supports(height:100svh)]:min-h-[88svh]">
       {/* Living mesh backdrop — cheap, GPU-only, and it never blocks the type. */}
-      <motion.div style={reduced ? undefined : { scale }} className="absolute inset-0 -z-10">
+      <div className="absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-[var(--bg)]" />
         <motion.div
           animate={still ? undefined : { x: [0, 60, -30, 0], y: [0, -40, 30, 0] }}
           transition={{ duration: 26, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute -left-[10%] top-[6%] h-[46vw] w-[46vw] rounded-full blur-[100px]"
+          className="absolute -left-[10%] top-[6%] h-[46vw] w-[46vw] rounded-full blur-[100px] will-change-transform"
           style={{ background: "radial-gradient(circle, color-mix(in oklab, var(--color-accent) 42%, transparent), transparent 70%)" }}
         />
         <motion.div
           animate={still ? undefined : { x: [0, -70, 40, 0], y: [0, 50, -20, 0] }}
           transition={{ duration: 32, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute -right-[8%] top-[26%] h-[40vw] w-[40vw] rounded-full blur-[110px]"
+          className="absolute -right-[8%] top-[26%] h-[40vw] w-[40vw] rounded-full blur-[110px] will-change-transform"
           style={{ background: "radial-gradient(circle, color-mix(in oklab, #34d1bf 34%, transparent), transparent 70%)" }}
         />
         <motion.div
           animate={still ? undefined : { x: [0, 40, -50, 0], y: [0, -30, 40, 0] }}
           transition={{ duration: 38, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute bottom-[2%] left-[26%] h-[36vw] w-[36vw] rounded-full blur-[110px]"
+          className="absolute bottom-[2%] left-[26%] h-[36vw] w-[36vw] rounded-full blur-[110px] will-change-transform"
           style={{ background: "radial-gradient(circle, color-mix(in oklab, #ffb86b 30%, transparent), transparent 70%)" }}
         />
         {/*
@@ -93,7 +97,7 @@ export function Hero() {
         )}
         <div className="grain absolute inset-0 mix-blend-overlay" />
         <div className="absolute inset-0 bg-gradient-to-b from-[var(--bg)]/10 via-transparent to-[var(--bg)]" />
-      </motion.div>
+      </div>
 
       {/*
         * Headline and ticket side by side.
@@ -103,7 +107,7 @@ export function Hero() {
         * scroll below it. The empty half was the right size for it, and the
         * type is large enough that it loses nothing by giving up the space.
         */}
-      <motion.div style={reduced ? undefined : { y, opacity }} className="mx-auto w-full max-w-[1400px] px-5 pb-8 pt-8 sm:px-8 sm:pb-12 sm:pt-12">
+      <div className="mx-auto w-full max-w-[1400px] px-5 pb-8 pt-8 sm:px-8 sm:pb-12 sm:pt-12">
         <div className="grid items-center gap-8 lg:grid-cols-[1.15fr_minmax(360px,420px)] lg:gap-12">
           <div>
             <h1 className="display text-[clamp(2.2rem,7.5vw,6.5rem)]">
@@ -207,7 +211,7 @@ export function Hero() {
             </Link>
           ))}
         </motion.div>
-      </motion.div>
+      </div>
 
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2, duration: 0.8 }}

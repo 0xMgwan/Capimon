@@ -1,38 +1,32 @@
 import Link from "next/link";
 import { Lockup } from "./Logo";
-import { B20_REGISTRY } from "@/lib/assets";
 
+/*
+ * Links a customer would look for. The developer ones — the B20 spec, the
+ * registry, Chainlink, raw APIs — were accurate but read as a manual for the
+ * plumbing; the proof page and How it works already cover what they showed.
+ */
 const COLS = [
   {
     title: "Invest",
     links: [
       { label: "All markets", href: "/markets" },
+      { label: "CRDB Bank", href: "/markets/crdb" },
+      { label: "NMB Bank", href: "/markets/nmb" },
       { label: "Open an account", href: "/join" },
       { label: "Portfolio", href: "/portfolio" },
-      { label: "Apple · AAPLc", href: "/markets/aapl" },
-      { label: "NVIDIA · NVDAc", href: "/markets/nvda" },
     ],
   },
   {
-    title: "Protocol",
+    title: "Company",
     links: [
       { label: "How it works", href: "/how-it-works" },
-      { label: "B20 standard", href: "https://docs.base.org/base-chain/specs/upgrades/beryl/b20/specification", ext: true },
-      { label: "Tokenized stocks on Base", href: "https://docs.base.org/base-chain/asset-issuance/tokenized-stocks-on-base", ext: true },
-      { label: "Onchain registry", href: `https://basescan.org/address/${B20_REGISTRY}`, ext: true },
+      { label: "Proof of reserves", href: "/proof" },
       { label: "Terms of service", href: "/terms" },
       { label: "Privacy policy", href: "/privacy" },
     ],
   },
-  {
-    title: "Data",
-    links: [
-      { label: "Live market API", href: "/api/markets", ext: true },
-      { label: "Routable venues", href: "/api/venues", ext: true },
-      { label: "Chainlink feeds", href: "https://data.chain.link/base/base", ext: true },
-    ],
-  },
-];
+] as { title: string; links: { label: string; href: string; ext?: boolean }[] }[];
 
 export function Footer() {
   return (
@@ -43,7 +37,7 @@ export function Footer() {
           * nine links. They sit side by side instead, which is what the eye
           * expects of a footer and what the column widths can easily take.
           */}
-        <div className="grid gap-8 md:grid-cols-[1.4fr_repeat(3,1fr)] md:gap-10">
+        <div className="grid gap-8 md:grid-cols-[2fr_repeat(2,1fr)] md:gap-10">
           <div>
             <Lockup />
             <p className="mt-3 max-w-xs text-[15px] leading-snug text-[var(--muted)] sm:text-[17px]">
@@ -52,7 +46,7 @@ export function Footer() {
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-4 md:contents">
+          <div className="grid grid-cols-2 gap-4 md:contents">
           {COLS.map((c) => (
             <div key={c.title}>
               <div className="eyebrow">{c.title}</div>
@@ -79,17 +73,15 @@ export function Footer() {
 
         <div className="mt-14 border-t hairline pt-6">
           <p className="max-w-3xl text-[11px] leading-relaxed text-[var(--muted)]">
-            CAPX is an interface to B20 tokenized equities issued on Base. Connected wallets are
-            self-custodied; accounts funded in Tanzanian shillings are held by CAPX on the
-            holder&rsquo;s behalf. It is not a
-            broker-dealer, exchange, or investment adviser, and nothing here is investment advice.
-            Tokenized equities are not available to US persons. One B20 token is not permanently one
-            share; redemption applies the current onchain multiplier. Mint and redeem are performed
-            by the issuer under KYC; secondary transfers are permissionless subject to onchain policy.
+            CAPX lets you buy shares listed on the Dar es Salaam Stock Exchange, and US shares,
+            with Tanzanian shillings. Shares bought through a CAPX account are held on your behalf
+            by CAPX with a licensed DSE broker. CAPX is not an exchange or an investment adviser,
+            and nothing here is investment advice. Share prices can fall as well as rise. US shares
+            are not available to US persons.
           </p>
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
             <span className="tnum text-xs text-[var(--muted)]">CAPX © {new Date().getFullYear()}</span>
-            <span className="eyebrow">Built on B20</span>
+            <span className="eyebrow">Capital in Motion</span>
           </div>
         </div>
       </div>

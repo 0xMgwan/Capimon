@@ -29,6 +29,25 @@ const dt = (s: string | null) =>
 export function ProofOfReserves() {
   const { t } = useT();
   const [securities, setSecurities] = useState<Security[] | null>(null);
+  /*
+   * Which security the visitor came to see.
+   *
+   * "Proof of reserves" on the NMB page landed on a list that opens with CRDB,
+   * which read as the wrong page. The link now carries #nmb, and that card is
+   * scrolled to and outlined once the list has loaded.
+   */
+  const [focus, setFocus] = useState<string | null>(null);
+  useEffect(() => {
+    const read = () => setFocus(window.location.hash.slice(1).toUpperCase() || null);
+    const id = setTimeout(read, 0);
+    window.addEventListener("hashchange", read);
+    return () => { clearTimeout(id); window.removeEventListener("hashchange", read); };
+  }, []);
+  useEffect(() => {
+    if (!focus || !securities?.length) return;
+    const id = setTimeout(() => document.getElementById(focus.toLowerCase())?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    return () => clearTimeout(id);
+  }, [focus, securities]);
 
   useEffect(() => {
     let alive = true;
@@ -70,9 +89,10 @@ export function ProofOfReserves() {
             return (
               <div
                 key={s.symbol}
-                className={`rounded-3xl border p-5 sm:p-7 ${
+                id={s.symbol.toLowerCase()}
+                className={`scroll-mt-28 rounded-3xl border p-5 sm:p-7 ${
                   under ? "border-[var(--color-down)]/50 bg-[var(--color-down)]/[0.05]" : "hairline"
-                }`}
+                } ${focus === s.symbol ? "ring-2 ring-[var(--color-accent)]" : ""}`}
               >
                 <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-2">
                   <div>

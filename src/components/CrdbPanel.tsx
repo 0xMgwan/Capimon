@@ -337,7 +337,7 @@ export function CrdbPanel({ symbol = "CRDB" }: { symbol?: string }) {
         <span>
           {m ? `${fmtQty(m.availableShares)} of ${fmtQty(m.custodyShares)} shares available` : "—"}
         </span>
-        <Link href="/proof" className="underline underline-offset-2 hover:text-[var(--fg)]">
+        <Link href={`/proof#${symbol.toLowerCase()}`} className="underline underline-offset-2 hover:text-[var(--fg)]">
           {t("Proof of reserves")}
         </Link>
       </div>

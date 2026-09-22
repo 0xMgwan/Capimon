@@ -5,8 +5,13 @@ import { useMarkets } from "@/lib/useMarkets";
 import { AssetLogo } from "./AssetLogo";
 import { marketSession } from "@/lib/format";
 import { useEffect, useState } from "react";
+import { useDse } from "@/lib/useDse";
+import { DseLogo } from "./DseLogo";
 
-/** Always-on strip of live Chainlink marks, doubled so the marquee loops seamlessly. */
+/**
+ * Always-on strip of live marks, doubled so the marquee loops seamlessly.
+ * DSE listings lead in shillings, then the US names in dollars.
+ */
 export function TickerTape() {
   const { data, ticks } = useMarkets();
   const [session, setSession] = useState(() => marketSession());
@@ -16,7 +21,12 @@ export function TickerTape() {
     return () => clearInterval(id);
   }, []);
 
-  const rows = data?.markets ?? [];
+  const dse = useDse().filter((d) => d.status === "live" && d.price > 0);
+  type Item = { kind: "dse"; d: (typeof dse)[number] } | { kind: "us"; m: NonNullable<typeof data>["markets"][number] };
+  const rows: Item[] = [
+    ...dse.map((d) => ({ kind: "dse" as const, d })),
+    ...(data?.markets ?? []).map((m) => ({ kind: "us" as const, m })),
+  ];
   const loop = rows.length ? [...rows, ...rows] : [];
 
   return (
@@ -41,7 +51,23 @@ export function TickerTape() {
             </div>
           ) : (
             <div className="marquee-track flex w-max gap-7 py-1.5 sm:py-2" style={{ "--marquee-duration": "60s" } as React.CSSProperties}>
-              {loop.map((m, i) => {
+              {loop.map((it, i) => {
+                if (it.kind === "dse") {
+                  const d = it.d;
+                  const up = d.changePct >= 0;
+                  return (
+                    <Link key={`dse-${d.symbol}-${i}`} href={`/markets/${d.symbol.toLowerCase()}`}
+                      className="flex items-center gap-2 whitespace-nowrap rounded px-1 text-xs transition-opacity hover:opacity-60">
+                      <DseLogo logo={d.logo} symbol={d.symbol} size={14} />
+                      <span className="font-semibold tracking-tight">{d.symbol}</span>
+                      <span className="tnum">TSh {d.price.toLocaleString("en-TZ", { maximumFractionDigits: 0 })}</span>
+                      <span className={`tnum text-[11px] ${up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                        {up ? "▲" : "▼"} {Math.abs(d.changePct).toFixed(2)}%
+                      </span>
+                    </Link>
+                  );
+                }
+                const m = it.m;
                 const dir = ticks[m.symbol];
                 const up = m.change >= 0;
                 return (

@@ -43,6 +43,19 @@ type Attestation = {
 };
 type Issuance = { id: string; security: string; kind: string; quantity: number; tx_hash: string | null; created_at: string };
 
+/** What each desk action tells the operator when it succeeds. */
+const DONE: Record<string, string> = {
+  "attest": "Attestation filed. It now waits for CAPX approval.",
+  "approve-attestation": "Attestation approved. Publish it on-chain to open headroom.",
+  "reject-attestation": "Attestation rejected.",
+  "request-issuance": "Mint requested. It now waits for CAPX approval.",
+  "approve-request": "Request approved. Mint it with the issuer wallet.",
+  "reject-request": "Request rejected.",
+  "complete-request": "Mint confirmed on Base and recorded. The new shares are available.",
+  "register-security": "Saved.",
+  "reconcile": "Recorded the on-chain supply.",
+};
+
 const dt = (s: string | null) =>
   s ? new Date(s).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
 
@@ -100,6 +113,13 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
     return () => clearInterval(id);
   }, [data, token, load]);
 
+  /* Success toasts auto-clear; errors stay until dismissed, since they need reading. */
+  useEffect(() => {
+    if (!note || err) return;
+    const id = setTimeout(() => setNote(null), 6000);
+    return () => clearTimeout(id);
+  }, [note, err]);
+
   /** Runs a desk action; resolves true when it succeeded. */
   const act = async (body: Record<string, unknown>): Promise<boolean> => {
     setBusy(true); setErr(null); setNote(null);
@@ -113,7 +133,9 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
       // A refused mint is the backing rule working, so it reads as a result
       // rather than a failure.
       if (!j.ok) throw new Error(j.error ?? "Action failed");
-      setNote("Done.");
+      setNote(body.action === "register-security" && body.status === "live" && body.symbol
+        ? `${body.symbol} is live. Customers can now see and buy it.`
+        : DONE[String(body.action)] ?? "Done.");
       await load(token);
       return true;
     } catch (e) {
@@ -181,11 +203,22 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
       <Pipeline />
       {isAdmin && <IssuerBar w={w} />}
 
+      {/*
+        * Results as a toast, pinned to the screen.
+        *
+        * They used to print at the top of the page, which is the one place
+        * nobody is looking after pressing a button halfway down it — filings,
+        * approvals and mints all went through with no visible answer.
+        */}
       {(note || err) && (
-        <p className={`mt-4 break-words rounded-2xl border hairline px-4 py-3 text-xs ${
-          err ? "text-[var(--color-down)]" : "text-[var(--muted)]"}`}>
-          {err ?? note}
-        </p>
+        <div role="status" aria-live="polite"
+          className="fixed inset-x-4 bottom-6 z-[80] mx-auto flex max-w-lg items-start gap-3 rounded-2xl border hairline bg-[var(--bg)] px-4 py-3 text-[13px] shadow-2xl shadow-black/15">
+          <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] text-white ${
+            err ? "bg-[var(--color-down)]" : "bg-[var(--color-up)]"}`}>{err ? "!" : "✓"}</span>
+          <span className={`min-w-0 flex-1 break-words ${err ? "text-[var(--color-down)]" : ""}`}>{err ?? note}</span>
+          <button onClick={() => { setErr(null); setNote(null); }} aria-label="Dismiss"
+            className="shrink-0 text-[var(--muted)] hover:text-[var(--fg)]">✕</button>
+        </div>
       )}
 
       {/* Backing first: it is the number every other panel exists to justify. */}
@@ -288,6 +321,35 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <div className="w-full">
+                  {/*
+                    * The last step, said out loud.
+                    *
+                    * A backed, minted security sat invisible because it was
+                    * still a draft, and nothing on the card said that going
+                    * live was the one thing left to do.
+                    */}
+                  {s.status === "draft" && s.token_address && b.issued > 0 && b.fresh && (
+                    <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--color-up)]/40 bg-[var(--color-up)]/[0.06] px-3.5 py-2.5 text-[12px]">
+                      <span className="flex-1">
+                        <span className="font-medium">{s.symbol} is backed and minted.</span>{" "}
+                        {isAdmin
+                          ? "It is still a draft, so customers cannot see or buy it yet."
+                          : "CAPX takes it live for customers."}
+                      </span>
+                      {isAdmin && (
+                        <button
+                          disabled={busy}
+                          onClick={() => void act({
+                            action: "register-security", symbol: s.symbol, name: s.name,
+                            tokenAddress: s.token_address, status: "live",
+                          })}
+                          className="rounded-full bg-[var(--color-up)] px-4 py-1.5 font-medium text-white disabled:opacity-50"
+                        >
+                          Go live
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <TokenSetup sec={s} isAdmin={isAdmin} w={w} sign={sign} onAct={act} busy={busy} />
                   {s.token_address && (
                     <RequestMint security={s.symbol} headroom={b.headroom} hasToken onAct={act} busy={busy} />
@@ -889,6 +951,9 @@ function RequestsSection({ data, isAdmin, onAct, busy, w, sign }: {
                             address: sec.token_address as `0x${string}`, abi: tokenAbi as Abi, functionName: "mint",
                             args: [data.contracts.treasury as `0x${string}`, BigInt(baseUnits(r.quantity, sec.decimals))],
                           });
+                          // Kept in the box, so if closing fails the hash is not lost
+                          // and Confirm on-chain can be pressed again.
+                          setHashes((h) => ({ ...h, [r.id]: hash }));
                           // Closed against the mined hash, which the server verifies again.
                           await onAct({ action: "complete-request", id: r.id, txHash: hash });
                         })}

@@ -66,7 +66,7 @@ const SECTIONS: Section[] = [
   {
     h: "What backs your balance",
     p: [
-      "Every share recorded against a custodial account is backed by a token CAPX holds, and every shilling by a shilling in the settlement account. Both are published and can be checked by anyone at capimon.vercel.app/proof.",
+      "Every share recorded against a custodial account is backed by a token CAPX holds, and every shilling by a shilling in the settlement account. Both are published and can be checked by anyone at capx.broker/proof.",
       "Tokenised Tanzanian securities are additionally backed by shares held in custody, with the custody position published on the blockchain. Where that attestation expires or is withdrawn, issuance stops automatically.",
       "If client assets are ever not fully backed, new orders are refused until they are. That is enforced in code, not by policy.",
     ],

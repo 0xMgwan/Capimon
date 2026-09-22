@@ -350,11 +350,32 @@ async function completeRequest(sql: Sql, role: OpsRole, body: Record<string, unk
   }
 
   const { publicClient } = await import("@/lib/chain");
-  const receipt = await publicClient.getTransactionReceipt({ hash: txHash as `0x${string}` }).catch(() => null);
+  // Waited for briefly: a hash handed over the moment it is mined can be a
+  // block ahead of the node this server reads from.
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash as `0x${string}`, timeout: 20_000 })
+    .catch(() => null);
   if (!receipt) return NextResponse.json({ ok: false, error: "That transaction is not on Base yet. Wait for it to confirm." }, { status: 409 });
   if (receipt.status !== "success") return NextResponse.json({ ok: false, error: "That transaction reverted." }, { status: 409 });
-  if ((receipt.to ?? "").toLowerCase() !== r.token_address.toLowerCase()) {
-    return NextResponse.json({ ok: false, error: `That transaction was not sent to the ${r.security} token.` }, { status: 409 });
+  /*
+   * Judged by what the transaction did, not where it was addressed.
+   *
+   * Checking `to` against the token turned away a real mint: MetaMask routes
+   * transactions from an upgraded (EIP-7702) account through its own
+   * delegation contract, so `to` is that contract even though the token did
+   * the minting. The event is the proof either way — a Transfer from the zero
+   * address, emitted by this token. For a burn, a Transfer to it.
+   */
+  const TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+  const ZERO = "0x" + "0".repeat(64);
+  const token = r.token_address.toLowerCase();
+  const moved = receipt.logs.some((l) =>
+    l.address.toLowerCase() === token && l.topics[0] === TRANSFER &&
+    (r.kind === "mint" ? l.topics[1] === ZERO : l.topics[2] === ZERO));
+  if (!moved) {
+    return NextResponse.json(
+      { ok: false, error: `That transaction did not ${r.kind} any ${r.security} tokens.` },
+      { status: 409 },
+    );
   }
 
   let added = 0;

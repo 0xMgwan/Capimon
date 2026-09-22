@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createDeposit, rampQuote, rampOnramp, MIN_TZS_BY_ROUTE, NtzsError, ntzsConfigured,
-         type PaymentMethod } from "@/lib/ntzs";
+         type PaymentMethod, type BankInstructions } from "@/lib/ntzs";
 import { currentUser } from "@/lib/auth";
 import { db, migrate } from "@/lib/db";
 import { omnibusUserId, collectionRoute, capabilities } from "@/lib/omnibus";
@@ -31,26 +31,24 @@ export async function POST(req: Request) {
     const phoneNumber = String(body.phoneNumber ?? user.phone ?? "").replace(/[^\d]/g, "");
     const amountTzs = Math.round(Number(body.amountTzs));
     const method: PaymentMethod = body.paymentMethod === "bank_transfer" ? "bank_transfer" : "mobile_money";
-    const payerAccountNumber = String(body.payerAccountNumber ?? "").replace(/[^\d]/g, "");
-    if (!phoneNumber) return bad("A mobile money number is required.");
-    // A bank credit loses its narration in transit, so the sending account is
-    // the only way to tell whose money arrived.
-    if (method === "bank_transfer" && !payerAccountNumber) {
-      return bad("For a bank transfer, enter the bank account number you are sending from.",
-                 "payer_account_required");
-    }
+    if (method === "mobile_money" && !phoneNumber) return bad("A mobile money number is required.");
     if (!Number.isFinite(amountTzs) || amountTzs < ABSOLUTE_MIN_TZS) {
       return bad(`The minimum deposit is ${ABSOLUTE_MIN_TZS.toLocaleString()} TZS.`);
     }
 
+    if (method === "bank_transfer") {
+      if (!Number.isFinite(amountTzs) || amountTzs < ABSOLUTE_MIN_TZS) {
+        return bad(`The minimum deposit is ${ABSOLUTE_MIN_TZS.toLocaleString()} TZS.`);
+      }
+      return bankDeposit(user.id, amountTzs);
+    }
+
     /*
      * Ramp is a mobile-money rail: its quote takes a phone number and nothing
-     * else. A bank transfer therefore has to go through /deposits, which this
-     * deployment will only accept with a userId — so it needs the `wallets`
-     * grant, and saying so beats letting the user fill in a form that cannot
-     * succeed.
+     * else, so every route below is for mobile money. Bank transfers returned
+     * above.
      */
-    const plannedRoute = method === "bank_transfer" ? "treasury" : await collectionRoute();
+    const plannedRoute = await collectionRoute();
     const routeMin = MIN_TZS_BY_ROUTE[plannedRoute] ?? ABSOLUTE_MIN_TZS;
     if (amountTzs < routeMin) {
       return bad(`The minimum deposit is ${routeMin.toLocaleString()} TZS.`, "below_minimum");
@@ -81,19 +79,6 @@ export async function POST(req: Request) {
       }
 
       if (route === "treasury") {
-        if (method === "bank_transfer") {
-          const caps = await capabilities();
-          if (!caps.wallets.available) {
-            await sql`update capx.deposits set status = 'failed',
-                      error = 'bank transfer needs the wallets capability' where id = ${localId}`;
-            return NextResponse.json(
-              { ok: false, code: "bank_unavailable",
-                error: "Bank transfers are not available yet. They run over the deposits rail, which this nTZS key can only use with the 'wallets' capability. Mobile money works now." },
-              { status: 503 },
-            );
-          }
-        }
-
         /*
          * The published spec makes userId optional and documents omitting it as
          * the way to collect into the partner treasury. The deployed API
@@ -104,7 +89,7 @@ export async function POST(req: Request) {
         let deposit: { id: string; status: string } | null = null;
         let usedRoute = "treasury";
         try {
-          deposit = await createDeposit({ amountTzs, phoneNumber, paymentMethod: method, payerAccountNumber });
+          deposit = await createDeposit({ amountTzs, phoneNumber, paymentMethod: method });
         } catch (e) {
           const err = e as NtzsError;
           const wantsUser = /userId/i.test(err?.message ?? "");
@@ -120,7 +105,7 @@ export async function POST(req: Request) {
               { status: 503 },
             );
           }
-          deposit = await createDeposit({ userId: await omnibusUserId(), amountTzs, phoneNumber, paymentMethod: method, payerAccountNumber });
+          deposit = await createDeposit({ userId: await omnibusUserId(), amountTzs, phoneNumber, paymentMethod: method });
           usedRoute = "omnibus-wallet";
         }
 
@@ -159,7 +144,7 @@ export async function POST(req: Request) {
         });
       }
 
-      const deposit = await createDeposit({ userId: await omnibusUserId(), amountTzs, phoneNumber, paymentMethod: method, payerAccountNumber });
+      const deposit = await createDeposit({ userId: await omnibusUserId(), amountTzs, phoneNumber, paymentMethod: method });
       await sql`update capx.deposits
                    set ntzs_deposit_id = ${String(deposit.id)},
                        metadata = metadata || ${sql.json({ route: "omnibus-wallet" })}
@@ -187,6 +172,86 @@ export async function POST(req: Request) {
   }
 }
 
+/**
+ * A bank transfer is a push, not a pull.
+ *
+ * nTZS issues a one-off reference and the account to pay into; the customer
+ * sends exactly that amount from any Tanzanian bank over TIPS with the
+ * reference in the description, and nTZS mints once the credit lands. There is
+ * no prompt and no payer account to collect — the earlier version asked for
+ * one, which the API neither takes nor needs, because the reference is what
+ * matches the money to the deposit and our row maps the deposit to the user.
+ *
+ * The documented shape takes a userId, so this goes to the omnibus wallet
+ * directly rather than trying the treasury first.
+ */
+async function bankDeposit(userId: string, amountTzs: number) {
+  const caps = await capabilities();
+  if (!caps.wallets.available) {
+    return NextResponse.json(
+      { ok: false, code: "bank_unavailable",
+        error: "Bank transfers are not available yet. They need the omnibus wallet, which this nTZS key cannot use without the 'wallets' capability. Mobile money works now." },
+      { status: 503 },
+    );
+  }
+
+  await migrate();
+  const sql = db();
+  const rows = await sql<{ id: string }[]>`
+    insert into capx.deposits (user_id, amount_tzs, phone, metadata)
+    values (${userId}, ${amountTzs}, '', ${sql.json({ paymentMethod: "bank_transfer", route: "omnibus-wallet" })})
+    returning id`;
+  const localId = rows[0].id;
+
+  try {
+    const deposit = await createDeposit({ userId: await omnibusUserId(), amountTzs, paymentMethod: "bank_transfer" });
+    const raw = deposit.instructions;
+    const instructions: BankInstructions =
+      raw && typeof raw === "object" ? raw : { note: typeof raw === "string" ? raw : undefined };
+    const reference = String(instructions.reference ?? deposit.reference ?? "") || null;
+    if (!reference || !instructions.accountNumber) {
+      // Without both there is nothing a customer can safely pay into. Keep the
+      // row open against the id in case nTZS still attaches a credit to it.
+      await sql`update capx.deposits set ntzs_deposit_id = ${String(deposit.id)}, status = 'failed',
+                error = 'bank instructions missing from response',
+                metadata = metadata || ${sql.json(JSON.parse(JSON.stringify({ deposit })))}
+                where id = ${localId}`;
+      return NextResponse.json(
+        { ok: false, code: "bank_instructions_missing",
+          error: "nTZS did not return an account to pay into. Nothing has been taken; try mobile money or try again shortly." },
+        { status: 502 },
+      );
+    }
+
+    const bank = {
+      institution: instructions.institution ?? null,
+      accountNumber: instructions.accountNumber,
+      accountName: instructions.accountName ?? null,
+      reference,
+      amountTzs: Number(instructions.amountTzs ?? amountTzs),
+      note: instructions.note ?? null,
+      expiresAt: new Date(Date.now() + BANK_REFERENCE_MS).toISOString(),
+    };
+    await sql`update capx.deposits
+                 set ntzs_deposit_id = ${String(deposit.id)},
+                     ntzs_reference = ${reference},
+                     metadata = metadata || ${sql.json({ bank })}
+               where id = ${localId}`;
+    return NextResponse.json({ ok: true, depositId: localId, route: "bank", status: deposit.status ?? "submitted", bank });
+  } catch (e) {
+    const err = e instanceof NtzsError ? e : null;
+    await sql`update capx.deposits set status = ${err?.retry === "verify" ? "uncertain" : "failed"},
+              error = ${err?.message ?? "initiation failed"} where id = ${localId}`;
+    return NextResponse.json(
+      { ok: false, code: err?.code ?? "deposit_failed", error: err?.message ?? "Could not prepare the bank transfer." },
+      { status: err?.status ?? 502 },
+    );
+  }
+}
+
+/** How long nTZS keeps a bank reference open. */
+const BANK_REFERENCE_MS = 72 * 3600_000;
+
 /** The caller's own deposits, newest first. */
 export async function GET() {
   const gate = requireDb();
@@ -197,7 +262,11 @@ export async function GET() {
   await migrate();
   const deposits = await db()`
     select id::text, ntzs_deposit_id, amount_tzs, status, usdc_credited::text, created_at, settled_at,
-           ntzs_status, error
+           ntzs_status, error,
+           -- Open bank transfers carry their payment details, so a customer
+           -- who closed the page can see where to send the money again.
+           case when metadata ? 'bank' and status in ('pending','uncertain')
+                then metadata->'bank' end as bank
       from capx.deposits where user_id = ${user.id}
      order by created_at desc limit 25`;
   return NextResponse.json({ ok: true, deposits }, { headers: { "cache-control": "no-store" } });

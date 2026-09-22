@@ -11,6 +11,8 @@ import { compactUsd } from "@/lib/format";
 import { Sparkline } from "./Sparkline";
 import { AssetLogo } from "./AssetLogo";
 import { useT } from "@/lib/i18n";
+import Image from "next/image";
+import { useCrdb } from "@/lib/useCrdb";
 
 /** True when the backdrop should hold still: reduced motion, or a phone. */
 function useStillBackdrop() {
@@ -37,6 +39,7 @@ export function Hero() {
 
   const { t } = useT();
   const { data } = useMarkets();
+  const crdbQ = useCrdb();
   // Longest history available, so the curve has shape rather than a flat line.
   const backdrop = (data?.markets ?? [])
     .filter((m) => m.history.length > 8)
@@ -119,7 +122,7 @@ export function Hero() {
               {/* Three lines said what one does. A hero is a claim, not a
                   summary — the detail has a whole page of its own. */}
               <p className="max-w-md text-[17px] leading-snug text-[var(--muted)] sm:text-lg">
-                {t("US shares in dollars. Tanzanian shares in shillings. Settled against custody published on Base.")}
+                {t("Tanzanian shares in shillings, settled the same day. US shares from the same account.")}
               </p>
 
               <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
@@ -154,13 +157,6 @@ export function Hero() {
           transition={{ duration: 0.8, delay: 0.62, ease: [0.16, 1, 0.3, 1] }}
           className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border hairline bg-[var(--border)] sm:mt-10 lg:grid-cols-4"
         >
-          <div className="bg-[var(--bg)] p-4 sm:bg-[var(--bg)]/80 sm:p-5 sm:backdrop-blur">
-            <div className="eyebrow">{t("Onchain value")}</div>
-            <div className="tnum mt-2 text-xl font-medium sm:text-2xl">
-              <Counter value={tvl} format={(n) => compactUsd(n)} />
-            </div>
-            <div className="mt-1 text-[11px] text-[var(--muted)]">supply × live mark</div>
-          </div>
           {/*
             * Two markets, not one count.
             *
@@ -173,13 +169,28 @@ export function Hero() {
             href="/markets/crdb"
             className="group bg-[var(--bg)] p-4 transition-colors sm:bg-[var(--bg)]/80 sm:p-5 sm:backdrop-blur"
           >
-            <div className="eyebrow">{t("Dar es Salaam")}</div>
-            <div className="tnum mt-2 text-xl font-medium sm:text-2xl">CRDB</div>
-            <div className="mt-1 text-[11px] text-[var(--muted)]">
-              {t("buy in shillings")}{" "}
-              <span className="inline-block transition-transform group-hover:translate-x-0.5">→</span>
+                        <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <Image src="/crdb.jpg" alt="" width={14} height={14} className="rounded-full object-cover" />
+                <span className="eyebrow truncate">CRDB · {t("Dar es Salaam")}</span>
+              </div>
+            </div>
+            <div className="tnum mt-2 text-xl font-medium sm:text-2xl">
+              {crdbQ ? `TSh ${crdbQ.price.toLocaleString("en-TZ", { maximumFractionDigits: 0 })}` : "CRDB"}
+            </div>
+            <div className={`tnum mt-1 text-[11px] ${!crdbQ ? "text-[var(--muted)]" : crdbQ.changePct >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+              {crdbQ ? `${crdbQ.changePct >= 0 ? "▲" : "▼"} ${Math.abs(crdbQ.changePct).toFixed(2)}% · ` : ""}
+              <span className="text-[var(--muted)]">{t("buy in shillings")}</span>{" "}
+              <span className="inline-block text-[var(--muted)] transition-transform group-hover:translate-x-0.5">→</span>
             </div>
           </Link>
+          <div className="bg-[var(--bg)] p-4 sm:bg-[var(--bg)]/80 sm:p-5 sm:backdrop-blur">
+            <div className="eyebrow">{t("Onchain value")}</div>
+            <div className="tnum mt-2 text-xl font-medium sm:text-2xl">
+              <Counter value={tvl} format={(n) => compactUsd(n)} />
+            </div>
+            <div className="mt-1 text-[11px] text-[var(--muted)]">supply × live mark</div>
+          </div>
           {movers.map((m) => (
             <Link key={m.symbol} href={`/markets/${m.ticker.toLowerCase()}`} className="group bg-[var(--bg)] p-4 transition-colors hover:bg-[var(--bg)] sm:bg-[var(--bg)]/80 sm:p-5 sm:backdrop-blur">
               <div className="flex items-center justify-between gap-2">

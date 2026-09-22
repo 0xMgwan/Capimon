@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "nodejs";
-export const alt = "CAPX · capital markets in motion";
+export const alt = "CAPX · Capital in Motion";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -57,7 +57,7 @@ export default function OpengraphImage() {
 
         <div style={{ display: "flex", alignItems: "center", gap: 14, fontSize: 24, color: "#6b6b6b" }}>
           <div style={{ width: 10, height: 10, borderRadius: 999, background: "#12a150", display: "flex" }} />
-          <div style={{ display: "flex" }}>Live on Base · trade any hour · shillings or self-custody</div>
+          <div style={{ display: "flex" }}>DSE shares in shillings · settled same day · US equities too</div>
         </div>
       </div>
     ),

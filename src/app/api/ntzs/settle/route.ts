@@ -37,6 +37,8 @@ const TERMINAL_BAD = /(fail|cancel|expir|reject|declin|revers|abandon|timed?_?ou
  * below, so a collection that somehow lands later is still credited.
  */
 const STALE_AFTER_MS = 30 * 60_000;
+/** A bank reference is open for 72 hours, not the life of a phone prompt. */
+const BANK_STALE_AFTER_MS = 72 * 3600_000;
 
 /**
  * Settles pending deposits: confirm the collection landed and credit the
@@ -60,7 +62,7 @@ export async function settlePending(): Promise<{ checked: number; results: Recor
 
   const pending = await sql<{ id: string; user_id: string; ntzs_deposit_id: string;
                              amount_tzs: number; age_ms: number;
-                             metadata: { route?: string; quotedUsdc?: number } }[]>`
+                             metadata: { route?: string; quotedUsdc?: number; paymentMethod?: string } }[]>`
     select id::text, user_id::text, ntzs_deposit_id, amount_tzs, metadata,
            extract(epoch from (now() - created_at)) * 1000 as age_ms
       from capx.deposits
@@ -117,7 +119,8 @@ export async function settlePending(): Promise<{ checked: number; results: Recor
       if (!TERMINAL_OK.test(status)) {
         // Long past the life of a payment prompt and upstream has not moved:
         // stop presenting it as in flight, but keep it in the watch list.
-        if (Number(d.age_ms) > STALE_AFTER_MS) {
+        const staleAfter = d.metadata?.paymentMethod === "bank_transfer" ? BANK_STALE_AFTER_MS : STALE_AFTER_MS;
+        if (Number(d.age_ms) > staleAfter) {
           await sql`update capx.deposits set status = 'expired' where id = ${d.id} and status <> 'expired'`;
           results.push({ id: d.id, outcome: `expired after ${Math.round(Number(d.age_ms) / 60000)} min (upstream: ${status || "pending"})` });
           continue;

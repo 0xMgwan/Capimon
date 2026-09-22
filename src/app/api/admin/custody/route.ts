@@ -141,10 +141,17 @@ export async function POST(req: Request) {
       if (!expiresAt || new Date(expiresAt).getTime() <= Date.now()) {
         return NextResponse.json({ ok: false, error: "An attestation needs an expiry in the future." }, { status: 400 });
       }
+      // Naming a party is only meaningful with the document they issued: an
+      // attestation without a reference is a claim nobody can check.
+      const custodian = String(body.custodian ?? "").trim();
+      const docRef = String(body.docRef ?? "").trim();
+      if (!custodian || !docRef) {
+        return NextResponse.json({ ok: false, error: "An attestation needs the attesting party and their statement reference." }, { status: 400 });
+      }
       const rows = await sql<{ id: string }[]>`
         insert into capx.custody_attestations (security, custodian, quantity, locked, doc_ref, expires_at, status)
-        values (${security}, ${String(body.custodian ?? "")}, ${quantity}, ${locked},
-                ${body.docRef ?? null}, ${expiresAt}, 'pending')
+        values (${security}, ${custodian}, ${quantity}, ${locked},
+                ${docRef}, ${expiresAt}, 'pending')
         returning id::text`;
       return NextResponse.json({ ok: true, id: rows[0].id });
     }

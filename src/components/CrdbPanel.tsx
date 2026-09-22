@@ -57,6 +57,24 @@ export function CrdbPanel() {
       .catch(() => { /* the panel keeps its last good figures */ });
   }, []);
 
+  /*
+   * Arriving from the hero ticket with an amount already chosen.
+   *
+   * Read once after mount rather than through useSearchParams, which would
+   * demand a Suspense boundary around the whole page for one prefill.
+   */
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const amt = Number(q.get("amount"));
+    // A timeout, not requestAnimationFrame: rAF never fires in a background
+    // tab, and the prefill would silently not happen.
+    const id = setTimeout(() => {
+      if (q.get("side") === "sell") setSide("sell");
+      if (amt > 0) setRaw(String(Math.round(amt)));
+    }, 0);
+    return () => clearTimeout(id);
+  }, []);
+
   useEffect(() => {
     load();
     const id = setInterval(load, 60_000);

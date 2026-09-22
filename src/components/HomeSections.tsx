@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { motion, useScroll, useTransform } from "motion/react";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
+import { useCrdb } from "@/lib/useCrdb";
+import type { Candle } from "@/lib/useMarkets";
 import { useMarkets } from "@/lib/useMarkets";
 import { Reveal, RevealWords } from "./Reveal";
 import { Counter } from "./Counter";
@@ -12,6 +15,7 @@ import { Sparkline } from "./Sparkline";
 import { AssetLogo } from "./AssetLogo";
 import { compactUsd, compact } from "@/lib/format";
 import { useT } from "@/lib/i18n";
+import { TAGLINE } from "./Logo";
 
 /* ------------------------------------------------------------------ */
 
@@ -20,6 +24,8 @@ import { useT } from "@/lib/i18n";
  * the strip reads as an architecture note rather than a wall of logos.
  */
 const STACK = [
+  { name: "DSE", role: "Listed market" },
+  { name: "nTZS", role: "Shilling settlement" },
   { name: "Base", role: "Settlement chain" },
   { name: "B20", role: "Token standard" },
   { name: "Chainlink", role: "Price feeds" },
@@ -53,6 +59,96 @@ export function StackStrip() {
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * The flagship: a Tanzanian share, bought in shillings.
+ *
+ * It sits above the US products because it is the product. Everything a
+ * visitor sees first should say "the DSE, from your phone, the same day" —
+ * dollar equities are the second act, not the headline.
+ */
+export function DseSection() {
+  const { t } = useT();
+  const crdb = useCrdb();
+  const [hist, setHist] = useState<Candle[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/securities/crdb/history")
+      .then((r) => r.json())
+      .then((d) => { if (alive && d.ok) setHist(d.candles ?? []); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const first = hist[0]?.p;
+  const last = crdb?.price ?? hist[hist.length - 1]?.p;
+  const yearPct = first && last ? ((last - first) / first) * 100 : null;
+  const fmt = (n: number) => n.toLocaleString("en-TZ", { maximumFractionDigits: 0 });
+
+  return (
+    <section className="mx-auto max-w-[1400px] px-5 pt-14 sm:px-8 sm:pt-24 lg:pt-32">
+      <Reveal>
+        <div className="eyebrow">{t("Dar es Salaam Stock Exchange")}</div>
+        <h2 className="display mt-4 max-w-4xl text-[clamp(1.8rem,5.4vw,4.6rem)]">
+          <RevealWords text={t("Tanzanian shares,")} />
+          <br />
+          <span className="contra text-[var(--muted)]">
+            <RevealWords text={t("in shillings, same day.")} delay={0.1} />
+          </span>
+        </h2>
+        <p className="mt-6 max-w-lg text-lg text-[var(--muted)]">
+          {t("Buy a fraction of a DSE-listed company from mobile money. No broker visit, no minimum lot, no waiting three days to settle.")}
+        </p>
+      </Reveal>
+
+      <Reveal>
+        <Link
+          href="/markets/crdb"
+          className="group relative mt-8 block overflow-hidden rounded-3xl border hairline p-5 transition-colors hover:border-[var(--color-accent)] sm:mt-14 sm:p-7 lg:p-9"
+        >
+          {hist.length > 4 && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 opacity-[0.12] [&>svg]:h-[55%] [&>svg]:w-full">
+              <Sparkline data={hist} color="var(--color-up)" width={1400} height={260} strokeWidth={2} />
+            </div>
+          )}
+          <div className="relative flex flex-wrap items-start justify-between gap-6">
+            <div className="flex items-center gap-4">
+              <Image src="/crdb.jpg" alt="" width={56} height={56} className="rounded-2xl object-cover" />
+              <div>
+                <div className="font-[family-name:var(--font-display)] text-2xl font-medium tracking-[-0.04em] sm:text-3xl lg:text-4xl">
+                  CRDB Bank Plc
+                </div>
+                <div className="mt-1 text-sm text-[var(--muted)]">{t("Live on CAPX · one CRDBt is one share in custody")}</div>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="tnum text-3xl font-medium sm:text-4xl">
+                {crdb ? <>TSh {fmt(crdb.price)}</> : "—"}
+              </div>
+              {crdb && (
+                <div className={`tnum mt-1 text-sm ${crdb.changePct >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                  {crdb.changePct >= 0 ? "▲" : "▼"} {Math.abs(crdb.changePct).toFixed(2)}% {t("today")}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="relative mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] lg:grid-cols-4">
+            <Stat label={t("1 year")} value={yearPct === null ? "—" : `${yearPct >= 0 ? "+" : ""}${yearPct.toFixed(0)}%`} />
+            <Stat label={t("Settlement")} value="T+0" />
+            <Stat label={t("Fee")} value={crdb ? `${crdb.feeBps / 100}%` : "1%"} />
+            <Stat label={t("Minimum lot")} value={t("None")} />
+          </div>
+
+          <span className="relative mt-8 inline-flex items-center gap-2 rounded-full bg-[var(--fg)] px-5 py-3 text-sm font-medium text-[var(--bg)] transition-transform group-hover:scale-[1.03]">
+            {t("Buy CRDB in shillings")} <span>→</span>
+          </span>
+        </Link>
+      </Reveal>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
 export function ProductsSection() {
   const { t } = useT();
   const { data } = useMarkets();
@@ -65,16 +161,16 @@ export function ProductsSection() {
   return (
     <section className="mx-auto max-w-[1400px] px-5 py-14 sm:px-8 sm:py-24 lg:py-32">
       <Reveal>
-        <div className="eyebrow">Our products</div>
+        <div className="eyebrow">{t("And beyond the DSE")}</div>
         <h2 className="display mt-4 max-w-4xl text-[clamp(1.8rem,5.4vw,4.6rem)]">
-          <RevealWords text="A new standard" />
+          <RevealWords text={t("The world's companies,")} />
           <br />
           <span className="contra text-[var(--muted)]">
-            <RevealWords text="for tokenized finance." delay={0.1} />
+            <RevealWords text={t("from the same account.")} delay={0.1} />
           </span>
         </h2>
         <p className="mt-6 max-w-lg text-lg text-[var(--muted)]">
-          Three onchain surfaces bridging public markets and DeFi. All of them read the same live state.
+          {t("The same shillings buy US equities too, priced by Chainlink and settled onchain.")}
         </p>
       </Reveal>
 
@@ -90,7 +186,7 @@ export function ProductsSection() {
                   </svg>
                 </div>
                 <h3 className="mt-4 sm:mt-6 font-[family-name:var(--font-display)] text-2xl font-medium tracking-[-0.04em] sm:text-3xl lg:text-4xl">
-                  {t("CAPX Equities")}
+                  {t("US equities")}
                 </h3>
                 <p className="mt-3 text-[17px] leading-relaxed text-[var(--muted)]">
                   Public companies as B20 tokens. Freely transferable, composable in DeFi,
@@ -127,7 +223,7 @@ export function ProductsSection() {
             </div>
 
             <Link href="/markets" className="mt-6 sm:mt-8 inline-flex items-center gap-2 rounded-full bg-[var(--fg)] px-5 py-3 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03]">
-              {t("Discover CAPX Equities")} <span>→</span>
+              {t("Browse US equities")} <span>→</span>
             </Link>
           </div>
         </Reveal>
@@ -395,19 +491,19 @@ export function ClosingCTA() {
       </div>
       <div className="mx-auto max-w-[1400px] px-5 py-16 text-center sm:px-8 sm:py-28 lg:py-40">
         <Reveal>
-          <div className="eyebrow">The future of markets</div>
+          <div className="eyebrow">{TAGLINE}</div>
           <h2 className="display mx-auto mt-5 max-w-4xl text-[clamp(1.95rem,6.5vw,5.5rem)]">
-            <RevealWords text="Markets that never" />{" "}
+            <RevealWords text={t("Your shillings,")} />{" "}
             <span className="contra">
-              <RevealWords text="close on you." delay={0.12} />
+              <RevealWords text={t("at work on the DSE.")} delay={0.12} />
             </span>
           </h2>
           <p className="mx-auto mt-7 max-w-xl text-lg text-[var(--muted)]">
-            Connect a wallet and read your positions straight off the chain, or open an account and fund it with shillings.
+            {t("Open an account, fund it from mobile money or your bank, and own a Tanzanian share the same day.")}
           </p>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
-            <Link href="/markets" className="rounded-full bg-[var(--fg)] px-7 py-4 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95">
-              Explore markets →
+            <Link href="/markets/crdb" className="rounded-full bg-[var(--fg)] px-7 py-4 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95">
+              {t("Buy CRDB")} →
             </Link>
             <Link href="/portfolio" className="rounded-full border hairline px-7 py-4 text-sm font-medium transition-colors hover:surface">
               {t("Open portfolio")}

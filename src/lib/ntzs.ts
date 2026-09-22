@@ -193,30 +193,39 @@ export async function getUser(id: string) {
  */
 export type PaymentMethod = "mobile_money" | "bank_transfer" | "card" | "lipa_namba";
 
+/**
+ * What a bank-transfer deposit hands back for the payer.
+ *
+ * Rendered from the response every time, never stored as constants: the docs
+ * are explicit that a hardcoded account number sends every payer to the wrong
+ * place the day it changes.
+ */
+export type BankInstructions = {
+  institution?: string;
+  accountNumber?: string;
+  accountName?: string;
+  reference?: string;
+  amountTzs?: number;
+  note?: string;
+};
+
 export async function createDeposit(input: {
   userId?: string;
   amountTzs: number;
-  phoneNumber: string;
+  /** Required for mobile money; a bank transfer takes none. */
+  phoneNumber?: string;
   paymentMethod?: PaymentMethod;
-  /**
-   * The account the money is sent FROM, required for a bank transfer.
-   *
-   * A bank credit arriving over TIPS loses its narration, so the sending
-   * account is the only thing that identifies whose deposit it is. Mobile money
-   * has the payer's number for that; a bank transfer has nothing else.
-   */
-  payerAccountNumber?: string;
 }) {
   const amount = Math.round(input.amountTzs);
   const body: Record<string, unknown> = {
     amountTzs: amount,
     tzsAmount: amount,
-    phoneNumber: input.phoneNumber,
     paymentMethod: input.paymentMethod ?? "mobile_money",
   };
+  if (input.phoneNumber) body.phoneNumber = input.phoneNumber;
   if (input.userId) body.userId = input.userId;
-  if (input.payerAccountNumber) body.payerAccountNumber = input.payerAccountNumber;
-  return call<{ id: string; status: string; [k: string]: unknown }>("/api/v1/deposits", {
+  return call<{ id: string; status: string; reference?: string;
+                instructions?: BankInstructions | string; [k: string]: unknown }>("/api/v1/deposits", {
     method: "POST", body, idempotent: true,
   });
 }

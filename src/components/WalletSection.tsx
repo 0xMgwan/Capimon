@@ -13,9 +13,15 @@ import { useVenues } from "@/lib/useVenues";
 import { useT } from "@/lib/i18n";
 import { AssetLogo } from "./AssetLogo";
 
+type BankDetails = {
+  institution: string | null; accountNumber: string; accountName: string | null;
+  reference: string; amountTzs: number; note: string | null; expiresAt: string;
+};
 type Deposit = {
   id: string; amount_tzs: number; status: string; usdc_credited: string | null;
   created_at: string; settled_at: string | null;
+  /** Present while a bank transfer is waiting for the money. */
+  bank?: BankDetails | null;
 };
 
 const TZS = (n: number) => `${Math.round(n).toLocaleString()} TZS`;
@@ -83,7 +89,8 @@ export function WalletSection({ holdings }: {
   const [error, setError] = useState<string | null>(null);
   const [panel, setPanel] = useState<"none" | "deposit" | "withdraw">("none");
   const [wdAmount, setWdAmount] = useState(10_000);
-  const [payerAccount, setPayerAccount] = useState("");
+  const [bankDetails, setBankDetails] = useState<BankDetails | null>(null);
+  const [hiddenRef, setHiddenRef] = useState<string | null>(null);
   const [quote, setQuote] = useState<{ quoteId: string; feeTzs: number; recipientName: string | null } | null>(null);
 
   const loadDeposits = useCallback(async () => {
@@ -112,6 +119,10 @@ export function WalletSection({ holdings }: {
     return () => { alive = false; clearTimeout(first); clearInterval(id); };
   }, [loadDeposits, refresh, pendingCount]);
 
+  /* The newest open bank transfer, so its details survive a reload. */
+  const openBankRaw = bankDetails ?? deposits.find((d) => d.bank)?.bank ?? null;
+  const openBank = openBankRaw && openBankRaw.reference !== hiddenRef ? openBankRaw : null;
+
   if (!account) return null;
   const phoneToUse = phone || account.user.phone || "";
   const minTzs = account.depositMinTzs ?? 500;
@@ -129,13 +140,14 @@ export function WalletSection({ holdings }: {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          amountTzs: amount, phoneNumber: phoneToUse, paymentMethod: method,
-          ...(method === "bank_transfer" ? { payerAccountNumber: payerAccount } : {}),
+          amountTzs: amount, paymentMethod: method,
+          ...(method === "mobile_money" ? { phoneNumber: phoneToUse } : {}),
         }),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error);
-      setNotice(j.note ?? "Approve the prompt on your phone.");
+      if (j.bank) { setBankDetails(j.bank); setHiddenRef(null); }
+      else setNotice(j.note ?? "Approve the prompt on your phone.");
       setPanel("none");
       await loadDeposits();
     } catch (e) {
@@ -337,42 +349,41 @@ export function WalletSection({ holdings }: {
                     aria-label="Amount in shillings"
                     className="tnum mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
                   />
-                  <input
-                    value={phoneToUse}
-                    onChange={(e) => setPhone(e.target.value)}
-                    inputMode="numeric" placeholder={t("Mobile money number")}
-                    className="mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
-                  />
-                  {/* A bank credit arrives without its narration, so the sending
-                      account is the only thing that identifies whose it is. */}
-                  {method === "bank_transfer" && (
+                  {/* A bank transfer is matched by its reference, so it needs no
+                      phone and no sending account — only mobile money asks. */}
+                  {method === "mobile_money" && (
                     <input
-                      value={payerAccount}
-                      onChange={(e) => setPayerAccount(e.target.value)}
-                      inputMode="numeric" placeholder={t("Bank account you are sending from")}
-                      className="tnum mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+                      value={phoneToUse}
+                      onChange={(e) => setPhone(e.target.value)}
+                      inputMode="numeric" placeholder={t("Mobile money number")}
+                      className="mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
                     />
                   )}
                   <button
                     onClick={deposit}
-                    disabled={busy || amount < minTzs || !phoneToUse
-                              || (method === "bank_transfer" && !payerAccount.trim())}
+                    disabled={busy || amount < minTzs || (method === "mobile_money" && !phoneToUse)}
                     className="mt-3 w-full rounded-full bg-[var(--fg)] py-3 text-sm font-medium text-[var(--bg)] disabled:opacity-50"
                   >
                     {busy
-                      ? method === "bank_transfer" ? "Preparing…" : "Sending prompt…"
-                      : `Deposit ${TZS(amount)}`}
+                      ? method === "bank_transfer" ? t("Preparing…") : t("Sending prompt…")
+                      : method === "bank_transfer"
+                        ? `${t("Get bank details for")} ${TZS(amount)}`
+                        : `${t("Deposit")} ${TZS(amount)}`}
                   </button>
                   <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
                     Minimum {minTzs.toLocaleString()} TZS
                     {account.depositRoute === "ramp" && method === "mobile_money" && " on this rail"}.
                     {method === "bank_transfer" &&
-                      " Send from the account you enter above. That is how the credit is matched to you. Bank transfers settle more slowly than mobile money."}
+                      ` ${t("You will get an account and a reference to pay from your own bank app. Any Tanzanian bank works; it usually lands within about 10 minutes.")}`}
                   </p>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
+
+          {openBank && panel !== "withdraw" && (
+            <BankTransferCard bank={openBank} onDone={() => { setHiddenRef(openBank.reference); setBankDetails(null); }} />
+          )}
 
           <AnimatePresence initial={false}>
             {panel === "withdraw" && (
@@ -586,5 +597,83 @@ export function WalletSection({ holdings }: {
         </div>
       </div>
     </section>
+  );
+}
+
+
+/**
+ * Where to send a bank deposit.
+ *
+ * Every figure comes from the nTZS response for this deposit — the account can
+ * change, and a hardcoded number would quietly send customers' money to the
+ * wrong place. The reference and the exact amount are what match the transfer
+ * back to this customer, so both are the loudest things on the card.
+ */
+function BankTransferCard({ bank, onDone }: { bank: BankDetails; onDone: () => void }) {
+  const { t } = useT();
+  const [copied, setCopied] = useState<string | null>(null);
+  const copy = (label: string, value: string) => {
+    navigator.clipboard?.writeText(value).then(() => {
+      setCopied(label);
+      setTimeout(() => setCopied((c) => (c === label ? null : c)), 1500);
+    }).catch(() => {});
+  };
+  const expires = new Date(bank.expiresAt);
+  const rows: [string, string | null, boolean][] = [
+    [t("Bank to select"), bank.institution, false],
+    [t("Account number"), bank.accountNumber, true],
+    [t("Account name"), bank.accountName, false],
+    [t("Amount, exactly"), `${Math.round(bank.amountTzs).toLocaleString()} TZS`, true],
+  ];
+  return (
+    <div className="mt-4 rounded-2xl border hairline p-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="eyebrow">{t("Send a bank transfer")}</div>
+        <span className="rounded-full bg-[var(--color-accent)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--color-accent)]">
+          {t("Waiting for payment")}
+        </span>
+      </div>
+
+      <div className="mt-3 rounded-xl surface p-3.5">
+        <div className="eyebrow">{t("Reference · put this in the description")}</div>
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <span className="tnum text-2xl font-medium tracking-wide">{bank.reference}</span>
+          <button
+            onClick={() => copy("ref", bank.reference)}
+            className="shrink-0 rounded-full border hairline px-3 py-1.5 text-[12px] font-medium hover:bg-[var(--bg)]"
+          >
+            {copied === "ref" ? t("Copied") : t("Copy")}
+          </button>
+        </div>
+      </div>
+
+      <dl className="mt-3 divide-y divide-[var(--border)] text-sm">
+        {rows.filter(([, v]) => v).map(([label, value, copyable]) => (
+          <div key={label} className="flex items-center justify-between gap-3 py-2">
+            <dt className="text-[var(--muted)]">{label}</dt>
+            <dd className="flex min-w-0 items-center gap-2 text-right">
+              <span className="tnum break-all font-medium">{value}</span>
+              {copyable && (
+                <button
+                  onClick={() => copy(label, String(value).replace(/[^\d]/g, "") || String(value))}
+                  className="shrink-0 text-[11px] text-[var(--muted)] underline underline-offset-2 hover:text-[var(--fg)]"
+                >
+                  {copied === label ? t("Copied") : t("Copy")}
+                </button>
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
+        {bank.note ? `${bank.note} ` : ""}
+        {t("Send from any Tanzanian bank. A different amount or a missing reference cannot be matched automatically.")}{" "}
+        {t("Valid until")} {expires.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}.
+      </p>
+      <button onClick={onDone} className="mt-3 text-[12px] font-medium text-[var(--muted)] hover:text-[var(--fg)]">
+        {t("I have sent it")} →
+      </button>
+    </div>
   );
 }

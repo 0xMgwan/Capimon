@@ -34,15 +34,15 @@ const SITE =
     ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
     : "https://capx.vercel.app");
 const DESCRIPTION =
-  "Buy and sell public equities onchain as B20 tokens on Base. US shares in dollars, " +
-  "CRDB Bank in shillings. Live marks, settlement against custody published onchain, " +
-  "and self-custody. No broker, no closing bell.";
+  "Buy Tanzanian shares in shillings from mobile money, settled the same day against " +
+  "custody published onchain. CRDB Bank on the DSE today, with US equities from the " +
+  "same account.";
 
 export const metadata: Metadata = {
   // Resolves relative OG and icon URLs so crawlers get absolute links.
   metadataBase: new URL(SITE),
   title: {
-    default: "CAPX · Capital markets in motion",
+    default: "CAPX · Capital in Motion",
     template: "%s · CAPX",
   },
   description: DESCRIPTION,
@@ -50,7 +50,7 @@ export const metadata: Metadata = {
   keywords: ["tokenized equities", "B20", "Base", "onchain stocks", "Chainlink", "self-custody",
     "CRDB", "Dar es Salaam Stock Exchange", "DSE", "Tanzania", "nTZS"],
   openGraph: {
-    title: "CAPX · Capital markets in motion",
+    title: "CAPX · Capital in Motion",
     description: DESCRIPTION,
     siteName: "CAPX",
     url: SITE,
@@ -59,7 +59,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "CAPX · Capital markets in motion",
+    title: "CAPX · Capital in Motion",
     description: DESCRIPTION,
   },
   robots: { index: true, follow: true },

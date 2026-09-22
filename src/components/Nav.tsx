@@ -65,7 +65,7 @@ export function Nav() {
         <nav className="mx-auto flex max-w-[1400px] items-center justify-between px-5 sm:px-8">
           <Link href="/" className="group flex items-center gap-2.5">
             <Logo className="h-7 w-7 transition-transform duration-500 group-hover:translate-x-0.5" />
-            <Wordmark />
+            <Wordmark tagline />
           </Link>
 
           <div className="hidden items-center gap-1 md:flex">
@@ -146,7 +146,7 @@ export function Nav() {
                   className="safe-t fixed inset-x-0 top-0 z-[70] rounded-b-3xl border-b hairline bg-[var(--bg)] p-5 pt-6 shadow-2xl md:hidden"
                 >
                   <div className="flex items-center justify-between">
-                    <Wordmark className="text-xl" />
+                    <Wordmark className="text-xl" tagline />
                     <button
                       onClick={() => setMenuAt(null)}
                       aria-label="Close menu"

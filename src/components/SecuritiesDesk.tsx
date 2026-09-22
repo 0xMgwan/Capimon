@@ -166,7 +166,12 @@ export function SecuritiesDesk() {
                   value={b.issued.toLocaleString()}
                 />
                 <Cell label="Headroom" value={b.headroom.toLocaleString()} />
-                <Cell label="Custodian" value={b.custodian ?? "—"} />
+                <Cell
+                  label="Attested by"
+                  value={b.custodian
+                    ? b.custodian.trim().toUpperCase().startsWith(PRIMARY_BROKER) ? `${b.custodian} · main broker` : b.custodian
+                    : `Awaiting ${PRIMARY_BROKER}`}
+                />
               </div>
               <p className="mt-3 text-[11px] text-[var(--muted)]">
                 {b.fresh
@@ -454,29 +459,62 @@ function RegisterSecurity({ onAct, busy }: { onAct: (b: Record<string, unknown>)
   );
 }
 
+/**
+ * The broker that confirms custody holdings.
+ *
+ * FIMCO is CAPX's main broker for attestations, so it is the default party on
+ * a filing. It is a default and not a stamp: the filing still cannot go in
+ * without FIMCO's own statement reference, so naming them always points at a
+ * document they issued rather than at a holding nobody asked them about.
+ */
+export const PRIMARY_BROKER = "FIMCO";
+
 function FileAttestation({ onAct, busy }: { onAct: (b: Record<string, unknown>) => Promise<void>; busy: boolean }) {
-  /*
-   * The custodian is blank on purpose.
-   *
-   * A prefilled bank name is one click away from asserting that an institution
-   * confirmed a holding it has never been asked about, and an attestation is
-   * exactly the record that must not be filled in for you.
-   */
-  const [f, setF] = useState({ security: "", custodian: "", quantity: "", locked: "", docRef: "", expiresAt: "" });
+  const [f, setF] = useState({ security: "CRDB", custodian: PRIMARY_BROKER, quantity: "", locked: "", docRef: "", expiresAt: "" });
+  const [other, setOther] = useState(false);
   const q = Number(f.quantity) || 0;
   const l = Number(f.locked || f.quantity) || 0;
+  const isBroker = !other && f.custodian === PRIMARY_BROKER;
   return (
     <div className="rounded-3xl border hairline p-5">
       <div className="eyebrow">File a custody attestation</div>
       <Field label="Security" v={f.security} on={(v) => setF({ ...f, security: v.toUpperCase() })} ph="CRDB"
         hint="The registered security's symbol: CRDB, not CRDBt." />
-      <Field label="Custodian" v={f.custodian} on={(v) => setF({ ...f, custodian: v })}
-        ph="Who is confirming the holding"
-        hint="Name the party actually standing behind this. If none has confirmed yet, say so here." />
+      <label className="mb-3 block">
+        <span className="eyebrow">Attested by</span>
+        <div className="mt-1.5 flex gap-2">
+          <button
+            onClick={() => { setOther(false); setF({ ...f, custodian: PRIMARY_BROKER }); }}
+            className={`flex-1 rounded-xl border px-3 py-2.5 text-left text-[13px] font-medium transition-colors ${
+              isBroker ? "border-[var(--fg)] bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"
+            }`}
+          >
+            {PRIMARY_BROKER}
+            <span className={`ml-1.5 text-[11px] font-normal ${isBroker ? "opacity-70" : "text-[var(--muted)]"}`}>main broker</span>
+          </button>
+          <button
+            onClick={() => { setOther(true); setF({ ...f, custodian: "" }); }}
+            className={`rounded-xl border px-3 py-2.5 text-[13px] font-medium transition-colors ${
+              other ? "border-[var(--fg)] bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"
+            }`}
+          >
+            Other
+          </button>
+        </div>
+        {other && (
+          <input
+            value={f.custodian} onChange={(e) => setF({ ...f, custodian: e.target.value })}
+            placeholder="Who is confirming the holding"
+            className="mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+          />
+        )}
+      </label>
       <Field label="Shares held" v={f.quantity} on={(v) => setF({ ...f, quantity: v.replace(/[^0-9.]/g, "") })} ph="100" />
       <Field label="Of those, locked" v={f.locked} on={(v) => setF({ ...f, locked: v.replace(/[^0-9.]/g, "") })} ph="100" />
-      <Field label="Custodian reference" v={f.docRef} on={(v) => setF({ ...f, docRef: v })}
-        ph="Statement or reference number" />
+      <Field label={isBroker ? `${PRIMARY_BROKER} statement reference` : "Custodian reference"} v={f.docRef}
+        on={(v) => setF({ ...f, docRef: v })}
+        ph={isBroker ? "Holding statement or CDS reference from FIMCO" : "Statement or reference number"}
+        hint="Required. The attestation is only as good as the document it points to." />
       <label className="mb-3 block">
         <span className="eyebrow">Expires</span>
         <input
@@ -492,7 +530,7 @@ function FileAttestation({ onAct, busy }: { onAct: (b: Record<string, unknown>) 
           action: "attest", ...f, quantity: q, locked: l,
           expiresAt: f.expiresAt ? new Date(`${f.expiresAt}T23:59:59Z`).toISOString() : "",
         })}
-        disabled={busy || !f.security || !f.custodian.trim() || !(q > 0) || l > q || !f.expiresAt}
+        disabled={busy || !f.security || !f.custodian.trim() || !f.docRef.trim() || !(q > 0) || l > q || !f.expiresAt}
         className="mt-1 w-full rounded-full bg-[var(--fg)] py-2.5 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40"
       >
         File for approval

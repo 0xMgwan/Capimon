@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
@@ -11,10 +12,14 @@ import { AssetLogo } from "./AssetLogo";
 import { UsdcIcon } from "./icons/Usdc";
 import { NtzsIcon } from "./icons/Ntzs";
 import { usd } from "@/lib/format";
+import { useCrdb } from "@/lib/useCrdb";
 import { useT } from "@/lib/i18n";
 
 const PRESETS = [50, 100, 500, 1000];
 const PRESETS_TZS = [25_000, 100_000, 250_000, 500_000];
+/** Sentinel for the CRDB row, which is not a Chainlink market. */
+const CRDB = "__CRDB__";
+const tzsFmt = new Intl.NumberFormat("en-TZ", { maximumFractionDigits: 0 });
 
 /**
  * A single order ticket: how much, what, what you get. The company selector is
@@ -65,9 +70,10 @@ export function QuickBuy() {
     const toUsdc = () => {
       // No rate means shillings cannot be priced, so the ticket drops to the
       // currency it can quote rather than showing a figure it cannot convert.
+      // The amount stays in shillings: the ticket opens on CRDB, which is
+      // priced in them regardless, and switching to a dollar name resets it.
       if (!alive) return;
       setCurrency("USDC");
-      setAmount(PRESETS[1]);
     };
     fetch("/api/ntzs/rate", { cache: "no-store" })
       .then((r) => r.json())
@@ -80,11 +86,20 @@ export function QuickBuy() {
       .catch(toUsdc);
     return () => { alive = false; };
   }, []);
-  const canShowTzs = !!rate && rate > 0;
-  const inTzs = currency === "TZS" && !!rate && rate > 0;
-  const amountUsd = inTzs && rate ? amount * rate : amount;
   const [custom, setCustom] = useState("");
-  const [picked, setPicked] = useState<string | null>(null);
+  /*
+   * CRDB first.
+   *
+   * The site is for Tanzanians buying Tanzanian shares, with US names as the
+   * second act. Opening the ticket on NVIDIA said the opposite in the one
+   * place every visitor looks.
+   */
+  const [picked, setPicked] = useState<string | null>(CRDB);
+  const crdb = useCrdb();
+  const isCrdb = picked === CRDB;
+  const canShowTzs = !!rate && rate > 0;
+  const inTzs = (currency === "TZS" && !!rate && rate > 0) || picked === CRDB;
+  const amountUsd = inTzs && rate ? amount * rate : amount;
 
   const markets = useMemo(() => {
     const rank = (sym: string) => (venues[sym]?.tradeable ? 0 : 1);
@@ -93,9 +108,14 @@ export function QuickBuy() {
     );
   }, [data, venues]);
 
-  const selected = markets.find((m) => m.ticker === picked) ?? markets[0];
+  const selected = isCrdb ? undefined : markets.find((m) => m.ticker === picked) ?? markets[0];
   const venue = selected ? venues[selected.symbol] : undefined;
-  const units = selected && selected.price > 0 ? amountUsd / selected.price : 0;
+  /* CRDB settles in shillings at the DSE mark, fee off the cash leg and the
+     share count floored — the same arithmetic the order itself runs. */
+  const crdbUnits = crdb && crdb.price > 0
+    ? Math.floor(((amount * (1 - crdb.feeBps / 10_000)) / crdb.price) * 1e8) / 1e8
+    : 0;
+  const units = isCrdb ? crdbUnits : selected && selected.price > 0 ? amountUsd / selected.price : 0;
   const tick = selected ? ticks[selected.symbol] : undefined;
 
   const setPreset = (n: number) => { setAmount(n); setCustom(""); };
@@ -107,6 +127,7 @@ export function QuickBuy() {
   };
 
   const go = () => {
+    if (isCrdb) { router.push(`/markets/crdb?side=buy&amount=${Math.round(amount)}`); return; }
     if (!selected) return;
     router.push(`/markets/${selected.ticker.toLowerCase()}?side=buy&amount=${amountUsd}`);
   };
@@ -119,7 +140,7 @@ export function QuickBuy() {
                   {inTzs ? <NtzsIcon className="h-3.5 w-3.5" /> : <UsdcIcon className="h-3.5 w-3.5" />}
                   {t("You pay")} · {inTzs ? "TZS" : "USDC"}
                 </div>
-                {canShowTzs && (
+                {canShowTzs && !isCrdb && (
                   <div className="flex rounded-full surface p-0.5">
                     {(["TZS", "USDC"] as const).map((c) => (
                       <button
@@ -169,7 +190,20 @@ export function QuickBuy() {
               {/* 2 — company */}
               <div className="eyebrow mt-6">{t("Buy")}</div>
               <div className="mt-3">
-                <AssetPicker markets={markets} venues={venues} selected={selected} onSelect={setPicked} />
+                <AssetPicker
+                  markets={markets} venues={venues} selected={selected ?? markets[0]}
+                  onSelect={(tk) => {
+                    // Leaving CRDB for a dollar name: if shillings cannot be
+                    // priced, fall back to the currency the swap quotes in.
+                    if (isCrdb && !canShowTzs) { setCurrency("USDC"); setCustom(""); setAmount(PRESETS[1]); }
+                    setPicked(tk);
+                  }}
+                  crdbSelected={isCrdb}
+                  onSelectCrdb={() => {
+                    if (currency !== "TZS") { setCurrency("TZS"); setCustom(""); setAmount(PRESETS_TZS[1]); }
+                    setPicked(CRDB);
+                  }}
+                />
               </div>
 
               {/* 3 — receipt */}
@@ -177,7 +211,7 @@ export function QuickBuy() {
                 <div className="eyebrow">{t("You receive")} · {t("oracle-implied")}</div>
                 <AnimatePresence mode="popLayout">
                   <motion.div
-                    key={`${selected?.ticker}-${units.toFixed(6)}`}
+                    key={`${isCrdb ? "CRDB" : selected?.ticker}-${units.toFixed(6)}`}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
@@ -186,27 +220,36 @@ export function QuickBuy() {
                       tick === "up" ? "flash-up" : tick === "down" ? "flash-down" : ""
                     }`}
                   >
-                    {selected && <AssetLogo logo={selected.logo} ticker={selected.ticker} color={selected.color} size={28} />}
-                    {units.toFixed(6)}
-                    <span className="text-sm text-[var(--muted)]">{selected?.symbol ?? "—"}</span>
+                    {isCrdb
+                      ? <Image src="/crdb.jpg" alt="" width={28} height={28} className="rounded-full object-cover" />
+                      : selected && <AssetLogo logo={selected.logo} ticker={selected.ticker} color={selected.color} size={28} />}
+                    {units.toLocaleString("en-US", { maximumFractionDigits: isCrdb ? 4 : 6, minimumFractionDigits: isCrdb ? 0 : 6 })}
+                    <span className="text-sm text-[var(--muted)]">{isCrdb ? "CRDBt" : selected?.symbol ?? "—"}</span>
                   </motion.div>
                 </AnimatePresence>
                 <div className="tnum mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
-                  {usd(amount)} at {selected ? usd(selected.price) : "—"} ·{" "}
+                  {isCrdb ? (
+                    <>
+                      TSh {tzsFmt.format(amount)} at {crdb ? `TSh ${tzsFmt.format(crdb.price)}` : "—"}
+                      {crdb && crdb.feeBps > 0 ? ` · ${crdb.feeBps / 100}% ${t("fee")}` : ""} · {t("settles same day in nTZS")}
+                    </>
+                  ) : (<>
+                  {inTzs ? `TSh ${tzsFmt.format(amount)} ≈ ${usd(amountUsd)}` : usd(amount)} at {selected ? usd(selected.price) : "—"} ·{" "}
                   {venue
                     ? venue.tradeable
                       ? `routing via ${venue.venues.join(" + ")}`
                       : "no secondary market yet, mint only"
                     : "checking routes…"}
+                  </>)}
                 </div>
               </div>
 
               <button
                 onClick={go}
-                disabled={!selected}
+                disabled={isCrdb ? !crdb : !selected}
                 className="group mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--fg)] py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
               >
-                {t("Review")} {selected?.ticker ?? ""} {t("order")}
+                {t("Review")} {isCrdb ? "CRDB" : selected?.ticker ?? ""} {t("order")}
                 <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
               </button>
 
@@ -215,7 +258,7 @@ export function QuickBuy() {
                   to say that this one is not. */}
               <p className="mt-3 text-[11px] text-[var(--muted)]">
                 {t("Indicative. Real quote on the")}{" "}
-                <Link href="/how-it-works" className="underline underline-offset-2 hover:text-[var(--fg)]">
+                <Link href={isCrdb ? "/markets/crdb" : selected ? `/markets/${selected.ticker.toLowerCase()}` : "/markets"} className="underline underline-offset-2 hover:text-[var(--fg)]">
                   {t("asset page")}
                 </Link>.
               </p>

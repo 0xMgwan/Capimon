@@ -16,6 +16,7 @@ export type CrdbSummary = {
   tradeDate: string | null;
   availableShares: number;
   tradable: boolean;
+  feeBps: number;
 };
 
 let cache: CrdbSummary | null = null;
@@ -37,6 +38,7 @@ export function useCrdb() {
           tradeDate: j.dse?.tradeDate ?? null,
           availableShares: j.market.availableShares,
           tradable: j.market.tradable,
+          feeBps: j.market.feeBps ?? 0,
         };
         cache = next;
         if (alive) setData(next);

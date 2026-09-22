@@ -35,12 +35,12 @@ export async function GET(req: Request) {
       /*
        * An identity document should never be framed by another origin.
        *
-       * `frame-ancestors` is the directive that does that. An earlier
-       * `default-src 'none'` alongside it did nothing useful for an image and
-       * risked breaking the browser's built-in PDF viewer, which is how a
-       * reviewer opens a scanned ID.
+       * `frame-ancestors` is the directive that does that. It allows 'self'
+       * rather than 'none' because the custody portal embeds a scanned PDF ID
+       * inline, and 'none' blocked even our own page from showing it. Every
+       * other origin is still refused.
        */
-      "content-security-policy": "frame-ancestors 'none'",
+      "content-security-policy": "frame-ancestors 'self'",
       "x-content-type-options": "nosniff",
       "content-disposition": `inline; filename="${which}-${id.slice(0, 8)}${
         row.mime === "application/pdf" ? ".pdf" : ".jpg"}"`,

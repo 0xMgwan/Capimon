@@ -469,7 +469,7 @@ type Kyc = {
   id: string; user_id: string; email: string; name: string | null;
   doc_type: string; doc_number: string | null; status: string; reason: string | null;
   reviewed_by: string | null; reviewed_at: string | null; created_at: string;
-  doc_bytes: number | null; selfie_bytes: number | null;
+  doc_bytes: number | null; selfie_bytes: number | null; doc_mime: string | null;
 };
 
 /**
@@ -525,13 +525,36 @@ function KycSection({ token }: { token: string }) {
             </button>
             {open === r.id && (
               <div className="grid gap-3 px-4 pb-4 sm:grid-cols-2">
-                {r.doc_bytes ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={img(r.id, "doc")} alt="ID document" className="w-full rounded-xl border hairline object-contain" />
-                ) : <p className="text-[11px] text-[var(--muted)]">No document image.</p>}
+                {/*
+                  * The document can be a PDF or an iPhone HEIC as well as a
+                  * photo. An <img> can show neither, which is how the ID came
+                  * out as a broken image beside a working selfie. PDFs are
+                  * embedded; HEIC, which only Safari decodes, opens in a new
+                  * tab where the system viewer can.
+                  */}
+                {!r.doc_bytes ? (
+                  <p className="text-[11px] text-[var(--muted)]">No document image.</p>
+                ) : r.doc_mime === "application/pdf" ? (
+                  <div>
+                    <iframe src={img(r.id, "doc")} title="ID document (PDF)"
+                      className="h-[480px] w-full rounded-xl border hairline bg-white" />
+                    <a href={img(r.id, "doc")} target="_blank" rel="noreferrer"
+                      className="mt-1 inline-block text-[11px] underline underline-offset-2">Open PDF full size ↗</a>
+                  </div>
+                ) : /heic|heif/i.test(r.doc_mime ?? "") ? (
+                  <a href={img(r.id, "doc")} target="_blank" rel="noreferrer"
+                    className="grid h-48 place-items-center rounded-xl border hairline surface text-center text-[12px] text-[var(--muted)]">
+                    <span>HEIC photo from an iPhone<br /><span className="font-medium text-[var(--fg)] underline">Open it ↗</span><br />Safari and Preview display it; Chrome cannot.</span>
+                  </a>
+                ) : (
+                  <a href={img(r.id, "doc")} target="_blank" rel="noreferrer" title="Open full size">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={img(r.id, "doc")} alt="ID document" className="max-h-[480px] w-full rounded-xl border hairline object-contain" />
+                  </a>
+                )}
                 {r.selfie_bytes ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={img(r.id, "selfie")} alt="Selfie" className="w-full rounded-xl border hairline object-contain" />
+                  <img src={img(r.id, "selfie")} alt="Selfie" className="max-h-[480px] w-full rounded-xl border hairline bg-[var(--surface-2,transparent)] object-contain" />
                 ) : <p className="text-[11px] text-[var(--muted)]">No selfie.</p>}
                 <p className="text-[11px] text-[var(--muted)] sm:col-span-2">
                   {r.reviewed_by ? `Reviewed by ${r.reviewed_by} on ${dt(r.reviewed_at)}.` : "Awaiting review by CAPX."}

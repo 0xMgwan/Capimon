@@ -36,6 +36,18 @@ export function CrdbChart({ symbol = "CRDB" }: { symbol?: string }) {
   if (candles === null) {
     return <div className="h-[240px] animate-pulse rounded-3xl surface sm:h-[320px]" />;
   }
+  // A listing CAPX added recently has one published price so far: say so,
+  // rather than calling a new security's history "unavailable".
+  if (candles.length === 1 && source === "oracle") {
+    return (
+      <div className="rounded-2xl border hairline p-4 text-[13px] text-[var(--muted)] sm:rounded-3xl sm:p-6">
+        {t("First price published by CAPX on")}{" "}
+        {new Date(candles[0].t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short" })}:{" "}
+        <span className="tnum font-medium text-[var(--fg)]">{candles[0].p.toLocaleString("en-TZ")} TZS</span>.{" "}
+        {t("The chart fills in day by day, and shows the full DSE history once the exchange is back.")}
+      </div>
+    );
+  }
   if (candles.length < 2) {
     return (
       <div className="rounded-3xl border hairline p-6 text-sm text-[var(--muted)]">

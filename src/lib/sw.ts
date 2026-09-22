@@ -434,4 +434,6 @@ export const SW: Record<string, string> = {
   "This is the last price CAPX published": "Hii ni bei ya mwisho iliyochapishwa na CAPX",
   "Buying and selling continue at this price.": "Kununua na kuuza kunaendelea kwa bei hii.",
   "The DSE's price history is unavailable right now. The chart returns as soon as the exchange is back.": "Historia ya bei ya DSE haipatikani sasa hivi. Chati itarudi mara soko litakaporejea.",
+  "First price published by CAPX on": "Bei ya kwanza iliyochapishwa na CAPX tarehe",
+  "The chart fills in day by day, and shows the full DSE history once the exchange is back.": "Chati itajaa siku baada ya siku, na itaonyesha historia kamili ya DSE soko likirejea.",
 };

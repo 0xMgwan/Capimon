@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
-import { timingSafeEqual } from "crypto";
 import { dbConfigured } from "@/lib/db";
 import { kycImage } from "@/lib/kyc";
+import { roleOf } from "@/lib/adminAuth";
 
 export const dynamic = "force-dynamic";
-
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
 
 /**
  * Serves one identity image to a reviewer.
@@ -20,13 +18,7 @@ export async function GET(req: Request) {
   if (!dbConfigured) return new NextResponse("not configured", { status: 503 });
 
   const url = new URL(req.url);
-  const given = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "")
-    || url.searchParams.get("token") || "";
-  const a = Buffer.from(given);
-  const b = Buffer.from(ADMIN_TOKEN);
-  if (!ADMIN_TOKEN || a.length !== b.length || !timingSafeEqual(a, b)) {
-    return new NextResponse("unauthorised", { status: 401 });
-  }
+  if (!roleOf(req)) return new NextResponse("unauthorised", { status: 401 });
 
   const id = url.searchParams.get("id") ?? "";
   const which = url.searchParams.get("which") === "selfie" ? "selfie" : "doc";

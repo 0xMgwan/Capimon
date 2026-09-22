@@ -29,7 +29,7 @@ const SECTIONS: Section[] = [
   {
     h: "Your identity documents specifically",
     p: [
-      "The document photograph and selfie are stored in our database and are visible only to CAPX staff reviewing your verification. They are not shown to other customers, they are not published, and they are never included in any page anyone else can reach.",
+      "The document photograph and selfie are stored in our database and are visible only to CAPX staff reviewing your verification and to the regulated parties we work with where compliance requires it. They are not shown to other customers, they are not published, and they are never included in any page anyone else can reach.",
       "They are served only through an access-controlled route and are not indexed or cached.",
       "We keep them after a decision because the evidence for a decision has to outlive the decision, and because anti-money-laundering rules require records to be retained. We are still settling the exact retention period; when it is fixed it will be stated here.",
     ],

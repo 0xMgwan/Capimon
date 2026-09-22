@@ -24,9 +24,8 @@ export async function GET(req: Request) {
   if (!dbConfigured) return NextResponse.json({ ok: false, code: "not_configured" }, { status: 503 });
   const role = roleOf(req);
   if (!role) return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
-  /* FIMCO sees who holds what, as a broker keeping the register would; it does
-     not need customers' contact details to do that, so they are withheld. */
-  const redact = role === "fimco";
+  /* FIMCO sees the full register, contact details included: as broker of
+     record it keeps the beneficial-owner records compliance requires. */
 
   try {
     await migrate();
@@ -65,7 +64,7 @@ export async function GET(req: Request) {
       const cost = byUser.get(r.user_id)?.get(r.asset);
       return {
         userId: r.user_id,
-        email: redact ? "" : r.email,
+        email: r.email,
         name: r.name,
         username: r.username,
         kycStatus: r.kyc_status,

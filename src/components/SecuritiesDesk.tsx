@@ -1731,8 +1731,21 @@ function OracleAdmin({ token, busy, setBusy, setErr, setNote }: {
 
       {quotes.length > 0 && (
         <div className="mt-4 overflow-hidden rounded-2xl border hairline">
+          {/*
+            * A row is the way to change that mark.
+            *
+            * The form opens on CRDB, so re-pricing anything else meant typing
+            * its symbol by hand with nothing to check it against — one typo
+            * away from marking the wrong security. Pressing a row loads it.
+            */}
           {quotes.map((q) => (
-            <div key={q.symbol} className="flex flex-wrap items-center gap-3 border-b hairline px-4 py-2.5 last:border-0">
+            <button
+              key={q.symbol}
+              onClick={() => setF({ symbol: q.symbol, price: String(q.price), source: q.source })}
+              title={`Edit ${q.symbol}'s price`}
+              className={`flex w-full flex-wrap items-center gap-3 border-b hairline px-4 py-2.5 text-left transition-colors last:border-0 hover:surface ${
+                f.symbol === q.symbol ? "surface" : ""}`}
+            >
               <span className="w-16 text-sm font-medium">{q.symbol}</span>
               <span className="tnum flex-1 text-sm">{q.price.toLocaleString()} TZS</span>
               <span className="text-[11px] text-[var(--muted)]">{q.source}</span>
@@ -1743,13 +1756,17 @@ function OracleAdmin({ token, busy, setBusy, setErr, setNote }: {
                 q.fresh ? "bg-[var(--color-up)]/10 text-[var(--color-up)]" : "bg-[var(--color-down)]/10 text-[var(--color-down)]"}`}>
                 {q.fresh ? "live" : "stale"}
               </span>
-            </div>
+              <span className="text-[11px] text-[var(--muted)]">edit</span>
+            </button>
           ))}
         </div>
       )}
       <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
-        Entered in whole shillings and stored with its source and timestamp. Settlement
-        refuses to price a trade against a mark that has gone stale.
+        Entered in whole shillings and stored with its source and timestamp. Press a row to
+        change that security&rsquo;s price. Settlement refuses to price a trade against a mark that
+        has gone stale, and a mark goes stale four days after it is set — a DSE listing is
+        re-marked automatically from the exchange, but a manually priced one has to be set
+        again before then or it stops trading.
       </p>
     </section>
   );

@@ -48,13 +48,19 @@ type Row = {
 export async function positionCosts(userId: string): Promise<Map<string, PositionCost>> {
   await migrate();
 
-  // Oldest first: average cost is path-dependent, so the order entries were
-  // written in is the order they have to be replayed in.
+  /*
+   * Oldest first: average cost is path-dependent, so the order entries were
+   * written in is the order they have to be replayed in.
+   *
+   * By `created_at`, not by `id`: ids are random uuids, so ordering by them
+   * replayed a customer's buys and sells in an arbitrary order and could
+   * compute an average cost from a sequence that never happened.
+   */
   const rows = await db()<Row[]>`
     select kind, asset, amount::text, metadata
       from capx.ledger_entries
      where user_id = ${userId}
-     order by id asc`;
+     order by created_at asc, id asc`;
 
   /*
    * A sell writes its price on the cash leg, not the share leg — the share

@@ -91,7 +91,10 @@ export async function history(userId: string, limit = 100) {
     select id::text, kind, asset, amount::text, ref, metadata, created_at
       from capx.ledger_entries
      where user_id = ${userId}
-     order by id desc
+     -- Newest first by time. Ordering by id returned an arbitrary slice,
+     -- because ids are random uuids, so a recent trade could be missing from
+     -- the activity list entirely while older ones showed.
+     order by created_at desc, id desc
      limit ${limit}`;
 }
 

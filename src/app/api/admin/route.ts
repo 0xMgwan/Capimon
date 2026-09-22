@@ -89,7 +89,7 @@ export async function GET(req: Request) {
 
       sql`select l.id::text, l.amount::text, l.ref, l.created_at, u.email
             from capx.ledger_entries l join capx.users u on u.id = l.user_id
-           where l.kind = 'withdrawal' order by l.id desc limit 30`,
+           where l.kind = 'withdrawal' order by l.created_at desc, l.id desc limit 30`,
     ]);
 
     // Reported separately: an unreachable dependency is not a shortfall.

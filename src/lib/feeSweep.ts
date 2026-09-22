@@ -104,7 +104,7 @@ export async function recentSweeps(limit = 20): Promise<FeeSweep[]> {
   const rows = await db()<(Omit<FeeSweep, "amount_tzs"> & { amount_tzs: string })[]>`
     select id::text, amount_tzs::text, destination, status, transfer_id, tx_hash,
            error, created_at, settled_at
-      from capx.fee_sweeps order by id desc limit ${limit}`;
+      from capx.fee_sweeps order by created_at desc, id desc limit ${limit}`;
   return rows.map((r) => ({ ...r, amount_tzs: Number(r.amount_tzs) }));
 }
 

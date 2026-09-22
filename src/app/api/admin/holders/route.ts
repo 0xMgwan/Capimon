@@ -1,20 +1,8 @@
 import { NextResponse } from "next/server";
-import { timingSafeEqual } from "crypto";
 import { db, migrate, dbConfigured } from "@/lib/db";
+import { roleOf } from "@/lib/adminAuth";
 
 export const dynamic = "force-dynamic";
-
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
-
-function authorised(req: Request) {
-  if (!ADMIN_TOKEN) return false;
-  const url = new URL(req.url);
-  const given = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "")
-    || url.searchParams.get("token") || "";
-  const a = Buffer.from(given);
-  const b = Buffer.from(ADMIN_TOKEN);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
 
 type Row = {
   user_id: string; email: string; name: string | null; username: string | null;
@@ -34,7 +22,11 @@ type Row = {
  */
 export async function GET(req: Request) {
   if (!dbConfigured) return NextResponse.json({ ok: false, code: "not_configured" }, { status: 503 });
-  if (!authorised(req)) return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
+  const role = roleOf(req);
+  if (!role) return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
+  /* FIMCO sees who holds what, as a broker keeping the register would; it does
+     not need customers' contact details to do that, so they are withheld. */
+  const redact = role === "fimco";
 
   try {
     await migrate();
@@ -73,7 +65,7 @@ export async function GET(req: Request) {
       const cost = byUser.get(r.user_id)?.get(r.asset);
       return {
         userId: r.user_id,
-        email: r.email,
+        email: redact ? "" : r.email,
         name: r.name,
         username: r.username,
         kycStatus: r.kyc_status,

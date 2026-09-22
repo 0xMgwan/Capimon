@@ -10,7 +10,17 @@ type Backing = {
   ratioPct: number | null; headroom: number;
   fresh: boolean; expiresAt: string | null; lastVerified: string | null;
 };
-type Security = { symbol: string; name: string; token_address: string | null; status: string; backing: Backing };
+type Security = { symbol: string; name: string; token_address: string | null; decimals: number; status: string; backing: Backing };
+type Role = "admin" | "fimco";
+type Request_ = {
+  id: string; security: string; kind: "mint" | "burn"; quantity: number; note: string | null;
+  requested_by: string; status: string; decided_by: string | null; tx_hash: string | null; created_at: string;
+};
+type Contracts = { custodyRegistry: string; treasury: string | null };
+type DeskData = {
+  role: Role; securities: Security[]; attestations: Attestation[]; issuance: Issuance[];
+  requests: Request_[]; contracts: Contracts;
+};
 
 /** Who holds this security, from the same route the admin holdings tab uses. */
 type Holder = {
@@ -22,7 +32,7 @@ type Holder = {
 type Attestation = {
   id: string; security: string; custodian: string; quantity: number; locked: number;
   doc_ref: string | null; issued_at: string; expires_at: string;
-  status: string; approved_by: string | null; expired: boolean;
+  status: string; approved_by: string | null; filed_by: string | null; expired: boolean;
 };
 type Issuance = { id: string; security: string; kind: string; quantity: number; tx_hash: string | null; created_at: string };
 
@@ -38,9 +48,9 @@ const dt = (s: string | null) =>
  * asserts the shares are really in the vault — and that should be a decision
  * somebody makes, not a side effect of typing numbers into a box.
  */
-export function SecuritiesDesk() {
+export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" }) {
   const [token, setToken] = useState("");
-  const [data, setData] = useState<{ securities: Security[]; attestations: Attestation[]; issuance: Issuance[] } | null>(null);
+  const [data, setData] = useState<DeskData | null>(null);
   const [busy, setBusy] = useState(false);
   const [holders, setHolders] = useState<Holder[] | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -53,7 +63,11 @@ export function SecuritiesDesk() {
       const r = await fetch(`/api/admin/custody?token=${encodeURIComponent(t)}`, { cache: "no-store" });
       const j = await r.json();
       if (!j.ok) throw new Error(j.code === "unauthorised" ? "That token was not accepted." : j.error);
-      setData({ securities: j.securities ?? [], attestations: j.attestations ?? [], issuance: j.issuance ?? [] });
+      setData({
+        role: j.role === "fimco" ? "fimco" : "admin",
+        securities: j.securities ?? [], attestations: j.attestations ?? [], issuance: j.issuance ?? [],
+        requests: j.requests ?? [], contracts: j.contracts ?? { custodyRegistry: "", treasury: null },
+      });
 
       /*
        * Who actually holds it, from the same route the admin holdings tab
@@ -100,17 +114,23 @@ export function SecuritiesDesk() {
     }
   };
 
+  const isAdmin = data?.role === "admin";
+
   if (!data) {
     return (
       <div className="mx-auto max-w-md px-5 py-16 sm:py-24">
-        <div className="eyebrow">Operations</div>
-        <h1 className="display mt-3 text-3xl">Securities desk.</h1>
-        <p className="mt-3 text-sm text-[var(--muted)]">Custody, issuance and the price feed.</p>
+        <div className="eyebrow">{portal === "fimco" ? "FIMCO · custody broker" : "Operations"}</div>
+        <h1 className="display mt-3 text-3xl">{portal === "fimco" ? "Custody portal." : "Securities desk."}</h1>
+        <p className="mt-3 text-sm text-[var(--muted)]">
+          {portal === "fimco"
+            ? "Holdings, attestations and tokenisation for the securities FIMCO holds for CAPX."
+            : "Custody, issuance and the price feed."}
+        </p>
         <input
           value={token}
           onChange={(e) => setToken(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") void load(token); }}
-          type="password" placeholder="Admin token"
+          type="password" placeholder={portal === "fimco" ? "Access token" : "Admin token"}
           className="mt-6 w-full rounded-xl border hairline bg-transparent px-4 py-3 text-sm outline-none focus:border-[var(--color-accent)]"
         />
         <button
@@ -126,8 +146,12 @@ export function SecuritiesDesk() {
 
   return (
     <div className="mx-auto max-w-[1200px] px-5 pb-24 pt-6 sm:px-8 sm:pt-12">
-      <div className="eyebrow">Operations</div>
-      <h1 className="display mt-2 text-[clamp(1.8rem,5vw,2.8rem)]">Securities desk.</h1>
+      <div className="eyebrow">
+        {portal === "fimco" ? "FIMCO · custody broker" : "Operations"}
+        {data.role === "admin" && portal === "fimco" && " · viewing as CAPX"}
+      </div>
+      <h1 className="display mt-2 text-[clamp(1.8rem,5vw,2.8rem)]">{portal === "fimco" ? "Custody portal." : "Securities desk."}</h1>
+      <Pipeline />
 
       {(note || err) && (
         <p className={`mt-4 break-words rounded-2xl border hairline px-4 py-3 text-xs ${
@@ -206,7 +230,7 @@ export function SecuritiesDesk() {
                     * a question about which record is wrong, and that needs a
                     * person rather than a default.
                     */}
-                  {b.drift > 0 && (
+                  {b.drift > 0 && isAdmin && (
                     <button
                       onClick={() => void act({ action: "reconcile", security: s.symbol })}
                       disabled={busy}
@@ -219,7 +243,7 @@ export function SecuritiesDesk() {
               )}
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
-                <MintBurn security={s.symbol} headroom={b.headroom} issued={b.issued} onAct={act} busy={busy} />
+                <RequestMint security={s.symbol} headroom={b.headroom} hasToken={!!s.token_address} onAct={act} busy={busy} />
 
                 {/*
                   * Status was set once at registration and never again, so
@@ -228,7 +252,7 @@ export function SecuritiesDesk() {
                   * security, so it belongs on the security rather than buried
                   * in the form that created it.
                   */}
-                <span className="ml-auto inline-flex overflow-hidden rounded-full border hairline text-[11px]">
+                {isAdmin && <span className="ml-auto inline-flex overflow-hidden rounded-full border hairline text-[11px]">
                   {(["draft", "live", "suspended"] as const).map((st) => (
                     <button
                       key={st}
@@ -249,7 +273,7 @@ export function SecuritiesDesk() {
                       {st}
                     </button>
                   ))}
-                </span>
+                </span>}
               </div>
 
               {/* The holders of this security specifically, not every position
@@ -272,9 +296,9 @@ export function SecuritiesDesk() {
                       {mine.map((h) => (
                         <div key={h.userId} className="flex items-baseline gap-3 px-4 py-2.5 text-[12px]">
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate">{h.username ? `@${h.username}` : h.email}</span>
+                            <span className="block truncate">{h.username ? `@${h.username}` : h.email || h.name || "—"}</span>
                             <span className="block truncate text-[11px] text-[var(--muted)]">
-                              {h.name ?? h.email}
+                              {h.name ?? (h.email || "—")}
                               <span className={h.kycStatus === "approved" ? "" : " text-[#b45309]"}>
                                 {" · "}{h.kycStatus === "approved" ? "verified" : h.kycStatus}
                               </span>
@@ -307,12 +331,15 @@ export function SecuritiesDesk() {
         })}
       </section>
 
-      <div className="mt-8 grid gap-4 lg:grid-cols-2">
-        <RegisterSecurity onAct={act} busy={busy} />
-        <FileAttestation onAct={act} busy={busy} />
+      <RequestsSection data={data} isAdmin={isAdmin} onAct={act} busy={busy} />
+
+      <div className={`mt-8 grid gap-4 ${isAdmin ? "lg:grid-cols-2" : ""}`}>
+        {isAdmin && <RegisterSecurity onAct={act} busy={busy} />}
+        <FileAttestation onAct={act} busy={busy} lockToBroker={!isAdmin}
+          securities={data.securities.map((x) => x.symbol)} />
       </div>
 
-      <OracleAdmin token={token} busy={busy} setBusy={setBusy} setErr={setErr} setNote={setNote} />
+      {isAdmin && <OracleAdmin token={token} busy={busy} setBusy={setBusy} setErr={setErr} setNote={setNote} />}
 
       <section className="mt-8">
         <div className="eyebrow mb-2">Attestations</div>
@@ -327,6 +354,8 @@ export function SecuritiesDesk() {
                 </span>
                 <span className="block text-[11px] text-[var(--muted)]">
                   {a.custodian || "—"} · {a.doc_ref || "no reference"} · expires {dt(a.expires_at)}
+                  {a.filed_by && ` · filed by ${a.filed_by}`}
+                  {a.approved_by && a.status === "approved" && ` · approved by ${a.approved_by}`}
                   {a.expired && " · EXPIRED"}
                 </span>
               </span>
@@ -336,7 +365,10 @@ export function SecuritiesDesk() {
                 : "surface text-[var(--muted)]"}`}>
                 {a.expired && a.status === "approved" ? "expired" : a.status}
               </span>
-              {a.status === "pending" && (
+              {a.status === "pending" && !isAdmin && (
+                <span className="text-[11px] text-[var(--muted)]">Awaiting CAPX approval</span>
+              )}
+              {a.status === "pending" && isAdmin && (
                 <span className="flex gap-2">
                   <button onClick={() => void act({ action: "approve-attestation", id: a.id })} disabled={busy}
                     className="rounded-full border hairline px-3 py-1.5 text-[12px] hover:surface disabled:opacity-50">
@@ -347,6 +379,14 @@ export function SecuritiesDesk() {
                     Reject
                   </button>
                 </span>
+              )}
+              {isAdmin && a.status === "approved" && !a.expired && !onRegistry(a, data.securities) && (
+                <div className="w-full">
+                  <p className="text-[11px] text-[#b45309]">
+                    Approved but not yet on the registry, so it backs nothing yet. Publish it with the issuer key:
+                  </p>
+                  <Cmd text={publishCmd(a, data.contracts.custodyRegistry)} />
+                </div>
               )}
             </div>
           ))}
@@ -374,9 +414,96 @@ export function SecuritiesDesk() {
   );
 }
 
-/** Issue or retire tokens, bounded by what custody allows. */
-function MintBurn({ security, headroom, issued, onAct, busy }: {
-  security: string; headroom: number; issued: number;
+/**
+ * The route from shares in custody to tokens in circulation.
+ *
+ * Shown at the top because the desk is used by two parties and each of them
+ * needs to know whose move it is. FIMCO confirms what it holds; CAPX approves
+ * and publishes that on-chain; only then is there headroom, and only a mint
+ * inside that headroom can be requested, approved and executed.
+ */
+function Pipeline() {
+  const steps: [string, string, string][] = [
+    ["1", "FIMCO files", "Attests the shares it holds, with its statement reference."],
+    ["2", "CAPX approves", "Reviews the statement. FIMCO cannot approve its own filing."],
+    ["3", "Published on-chain", "The issuer key writes it to the custody registry. Headroom opens."],
+    ["4", "Mint requested", "Either party asks, inside the headroom. CAPX approves."],
+    ["5", "Issuer mints", "Tokens go to the treasury; the tx hash closes the request."],
+  ];
+  return (
+    <div className="mt-6 grid gap-px overflow-hidden rounded-2xl border hairline bg-[var(--border)] sm:grid-cols-5">
+      {steps.map(([n, title, body]) => (
+        <div key={n} className="bg-[var(--bg)] p-3.5">
+          <div className="tnum text-[11px] text-[var(--muted)]">{n}</div>
+          <div className="mt-1 text-[13px] font-medium">{title}</div>
+          <div className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">{body}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** A shell command to run with the issuer key, with a copy button. */
+function Cmd({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="mt-2 flex items-start gap-2 rounded-xl surface p-3">
+      <pre className="scroll-thin min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed">{text}</pre>
+      <button
+        onClick={() => navigator.clipboard?.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}
+        className="shrink-0 rounded-full border hairline px-2.5 py-1 text-[11px] hover:bg-[var(--bg)]"
+      >
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
+const shq = (v: string) => `"${v.replace(/(["\\$`])/g, "\\$1")}"`;
+const RUN_FROM = "cd contracts && source .env && \\\n";
+
+/**
+ * Whether an approved filing is what the registry actually says.
+ *
+ * Backing takes the smaller of the filed and on-chain figures, so a filing
+ * that matches backing exactly with the chain as its source is the one that
+ * is live. Anything else still needs publishing.
+ */
+function onRegistry(a: Attestation, securities: Security[]) {
+  const b = securities.find((x) => x.symbol === a.security)?.backing;
+  return !!b && b.custodySource === "chain" && b.underlying === a.quantity && b.locked === a.locked;
+}
+
+function publishCmd(a: Attestation, registry: string) {
+  const expiry = Math.floor(new Date(a.expires_at).getTime() / 1000);
+  return RUN_FROM + `cast send ${registry} \\\n  "attestCustody(string,string,uint256,uint256,uint64,string)" \\\n  ` +
+    `${shq(a.security)} ${shq(a.custodian)} ${a.quantity} ${a.locked} ${expiry} ${shq(a.doc_ref ?? "")} \\\n` +
+    `  --private-key $ISSUER_PRIVATE_KEY --rpc-url $BASE_MAINNET_RPC`;
+}
+
+/** Whole-share quantity to token base units, as a string so nothing rounds. */
+function baseUnits(qty: number, decimals: number) {
+  const [w, f = ""] = String(qty).split(".");
+  return (BigInt(w) * 10n ** BigInt(decimals) + BigInt((f + "0".repeat(decimals)).slice(0, decimals) || "0")).toString();
+}
+
+function mintCmd(r: Request_, sec: Security | undefined, treasury: string | null) {
+  if (!sec?.token_address) return null;
+  if (!treasury) return null;
+  return RUN_FROM + `cast send ${sec.token_address} "mint(address,uint256)" \\\n  ${treasury} ${baseUnits(r.quantity, sec.decimals)} \\\n` +
+    `  --private-key $ISSUER_PRIVATE_KEY --rpc-url $BASE_MAINNET_RPC`;
+}
+
+/**
+ * Asking for more tokens.
+ *
+ * There is no bare "Mint" button any more. The old one only wrote a line in
+ * the log — the tokens themselves need the issuer key — so it looked like
+ * minting while doing nothing on-chain. A request goes into the queue below,
+ * where it is approved and then closed against the real transaction.
+ */
+function RequestMint({ security, headroom, hasToken, onAct, busy }: {
+  security: string; headroom: number; hasToken: boolean;
   onAct: (b: Record<string, unknown>) => Promise<void>; busy: boolean;
 }) {
   const [qty, setQty] = useState("");
@@ -385,26 +512,110 @@ function MintBurn({ security, headroom, issued, onAct, busy }: {
     <div className="flex flex-wrap items-center gap-2">
       <input
         value={qty} onChange={(e) => setQty(e.target.value.replace(/[^0-9.]/g, ""))}
-        inputMode="decimal" placeholder="Quantity"
+        inputMode="decimal" placeholder="Shares"
         className="tnum w-28 rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
       />
       <button
-        onClick={() => void onAct({ action: "mint", security, quantity: n })}
-        disabled={busy || !(n > 0) || n > headroom}
-        title={n > headroom ? `Only ${headroom} may be issued against current custody` : undefined}
+        onClick={() => { void onAct({ action: "request-issuance", security, kind: "mint", quantity: n }); setQty(""); }}
+        disabled={busy || !(n > 0) || n > headroom || !hasToken}
         className="rounded-full bg-[var(--fg)] px-4 py-2 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40"
       >
-        Mint
+        Request mint
       </button>
-      <button
-        onClick={() => void onAct({ action: "burn", security, quantity: n })}
-        disabled={busy || !(n > 0) || n > issued}
-        className="rounded-full border hairline px-4 py-2 text-[13px] font-medium hover:surface disabled:opacity-40"
-      >
-        Burn
-      </button>
-      <span className="text-[11px] text-[var(--muted)]">max mint {headroom.toLocaleString()}</span>
+      <span className="text-[11px] text-[var(--muted)]">
+        {!hasToken
+          ? "No token registered yet — create it and register its address first."
+          : headroom > 0
+            ? `Up to ${headroom.toLocaleString()} can be minted against current custody.`
+            : "Headroom is 0: every locked share already has a token. To mint more, FIMCO files a larger attestation first."}
+      </span>
     </div>
+  );
+}
+
+/** The queue of mint and burn requests, and what each one is waiting for. */
+function RequestsSection({ data, isAdmin, onAct, busy }: {
+  data: DeskData; isAdmin: boolean; onAct: (b: Record<string, unknown>) => Promise<void>; busy: boolean;
+}) {
+  const [hashes, setHashes] = useState<Record<string, string>>({});
+  return (
+    <section className="mt-8">
+      <div className="eyebrow mb-2">Tokenisation requests</div>
+      <div className="overflow-hidden rounded-2xl border hairline">
+        {data.requests.length === 0 ? (
+          <p className="p-5 text-center text-sm text-[var(--muted)]">No requests yet. Request a mint from a security above.</p>
+        ) : data.requests.map((r) => {
+          const sec = data.securities.find((x) => x.symbol === r.security);
+          const cmd = r.status === "approved" && r.kind === "mint" ? mintCmd(r, sec, data.contracts.treasury) : null;
+          return (
+            <div key={r.id} className="border-b hairline px-4 py-3 last:border-0">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium">
+                    {r.kind === "mint" ? "Mint" : "Burn"} {r.quantity.toLocaleString()} {r.security}
+                  </span>
+                  <span className="block text-[11px] text-[var(--muted)]">
+                    Requested by {r.requested_by} · {dt(r.created_at)}
+                    {r.decided_by && ` · ${r.status === "rejected" ? "rejected" : "approved"} by ${r.decided_by}`}
+                    {r.note && ` · ${r.note}`}
+                  </span>
+                </span>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] uppercase ${
+                  r.status === "executed" ? "bg-[var(--color-up)]/10 text-[var(--color-up)]"
+                  : r.status === "rejected" ? "bg-[var(--color-down)]/10 text-[var(--color-down)]"
+                  : "surface text-[var(--muted)]"}`}>
+                  {r.status}
+                </span>
+                {r.status === "pending" && isAdmin && (
+                  <span className="flex gap-2">
+                    <button onClick={() => void onAct({ action: "approve-request", id: r.id })} disabled={busy}
+                      className="rounded-full border hairline px-3 py-1.5 text-[12px] hover:surface disabled:opacity-50">Approve</button>
+                    <button onClick={() => void onAct({ action: "reject-request", id: r.id })} disabled={busy}
+                      className="rounded-full border hairline px-3 py-1.5 text-[12px] text-[var(--color-down)] hover:surface disabled:opacity-50">Reject</button>
+                  </span>
+                )}
+                {r.status === "pending" && !isAdmin && (
+                  <span className="text-[11px] text-[var(--muted)]">Awaiting CAPX approval</span>
+                )}
+                {r.status === "executed" && r.tx_hash && (
+                  <a href={`https://basescan.org/tx/${r.tx_hash}`} target="_blank" rel="noreferrer"
+                    className="tnum text-[11px] underline underline-offset-2">{r.tx_hash.slice(0, 10)}…</a>
+                )}
+              </div>
+              {r.status === "approved" && isAdmin && (
+                <div className="mt-2">
+                  {cmd ? (
+                    <>
+                      <p className="text-[11px] text-[var(--muted)]">Run with the issuer key, then paste the transaction hash:</p>
+                      <Cmd text={cmd} />
+                    </>
+                  ) : (
+                    <p className="text-[11px] text-[#b45309]">No token address or treasury configured, so there is nothing to mint into.</p>
+                  )}
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      value={hashes[r.id] ?? ""} onChange={(e) => setHashes({ ...hashes, [r.id]: e.target.value.trim() })}
+                      placeholder="0x… transaction hash"
+                      className="tnum min-w-0 flex-1 rounded-xl border hairline bg-transparent px-3 py-2 text-[12px] outline-none focus:border-[var(--color-accent)]"
+                    />
+                    <button
+                      onClick={() => void onAct({ action: "complete-request", id: r.id, txHash: hashes[r.id] })}
+                      disabled={busy || !/^0x[0-9a-fA-F]{64}$/.test(hashes[r.id] ?? "")}
+                      className="rounded-full bg-[var(--fg)] px-4 py-2 text-[12px] font-medium text-[var(--bg)] disabled:opacity-40"
+                    >
+                      Confirm on-chain
+                    </button>
+                  </div>
+                </div>
+              )}
+              {r.status === "approved" && !isAdmin && (
+                <p className="mt-1 text-[11px] text-[var(--muted)]">Approved. Waiting for CAPX to execute it with the issuer key.</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -469,17 +680,24 @@ function RegisterSecurity({ onAct, busy }: { onAct: (b: Record<string, unknown>)
  */
 export const PRIMARY_BROKER = "FIMCO";
 
-function FileAttestation({ onAct, busy }: { onAct: (b: Record<string, unknown>) => Promise<void>; busy: boolean }) {
+function FileAttestation({ onAct, busy, lockToBroker = false, securities = [] }: {
+  onAct: (b: Record<string, unknown>) => Promise<void>; busy: boolean;
+  /** FIMCO's own portal files as FIMCO; there is no party to choose. */
+  lockToBroker?: boolean; securities?: string[];
+}) {
   const [f, setF] = useState({ security: "CRDB", custodian: PRIMARY_BROKER, quantity: "", locked: "", docRef: "", expiresAt: "" });
   const [other, setOther] = useState(false);
   const q = Number(f.quantity) || 0;
   const l = Number(f.locked || f.quantity) || 0;
-  const isBroker = !other && f.custodian === PRIMARY_BROKER;
+  const isBroker = lockToBroker || (!other && f.custodian === PRIMARY_BROKER);
   return (
     <div className="rounded-3xl border hairline p-5">
       <div className="eyebrow">File a custody attestation</div>
       <Field label="Security" v={f.security} on={(v) => setF({ ...f, security: v.toUpperCase() })} ph="CRDB"
-        hint="The registered security's symbol: CRDB, not CRDBt." />
+        hint={securities.length ? `Registered: ${securities.join(", ")}. The security, not the token: CRDB, not CRDBt.` : "The registered security's symbol: CRDB, not CRDBt."} />
+      {lockToBroker ? (
+        <p className="mb-3 text-[12px] text-[var(--muted)]">Filed as <span className="font-medium text-[var(--fg)]">{PRIMARY_BROKER}</span>. CAPX reviews it before it is published.</p>
+      ) : (
       <label className="mb-3 block">
         <span className="eyebrow">Attested by</span>
         <div className="mt-1.5 flex gap-2">
@@ -509,6 +727,7 @@ function FileAttestation({ onAct, busy }: { onAct: (b: Record<string, unknown>) 
           />
         )}
       </label>
+      )}
       <Field label="Shares held" v={f.quantity} on={(v) => setF({ ...f, quantity: v.replace(/[^0-9.]/g, "") })} ph="100" />
       <Field label="Of those, locked" v={f.locked} on={(v) => setF({ ...f, locked: v.replace(/[^0-9.]/g, "") })} ph="100" />
       <Field label={isBroker ? `${PRIMARY_BROKER} statement reference` : "Custodian reference"} v={f.docRef}

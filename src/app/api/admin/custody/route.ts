@@ -1,38 +1,35 @@
 import { NextResponse } from "next/server";
-import { timingSafeEqual } from "crypto";
 import { db, migrate, dbConfigured } from "@/lib/db";
 import { backing, canIssue, recordIssuance, reconcileIssuance } from "@/lib/custody";
+import { roleOf, ACTOR, type OpsRole } from "@/lib/adminAuth";
+import { SECURITIES_CONTRACTS } from "@/lib/assets";
+import { treasuryAddress } from "@/lib/treasury";
 
 export const dynamic = "force-dynamic";
 
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
-
-function authorised(req: Request) {
-  if (!ADMIN_TOKEN) return false;
-  const url = new URL(req.url);
-  const given = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "")
-    || url.searchParams.get("token") || "";
-  const a = Buffer.from(given);
-  const b = Buffer.from(ADMIN_TOKEN);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
+/** What FIMCO may do. Everything else on this route is CAPX's. */
+const FIMCO_ACTIONS = new Set(["attest", "request-issuance"]);
 
 /** Attestations and issuance history for the custody desk. */
 export async function GET(req: Request) {
   if (!dbConfigured) return NextResponse.json({ ok: false, code: "not_configured" }, { status: 503 });
-  if (!authorised(req)) return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
+  const role = roleOf(req);
+  if (!role) return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
 
   try {
     await migrate();
     const sql = db();
-    const [securities, attestations, issuance] = await Promise.all([
+    const [securities, attestations, issuance, requests] = await Promise.all([
       sql`select symbol, name, token_address, decimals, chain_id, status from capx.securities order by symbol`,
       sql`select id::text, security, custodian, quantity::float8 as quantity, locked::float8 as locked,
-                 doc_ref, issued_at, expires_at, status, approved_by, approved_at,
+                 doc_ref, issued_at, expires_at, status, approved_by, approved_at, filed_by,
                  (expires_at <= now()) as expired
             from capx.custody_attestations order by created_at desc limit 50`,
       sql`select id::text, security, kind, quantity::float8 as quantity, tx_hash, actor, created_at
             from capx.issuance_events order by created_at desc limit 50`,
+      sql`select id::text, security, kind, quantity::float8 as quantity, note, requested_by, status,
+                 decided_by, decided_at, tx_hash, executed_at, created_at
+            from capx.issuance_requests order by created_at desc limit 50`,
     ]);
 
     const withBacking = await Promise.all(
@@ -40,7 +37,11 @@ export async function GET(req: Request) {
     );
 
     return NextResponse.json(
-      { ok: true, securities: withBacking, attestations, issuance },
+      {
+        ok: true, role, securities: withBacking, attestations, issuance, requests,
+        // What the desk needs to write out the exact on-chain commands.
+        contracts: { custodyRegistry: SECURITIES_CONTRACTS.custodyRegistry, treasury: treasuryAddress() },
+      },
       { headers: { "cache-control": "no-store" } },
     );
   } catch (e) {
@@ -61,11 +62,15 @@ export async function GET(req: Request) {
  */
 export async function POST(req: Request) {
   if (!dbConfigured) return NextResponse.json({ ok: false, code: "not_configured" }, { status: 503 });
-  if (!authorised(req)) return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
+  const role = roleOf(req);
+  if (!role) return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
 
   try {
     const body = await req.json().catch(() => ({}));
     const action = String(body.action ?? "");
+    if (role === "fimco" && !FIMCO_ACTIONS.has(action)) {
+      return NextResponse.json({ ok: false, code: "forbidden", error: "That action is CAPX's to take." }, { status: 403 });
+    }
     await migrate();
     const sql = db();
 
@@ -143,15 +148,16 @@ export async function POST(req: Request) {
       }
       // Naming a party is only meaningful with the document they issued: an
       // attestation without a reference is a claim nobody can check.
-      const custodian = String(body.custodian ?? "").trim();
+      // FIMCO files as FIMCO; it cannot name another party as the custodian.
+      const custodian = role === "fimco" ? "FIMCO" : String(body.custodian ?? "").trim();
       const docRef = String(body.docRef ?? "").trim();
       if (!custodian || !docRef) {
         return NextResponse.json({ ok: false, error: "An attestation needs the attesting party and their statement reference." }, { status: 400 });
       }
       const rows = await sql<{ id: string }[]>`
-        insert into capx.custody_attestations (security, custodian, quantity, locked, doc_ref, expires_at, status)
+        insert into capx.custody_attestations (security, custodian, quantity, locked, doc_ref, expires_at, status, filed_by)
         values (${security}, ${custodian}, ${quantity}, ${locked},
-                ${docRef}, ${expiresAt}, 'pending')
+                ${docRef}, ${expiresAt}, 'pending', ${ACTOR[role]})
         returning id::text`;
       return NextResponse.json({ ok: true, id: rows[0].id });
     }
@@ -160,7 +166,7 @@ export async function POST(req: Request) {
       const id = String(body.id ?? "");
       if (!id) return NextResponse.json({ ok: false, error: "id is required" }, { status: 400 });
       await sql`update capx.custody_attestations
-                   set status = 'approved', approved_by = ${String(body.approvedBy ?? "admin")}, approved_at = now()
+                   set status = 'approved', approved_by = ${ACTOR[role]}, approved_at = now()
                  where id = ${id}::uuid and status = 'pending'`;
       return NextResponse.json({ ok: true });
     }
@@ -220,6 +226,32 @@ export async function POST(req: Request) {
       });
     }
 
+    if (action === "request-issuance") {
+      return requestIssuance(sql, role, body);
+    }
+    if (action === "approve-request" || action === "reject-request") {
+      const id = String(body.id ?? "");
+      const next = action === "approve-request" ? "approved" : "rejected";
+      if (next === "approved") {
+        // Checked again at approval: custody may have moved since the ask.
+        const [r] = await sql<{ security: string; kind: string; quantity: number }[]>`
+          select security, kind, quantity::float8 as quantity from capx.issuance_requests
+           where id = ${id}::uuid and status = 'pending'`;
+        if (!r) return NextResponse.json({ ok: false, error: "No pending request with that id." }, { status: 404 });
+        if (r.kind === "mint") {
+          const v = await canIssue(r.security, r.quantity);
+          if (!v.ok) return NextResponse.json({ ok: false, error: v.reason }, { status: 409 });
+        }
+      }
+      await sql`update capx.issuance_requests
+                   set status = ${next}, decided_by = ${ACTOR[role]}, decided_at = now()
+                 where id = ${id}::uuid and status = 'pending'`;
+      return NextResponse.json({ ok: true });
+    }
+    if (action === "complete-request") {
+      return completeRequest(sql, role, body);
+    }
+
     return NextResponse.json({ ok: false, error: `Unknown action "${action}".` }, { status: 400 });
   } catch (e) {
     return NextResponse.json(
@@ -227,4 +259,77 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
+}
+
+
+type Sql = ReturnType<typeof db>;
+
+/**
+ * Asking for tokens, which is not the same as creating them.
+ *
+ * A mint request is refused up front when custody could not cover it, so a
+ * request in the queue is always one that could be approved today. Nothing
+ * moves on-chain here; that takes the issuer key, which this server does not
+ * hold.
+ */
+async function requestIssuance(sql: Sql, role: OpsRole, body: Record<string, unknown>) {
+  const security = String(body.security ?? "").trim().toUpperCase();
+  const kind = body.kind === "burn" ? "burn" : "mint";
+  const quantity = Number(body.quantity);
+  if (!security || !(quantity > 0)) {
+    return NextResponse.json({ ok: false, error: "A security and a positive quantity are required." }, { status: 400 });
+  }
+  if (kind === "mint") {
+    const v = await canIssue(security, quantity);
+    if (!v.ok) return NextResponse.json({ ok: false, error: v.reason }, { status: 409 });
+  }
+  const [row] = await sql<{ id: string }[]>`
+    insert into capx.issuance_requests (security, kind, quantity, note, requested_by)
+    values (${security}, ${kind}, ${quantity}, ${body.note ? String(body.note).slice(0, 500) : null}, ${ACTOR[role]})
+    returning id::text`;
+  return NextResponse.json({ ok: true, id: row.id });
+}
+
+/**
+ * Closing a request against the transaction that carried it out.
+ *
+ * The hash is not taken on trust: the receipt has to exist, have succeeded,
+ * and have been sent to this security's token. Supply is then reconciled from
+ * the chain, so the log records what the chain says was minted rather than
+ * what the form said would be.
+ */
+async function completeRequest(sql: Sql, role: OpsRole, body: Record<string, unknown>) {
+  const id = String(body.id ?? "");
+  const txHash = String(body.txHash ?? "").trim().toLowerCase();
+  if (!/^0x[0-9a-f]{64}$/.test(txHash)) {
+    return NextResponse.json({ ok: false, error: "That is not a transaction hash." }, { status: 400 });
+  }
+  const [r] = await sql<{ security: string; kind: string; token_address: string | null }[]>`
+    select r.security, r.kind, s.token_address
+      from capx.issuance_requests r left join capx.securities s on s.symbol = r.security
+     where r.id = ${id}::uuid and r.status = 'approved'`;
+  if (!r) return NextResponse.json({ ok: false, error: "No approved request with that id." }, { status: 404 });
+  if (!r.token_address) {
+    return NextResponse.json({ ok: false, error: `${r.security} has no token registered yet.` }, { status: 409 });
+  }
+
+  const { publicClient } = await import("@/lib/chain");
+  const receipt = await publicClient.getTransactionReceipt({ hash: txHash as `0x${string}` }).catch(() => null);
+  if (!receipt) return NextResponse.json({ ok: false, error: "That transaction is not on Base yet. Wait for it to confirm." }, { status: 409 });
+  if (receipt.status !== "success") return NextResponse.json({ ok: false, error: "That transaction reverted." }, { status: 409 });
+  if ((receipt.to ?? "").toLowerCase() !== r.token_address.toLowerCase()) {
+    return NextResponse.json({ ok: false, error: `That transaction was not sent to the ${r.security} token.` }, { status: 409 });
+  }
+
+  let added = 0;
+  if (r.kind === "mint") {
+    try {
+      added = (await reconcileIssuance(r.security, { txHash, actor: ACTOR[role] })).added;
+    } catch (e) {
+      return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "reconcile failed" }, { status: 409 });
+    }
+  }
+  await sql`update capx.issuance_requests set status = 'executed', tx_hash = ${txHash}, executed_at = now()
+             where id = ${id}::uuid`;
+  return NextResponse.json({ ok: true, added, backing: await backing(r.security) });
 }

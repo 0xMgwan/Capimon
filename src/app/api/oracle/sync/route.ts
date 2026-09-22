@@ -5,8 +5,26 @@ import { CRDBT_SECURITY } from "@/lib/assets";
 
 export const dynamic = "force-dynamic";
 
-/** Securities whose marks are kept current from DSE. */
-const TRACKED = [CRDBT_SECURITY];
+/**
+ * Securities whose marks are kept current from DSE: every registered security
+ * that is not suspended, keyed by the DSE code it was registered under.
+ *
+ * Read from the registry table rather than a constant, so adding NMB on the
+ * desk is enough for its price to start publishing. CRDB is always included,
+ * so a database outage cannot stop the one live security being marked.
+ */
+async function tracked(): Promise<string[]> {
+  const set = new Set<string>([CRDBT_SECURITY]);
+  try {
+    const { db, dbConfigured } = await import("@/lib/db");
+    if (dbConfigured) {
+      const rows = await db()<{ symbol: string }[]>`
+        select symbol from capx.securities where status <> 'suspended'`;
+      rows.forEach((r) => set.add(r.symbol.toUpperCase()));
+    }
+  } catch { /* fall back to CRDB alone */ }
+  return [...set];
+}
 
 /**
  * Publishing is a privileged write, so it is not open.
@@ -38,7 +56,7 @@ function permitted(req: Request): boolean {
 export async function GET(req: Request) {
   if (permitted(req)) return POST(req);
   const prices = await Promise.all(
-    TRACKED.map(async (s) => ({ symbol: s, oracle: await readOraclePrice(s).catch(() => null) })),
+    (await tracked()).map(async (s) => ({ symbol: s, oracle: await readOraclePrice(s).catch(() => null) })),
   );
   return NextResponse.json({ ok: true, prices }, { headers: { "cache-control": "no-store" } });
 }
@@ -60,7 +78,7 @@ export async function POST(req: Request) {
   const force = url.searchParams.get("force") === "1";
 
   const results = await Promise.all(
-    TRACKED.map(async (symbol) => {
+    (await tracked()).map(async (symbol) => {
       try {
         const r = await publishDsePrice(symbol, { force });
         return { symbol, ...r };

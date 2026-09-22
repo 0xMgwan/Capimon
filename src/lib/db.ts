@@ -207,6 +207,30 @@ export async function migrate() {
           created_at     timestamptz not null default now()
         )`;
 
+      /*
+       * A request to create or retire tokens, separate from the issuance log.
+       *
+       * The log records what happened on-chain; this records what somebody
+       * asked for and who agreed to it. FIMCO can ask, CAPX approves, and the
+       * issuer key executes — three parties, so no single one can both claim
+       * shares exist and create tokens against them.
+       */
+      await sql`
+        create table if not exists capx.issuance_requests (
+          id           uuid primary key default gen_random_uuid(),
+          security     text not null,
+          kind         text not null,           -- mint | burn
+          quantity     numeric(38,8) not null,
+          note         text,
+          requested_by text not null,
+          status       text not null default 'pending',  -- pending | approved | executed | rejected
+          decided_by   text,
+          decided_at   timestamptz,
+          tx_hash      text,
+          executed_at  timestamptz,
+          created_at   timestamptz not null default now()
+        )`;
+
       // Reference prices, each with where it came from and when. A price with
       // no provenance is a number somebody typed, and settlement decides what a
       // share is worth (Rule 7).
@@ -308,6 +332,10 @@ export async function migrate() {
         deposits: [
           "ntzs_status text", "ntzs_reference text", "swap_ref text", "transfer_tx text",
           "rate_tzs_usdc numeric(38,8)", "metadata jsonb not null default '{}'::jsonb",
+        ],
+        custody_attestations: [
+          /* Who filed it, as distinct from who it names as custodian. */
+          "filed_by text",
         ],
         notifications: [
           /* Which holding a trade notification concerns, so the row can show

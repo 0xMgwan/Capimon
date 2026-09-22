@@ -241,6 +241,7 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
       </div>
       <h1 className="display mt-2 text-[clamp(1.8rem,5vw,2.8rem)]">{portal === "fimco" ? "Custody portal." : "Securities desk."}</h1>
       <Pipeline />
+      <ExportPanel token={token} />
       {isAdmin && <IssuerBar w={w} />}
 
       {/*
@@ -726,6 +727,135 @@ function KycSection({ token }: { token: string }) {
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+/** The dates a period preset stands for, worked out when the button is pressed. */
+function exportRange(preset: string, from: string, to: string): { from?: string; to?: string } {
+  const d = (x: Date) => x.toISOString().slice(0, 10);
+  const now = new Date();
+  if (preset === "30d") return { from: d(new Date(now.getTime() - 30 * 86400_000)), to: d(now) };
+  if (preset === "month") return { from: d(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))), to: d(now) };
+  if (preset === "year") return { from: d(new Date(Date.UTC(now.getUTCFullYear(), 0, 1))), to: d(now) };
+  if (preset === "custom") return { from: from || undefined, to: to || undefined };
+  return {};
+}
+
+const EXPORTS: { key: string; label: string; about: string; ranged: boolean }[] = [
+  { key: "customers", label: "Customers", about: "Identity, verification, funding, trading frequency, holdings", ranged: false },
+  { key: "holdings", label: "Holdings", about: "Every position: quantity, cost, value, profit", ranged: false },
+  { key: "trades", label: "Trades", about: "Every order: who, what, price, fee, cash", ranged: true },
+  { key: "cash", label: "Deposits & withdrawals", about: "Method, amount, status, references", ranged: true },
+  { key: "ledger", label: "Full ledger", about: "Every entry, unaggregated", ranged: true },
+  { key: "attestations", label: "Custody filings", about: "Filed, approved, validity", ranged: true },
+  { key: "issuance", label: "Mints & burns", about: "With Basescan links", ranged: true },
+];
+
+/**
+ * Exports for both desks, as CSV that opens directly in Excel or Sheets.
+ *
+ * Fetched with the token in a header and saved from a blob, rather than a
+ * plain link with ?token=, so the token never lands in browser history or a
+ * download manager's URL list.
+ */
+function ExportPanel({ token }: { token: string }) {
+  const [open, setOpen] = useState(false);
+  const [preset, setPreset] = useState<"all" | "30d" | "month" | "year" | "custom">("all");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+
+  const download = async (key: string) => {
+    const r = exportRange(preset, from, to);
+    const q = new URLSearchParams({ dataset: key, ...(r.from ? { from: r.from } : {}), ...(r.to ? { to: r.to } : {}) });
+    const res = await fetch(`/api/admin/export?${q}`, { headers: { authorization: `Bearer ${token}` }, cache: "no-store" });
+    if (!res.ok) {
+      const j = await res.json().catch(() => null);
+      throw new Error(j?.error ?? `Export failed (${res.status})`);
+    }
+    const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? `capx_${key}.csv`;
+    const rows = Number(res.headers.get("x-row-count") ?? 0);
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    return rows;
+  };
+
+  const one = async (key: string, label: string) => {
+    setBusyKey(key); setMsg(null);
+    try { const n = await download(key); setMsg(`${label}: ${n.toLocaleString()} rows downloaded.`); }
+    catch (e) { setMsg(e instanceof Error ? e.message : "Export failed"); }
+    finally { setBusyKey(null); }
+  };
+  const all = async () => {
+    setBusyKey("all"); setMsg(null);
+    try {
+      let total = 0;
+      for (const x of EXPORTS) { total += await download(x.key); await new Promise((r) => setTimeout(r, 350)); }
+      setMsg(`${EXPORTS.length} files, ${total.toLocaleString()} rows downloaded.`);
+    } catch (e) { setMsg(e instanceof Error ? e.message : "Export failed"); }
+    finally { setBusyKey(null); }
+  };
+
+  return (
+    <section className="mt-4 rounded-2xl border hairline">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left">
+        <span>
+          <span className="eyebrow">Export data</span>
+          <span className="ml-3 text-[12px] text-[var(--muted)]">Customers, holdings, trades, cash, filings — as spreadsheets</span>
+        </span>
+        <span className="text-[var(--muted)]">{open ? "−" : "+"}</span>
+      </button>
+      {open && (
+        <div className="border-t hairline px-4 pb-4 pt-3">
+          <div className="flex flex-wrap items-center gap-2 text-[12px]">
+            <span className="text-[var(--muted)]">Period</span>
+            {([["all", "All time"], ["30d", "Last 30 days"], ["month", "This month"], ["year", "This year"], ["custom", "Custom"]] as const).map(([k, l]) => (
+              <button key={k} onClick={() => setPreset(k)}
+                className={`rounded-full border px-3 py-1 ${preset === k ? "border-[var(--fg)] bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"}`}>
+                {l}
+              </button>
+            ))}
+            {preset === "custom" && (
+              <span className="flex items-center gap-1.5">
+                <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
+                  className="rounded-lg border hairline bg-transparent px-2 py-1" />
+                <span className="text-[var(--muted)]">to</span>
+                <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
+                  className="rounded-lg border hairline bg-transparent px-2 py-1" />
+              </span>
+            )}
+          </div>
+          <p className="mt-2 text-[11px] text-[var(--muted)]">
+            The period applies to trades, cash, ledger, filings and mints. Customers and holdings are always as of now, with lifetime totals.
+          </p>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {EXPORTS.map((x) => (
+              <button key={x.key} disabled={!!busyKey} onClick={() => void one(x.key, x.label)}
+                className="rounded-xl border hairline p-3 text-left transition-colors hover:surface disabled:opacity-50">
+                <span className="flex items-center justify-between gap-2 text-[13px] font-medium">
+                  {x.label}
+                  <span className="text-[11px] font-normal text-[var(--muted)]">{busyKey === x.key ? "Preparing…" : "CSV ↓"}</span>
+                </span>
+                <span className="mt-1 block text-[11px] leading-snug text-[var(--muted)]">
+                  {x.about}{!x.ranged && " · as of now"}
+                </span>
+              </button>
+            ))}
+            <button disabled={!!busyKey} onClick={() => void all()}
+              className="rounded-xl bg-[var(--fg)] p-3 text-left text-[var(--bg)] disabled:opacity-50">
+              <span className="block text-[13px] font-medium">{busyKey === "all" ? "Preparing…" : "Download all"}</span>
+              <span className="mt-1 block text-[11px] opacity-70">Every table above, one file each</span>
+            </button>
+          </div>
+          {msg && <p className="mt-3 text-[12px] text-[var(--muted)]">{msg}</p>}
+        </div>
+      )}
     </section>
   );
 }

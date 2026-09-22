@@ -373,10 +373,14 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
                     * still a draft, and nothing on the card said that going
                     * live was the one thing left to do.
                     */}
-                  {s.status === "draft" && s.token_address && (s.kind === "external" ? (s.held ?? 0) > 0 : b.issued > 0 && b.fresh) && (
+                  {s.status === "draft" && s.token_address && (s.kind === "external" ? (s.held ?? b.underlying) > 0 : b.issued > 0 && b.fresh) && (
                     <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--color-up)]/40 bg-[var(--color-up)]/[0.06] px-3.5 py-2.5 text-[12px]">
                       <span className="flex-1">
-                        <span className="font-medium">{s.symbol} is backed and minted.</span>{" "}
+                        <span className="font-medium">
+                          {s.kind === "external"
+                            ? `${s.symbol} is in the treasury and ready.`
+                            : `${s.symbol} is backed and minted.`}
+                        </span>{" "}
                         {isAdmin
                           ? "It is still a draft, so customers cannot see or buy it yet."
                           : "CAPX takes it live for customers."}

@@ -21,7 +21,10 @@ export async function GET(req: Request) {
     const sql = db();
     const [securities, attestations, issuance, requests] = await Promise.all([
       sql`select symbol, name, token_address, decimals, chain_id, status,
-                 (metadata ? 'logo') as has_logo
+                 (metadata ? 'logo') as has_logo,
+                 coalesce(metadata->>'kind', 'dse') as kind,
+                 metadata->>'issuer' as issuer, metadata->>'venue' as venue,
+                 coalesce((metadata->>'buyOnly')::boolean, false) as "buyOnly"
             from capx.securities order by symbol`,
       sql`select id::text, security, custodian, quantity::float8 as quantity, locked::float8 as locked,
                  doc_ref, issued_at, expires_at, status, approved_by, approved_at, filed_by,

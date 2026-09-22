@@ -103,6 +103,18 @@ export async function issuedQuantity(security: string): Promise<number> {
 }
 
 export async function backing(security: string): Promise<Backing> {
+  /*
+   * A token CAPX did not issue is backed by what CAPX holds.
+   *
+   * Measuring an external listing the usual way compared the token's whole
+   * supply — every subscriber's DPRI, not ours — against our issuance log,
+   * which read as a huge unrecorded mint and offered to burn other people's
+   * tokens. There is no attestation and no issuance here: the treasury's
+   * balance is the backing and customers' claims are what it must cover.
+   */
+  const ext = await externalBacking(security);
+  if (ext) return ext;
+
   const [att, onchain, chain, recorded, clientHeld] = await Promise.all([
     activeAttestation(security),
     onchainCustody(security).catch(() => null),
@@ -321,4 +333,47 @@ export async function recordBurnFromChain(
     insert into capx.issuance_events (security, kind, quantity, tx_hash, actor)
     values (${security}, 'burn', ${burned}, ${input.txHash ?? null}, ${input.actor ?? "burn"})`;
   return { recorded, issued: chain.quantity, burned };
+}
+
+
+/**
+ * Backing for a listing CAPX bought rather than minted, or null when the
+ * security is one CAPX tokenised itself.
+ */
+async function externalBacking(security: string): Promise<Backing | null> {
+  const { dseSecurity } = await import("./dseSecurities");
+  const sec = await dseSecurity(security).catch(() => null);
+  if (!sec || sec.kind !== "external") return null;
+
+  const [{ treasuryHoldings }, { totalLiabilities }] = await Promise.all([
+    import("./treasury"), import("./ledger"),
+  ]);
+  const [t, ls] = await Promise.all([
+    treasuryHoldings().catch(() => null),
+    totalLiabilities().catch(() => [] as { asset: string; amount: number }[]),
+  ]);
+  const held = t?.holdings.find((h) => h.asset === sec.symbol)?.qty ?? 0;
+  const clientHeld = ls.find((l) => l.asset === sec.symbol)?.amount ?? 0;
+
+  return {
+    security: sec.symbol,
+    custodian: sec.issuer ?? "External issuer",
+    underlying: held,
+    locked: held,
+    // What customers are owed is the only "issued" figure that means anything
+    // here; the token's supply belongs to its issuer and everyone else holding it.
+    issued: clientHeld,
+    clientHeld,
+    unallocated: Math.max(0, held - clientHeld),
+    recorded: clientHeld,
+    drift: 0,
+    source: "chain",
+    ratioPct: clientHeld > 0 ? (held / clientHeld) * 100 : null,
+    headroom: Math.max(0, held - clientHeld),
+    fresh: held > 0,
+    custodySource: "chain",
+    custodyMismatch: null,
+    expiresAt: null,
+    lastVerified: new Date().toISOString(),
+  };
 }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { type PayoutDest } from "@/lib/ntzs";
 import { withdrawalQuote, createWithdrawal, lookupRecipient, NtzsError, ntzsConfigured,
          rampQuote, rampOfframp, getSwapRate } from "@/lib/ntzs";
-import { currentUser } from "@/lib/auth";
+import { currentUser, kycRefusal } from "@/lib/auth";
 import { balanceOf, record } from "@/lib/ledger";
 import { notify } from "@/lib/notify";
 import { requireDb, bad, notConfigured } from "@/lib/apiHelpers";
@@ -106,6 +106,9 @@ export async function GET(req: Request) {
   try {
     const user = await currentUser();
     if (!user) return NextResponse.json({ ok: false, code: "unauthenticated" }, { status: 401 });
+    /* Priced and paid only for a verified account: this is money leaving. */
+    const refusal = kycRefusal(user, "withdraw");
+    if (refusal) return NextResponse.json({ ok: false, ...refusal }, { status: 403 });
 
     const u = new URL(req.url);
     const amountTzs = Math.round(Number(u.searchParams.get("amountTzs")));
@@ -193,6 +196,9 @@ export async function POST(req: Request) {
   try {
     const user = await currentUser();
     if (!user) return NextResponse.json({ ok: false, code: "unauthenticated" }, { status: 401 });
+
+    const refusal = kycRefusal(user, "withdraw");
+    if (refusal) return NextResponse.json({ ok: false, ...refusal }, { status: 403 });
 
     const body = await req.json();
     const quoteId = String(body.quoteId ?? "");

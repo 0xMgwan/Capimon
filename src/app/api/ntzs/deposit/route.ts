@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createDeposit, rampQuote, rampOnramp, MIN_TZS_BY_ROUTE, NtzsError, ntzsConfigured,
          type PaymentMethod, type BankInstructions } from "@/lib/ntzs";
-import { currentUser } from "@/lib/auth";
+import { currentUser, kycRefusal } from "@/lib/auth";
 import { db, migrate } from "@/lib/db";
 import { omnibusUserId, collectionRoute, capabilities } from "@/lib/omnibus";
 import { requireDb, bad, boom, notConfigured } from "@/lib/apiHelpers";
@@ -26,6 +26,10 @@ export async function POST(req: Request) {
   try {
     const user = await currentUser();
     if (!user) return NextResponse.json({ ok: false, code: "unauthenticated" }, { status: 401 });
+
+    /* Money in from an unverified account is money CAPX cannot account for. */
+    const refusal = kycRefusal(user, "deposit");
+    if (refusal) return NextResponse.json({ ok: false, ...refusal }, { status: 403 });
 
     const body = await req.json();
     const phoneNumber = String(body.phoneNumber ?? user.phone ?? "").replace(/[^\d]/g, "");

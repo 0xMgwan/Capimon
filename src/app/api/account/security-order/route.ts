@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, migrate } from "@/lib/db";
-import { currentUser } from "@/lib/auth";
+import { currentUser, kycRefusal } from "@/lib/auth";
 import { balanceOf, record } from "@/lib/ledger";
 import { requireDb, bad, boom } from "@/lib/apiHelpers";
 import { assertSolvent } from "@/lib/solvency";
@@ -61,6 +61,12 @@ export async function POST(req: Request) {
           error: `${SEC} cannot be sold yet. ${market.issuer ?? "The issuer"} opens selling once the offer closes and allocation completes.` },
         { status: 409 },
       );
+    }
+
+    // Unverified accounts may close a position but not open one.
+    if (side === "buy") {
+      const refusal = kycRefusal(user, "buy");
+      if (refusal) return NextResponse.json({ ok: false, ...refusal }, { status: 403 });
     }
 
     // Gate buys, never sells — a sell returns shares and can only improve

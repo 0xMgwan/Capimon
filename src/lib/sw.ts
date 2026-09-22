@@ -519,4 +519,8 @@ export const SW: Record<string, string> = {
   "Short": "Pungufu",
   "Set by CAPX": "Imewekwa na CAPX",
   "Tokenised by {issuer}. CAPX buys and holds the token, and prices it in shillings.": "Imetokenishwa na {issuer}. CAPX inanunua na kushikilia tokeni, na kuipanga bei kwa shilingi.",
+  "Verification under review.": "Uhakiki unapitiwa.",
+  "Verify your identity to buy.": "Thibitisha utambulisho wako ili ununue.",
+  "You can buy as soon as it is approved. Selling stays open.": "Utaweza kununua mara tu utakapoidhinishwa. Kuuza kunabaki wazi.",
+  "It takes a few minutes.": "Inachukua dakika chache.",
 };

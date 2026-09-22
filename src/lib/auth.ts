@@ -99,3 +99,36 @@ export async function currentUser(): Promise<SessionUser | null> {
     return null;
   }
 }
+
+/**
+ * Whether a customer may do something that moves money or securities.
+ *
+ * Verification was only ever a prompt on the page, so an account that
+ * dismissed it — or a script that never saw it — could buy, sell, deposit and
+ * withdraw unverified. This is the check every such route now makes, in one
+ * place so the next route cannot quietly omit it.
+ *
+ * Selling is deliberately not gated. A holder reducing a position is lowering
+ * everyone's exposure, and refusing it would trap the assets of someone whose
+ * verification lapsed or was rejected after they bought. Everything that adds
+ * exposure or takes money out requires an approved verification.
+ */
+export type GatedAction = "buy" | "deposit" | "withdraw";
+
+export function kycRefusal(
+  user: { kycStatus?: string | null } | null,
+  action: GatedAction,
+): { code: string; error: string } | null {
+  const status = user?.kycStatus ?? "none";
+  if (status === "approved") return null;
+
+  const what = action === "buy" ? "buy shares"
+    : action === "deposit" ? "add money"
+    : "withdraw";
+  const reason = status === "pending"
+    ? `Your verification is still being reviewed. You can ${what} as soon as it is approved.`
+    : status === "rejected"
+      ? `Your verification was not accepted, so you cannot ${what} yet. Submit it again from your account.`
+      : `Verify your identity before you ${what}. It takes a few minutes from your account.`;
+  return { code: `kyc_${status}`, error: reason };
+}

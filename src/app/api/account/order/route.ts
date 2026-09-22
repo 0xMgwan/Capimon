@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, migrate } from "@/lib/db";
-import { currentUser } from "@/lib/auth";
+import { currentUser, kycRefusal } from "@/lib/auth";
 import { balanceOf, record } from "@/lib/ledger";
 import { BY_SYMBOL } from "@/lib/assets";
 import { executeBuy, executeSell, treasuryConfigured } from "@/lib/treasury";
@@ -30,6 +30,12 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const side = body.side === "sell" ? "sell" : "buy";
+
+    // Unverified accounts may close a position but not open one.
+    if (side === "buy") {
+      const refusal = kycRefusal(user, "buy");
+      if (refusal) return NextResponse.json({ ok: false, ...refusal }, { status: 403 });
+    }
 
     // Gate buys, never sells. A buy spends USDC and can deepen a shortfall, so
     // it must not run against under-backed holdings. A sell does the opposite —

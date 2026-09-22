@@ -121,8 +121,11 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
   const tooPoor = !!(side === "buy" && quote && quote.spend > tzsBalance);
   const tooFew = !!(side === "sell" && quote && quote.qty > held);
 
+  /* Buying needs a verified account; selling does not, so a holder is never
+     trapped by a verification that lapsed after they bought. */
+  const needsKyc = side === "buy" && !!account && account.user.kycStatus !== "approved";
   const blocked =
-    busy || !m?.tradable || !quote || !(quote.qty > 0) || tooMany || tooPoor || tooFew;
+    busy || !m?.tradable || !quote || !(quote.qty > 0) || tooMany || tooPoor || tooFew || needsKyc;
 
   async function submit() {
     if (!quote || blocked) return;
@@ -330,6 +333,19 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
             {t("Add money")}
           </Link>
         </div>
+      )}
+      {needsKyc && (
+        <p className="mt-3 rounded-xl border border-[#b45309]/35 bg-[#b45309]/[0.06] px-3 py-2 text-[12px] leading-snug text-[var(--muted)]">
+          <span className="font-medium text-[var(--fg)]">
+            {t(account!.user.kycStatus === "pending" ? "Verification under review." : "Verify your identity to buy.")}
+          </span>{" "}
+          {account!.user.kycStatus === "pending"
+            ? t("You can buy as soon as it is approved. Selling stays open.")
+            : <>
+                {t("It takes a few minutes.")}{" "}
+                <Link href="/verify" className="underline underline-offset-2">{t("Verify now")}</Link>
+              </>}
+        </p>
       )}
       {tooFew && <Warn>You hold {fmtQty(held)} {symbol}.</Warn>}
       {tooMany && m && (

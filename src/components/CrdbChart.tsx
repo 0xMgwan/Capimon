@@ -17,7 +17,7 @@ const TZS_RANGES = ["1W", "1M", "ALL"] as const;
 const fmt = (n: number) =>
   `${Math.round(n).toLocaleString("en-TZ")} TZS`;
 
-export function CrdbChart({ symbol = "CRDB" }: { symbol?: string }) {
+export function CrdbChart({ symbol = "CRDB", external = false }: { symbol?: string; external?: boolean }) {
   const { t } = useT();
   const [candles, setCandles] = useState<Candle[] | null>(null);
   /** Set when the series is the saved copy, because the exchange is down. */
@@ -44,14 +44,18 @@ export function CrdbChart({ symbol = "CRDB" }: { symbol?: string }) {
         {t("First price published by CAPX on")}{" "}
         {new Date(candles[0].t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short" })}:{" "}
         <span className="tnum font-medium text-[var(--fg)]">{candles[0].p.toLocaleString("en-TZ")} TZS</span>.{" "}
-        {t("The chart fills in day by day, and shows the full DSE history once the exchange is back.")}
+        {external
+          ? t("The chart fills in day by day as CAPX republishes it.")
+          : t("The chart fills in day by day, and shows the full DSE history once the exchange is back.")}
       </div>
     );
   }
   if (candles.length < 2) {
     return (
       <div className="rounded-3xl border hairline p-6 text-sm text-[var(--muted)]">
-        {t("The DSE's price history is unavailable right now. The chart returns as soon as the exchange is back.")}
+        {external
+          ? t("CAPX sets this price. A chart builds from each price CAPX publishes.")
+          : t("The DSE's price history is unavailable right now. The chart returns as soon as the exchange is back.")}
       </div>
     );
   }
@@ -63,7 +67,9 @@ export function CrdbChart({ symbol = "CRDB" }: { symbol?: string }) {
       format={fmt}
       ranges={TZS_RANGES}
       provenance={(n) =>
-        source === "oracle"
+        external
+          ? `${n} days of prices published by CAPX`
+          : source === "oracle"
           ? `${n} days of prices published by CAPX · shown while DSE data is unavailable`
           : cachedAt
             ? `${n} daily prices · DSE history saved ${new Date(cachedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}${source === "saved+oracle" ? ", then CAPX's published prices" : ""}`

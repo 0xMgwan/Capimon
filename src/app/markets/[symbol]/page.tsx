@@ -49,7 +49,7 @@ export default async function AssetPage({ params }: { params: Promise<{ symbol: 
     return (
       <main className="mx-auto w-full max-w-3xl px-4 pb-24 pt-3 sm:px-6 sm:pt-10">
         <CrdbIntro symbol={d.symbol} name={d.name} />
-        <CrdbChart symbol={d.symbol} />
+        <CrdbChart symbol={d.symbol} external={d.kind === "external"} />
         <div className="mt-3" />
         <CrdbPanel symbol={d.symbol} showHeader={false} />
       </main>

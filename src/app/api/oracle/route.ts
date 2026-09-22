@@ -68,6 +68,17 @@ export async function POST(req: Request) {
     // of recording it at all.
     if (!source) return NextResponse.json({ ok: false, error: "source is required" }, { status: 400 });
 
+    /*
+     * On-chain first, database second.
+     *
+     * Settlement prices trades from the oracle contract, so a mark that only
+     * reached this table was invisible to it: the desk listed the price as
+     * live while every order was refused for having no price. The row is a
+     * record of what was set, not the mark itself.
+     */
+    const { publishManualPrice } = await import("@/lib/oracle");
+    const { txHash } = await publishManualPrice(symbol, priceTzs, source);
+
     await migrate();
     await db()`
       insert into capx.oracle_prices (symbol, price_tzs, source, updated_at)
@@ -75,7 +86,7 @@ export async function POST(req: Request) {
       on conflict (symbol) do update
         set price_tzs = excluded.price_tzs, source = excluded.source, updated_at = now()`;
 
-    return NextResponse.json({ ok: true, symbol, price: priceTzs, source });
+    return NextResponse.json({ ok: true, symbol, price: priceTzs, source, txHash });
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : "Could not set the price" },

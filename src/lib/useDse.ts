@@ -13,6 +13,11 @@ export type DseListing = {
   price: number; changePct: number; tradeDate: string | null; feeBps: number;
   /** "dse" when live from the exchange, "oracle" when the exchange is down. */
   source?: "dse" | "oracle" | "none";
+  /** "external": a token another issuer made, which CAPX buys and holds. */
+  kind?: "dse" | "external";
+  issuer?: string | null;
+  /** True while the venue does not buy back — an open IPO. */
+  buyOnly?: boolean;
   /** When the fallback price was published. */
   asOf?: string | null;
 };

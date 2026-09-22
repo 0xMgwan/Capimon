@@ -146,6 +146,27 @@ export async function publishDsePrice(
 }
 
 
+/**
+ * Publishes a price somebody set by hand.
+ *
+ * Separate from the DSE path because there is no exchange print to check it
+ * against: an external listing — a tokenised IPO — is priced by CAPX from what
+ * it paid, and this is the only mark it will ever have. It goes to the oracle
+ * contract, because that is what settlement reads; a row in the database
+ * alone showed "live" on the desk while every trade was refused for having no
+ * price at all.
+ */
+export async function publishManualPrice(symbol: string, price: number, source: string) {
+  if (!(price > 0)) throw new Error("A price must be greater than zero.");
+  const txHash = await treasuryWrite({
+    address: ORACLE,
+    abi: oracleAbi,
+    functionName: "setPrice",
+    args: [symbol.toUpperCase(), parseUnits(String(price), NTZS_DECIMALS), source.slice(0, 120)],
+  });
+  return { txHash, price };
+}
+
 /* --------------------------------------------------------- opportunistic -- */
 
 /**

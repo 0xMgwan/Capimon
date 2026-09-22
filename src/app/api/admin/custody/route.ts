@@ -135,12 +135,23 @@ export async function POST(req: Request) {
        * no mint; its backing is the treasury's balance. `buyOnly` closes the
        * sell side while a venue does not allow selling back.
        */
-      const kind = body.kind === "external" ? "external" : "dse";
+      /*
+       * Only what the caller actually sent.
+       *
+       * Writing defaults for every field turned a partial save into a reset:
+       * the status buttons post just the symbol, name, address and status, so
+       * pressing "Live" was silently re-declaring an external listing as one
+       * CAPX mints — losing its issuer, its buy-only rule, and bringing back
+       * the attestation and mint flow that do not apply to it.
+       */
+      const kind = body.kind === undefined
+        ? undefined
+        : body.kind === "external" ? "external" : "dse";
       const listing = {
-        kind,
-        ...(body.issuer ? { issuer: String(body.issuer).slice(0, 120) } : {}),
-        ...(body.venue ? { venue: String(body.venue).slice(0, 200) } : {}),
-        buyOnly: body.buyOnly === true,
+        ...(kind ? { kind } : {}),
+        ...(body.issuer !== undefined ? { issuer: String(body.issuer).slice(0, 120) } : {}),
+        ...(body.venue !== undefined ? { venue: String(body.venue).slice(0, 200) } : {}),
+        ...(body.buyOnly !== undefined ? { buyOnly: body.buyOnly === true } : {}),
       };
 
       let logo: string | null = null;

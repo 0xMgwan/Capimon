@@ -30,6 +30,7 @@ export async function GET() {
     const fallback = q ? null : await readOraclePrice(s.symbol).catch(() => null);
     return {
       symbol: s.symbol, name: s.name, logo: s.logo, status: s.status,
+      kind: s.kind, issuer: s.issuer, buyOnly: s.buyOnly,
       price: q ? currentPrice(q) : fallback?.price ?? 0,
       changePct: q?.changePct ?? 0,
       tradeDate: q?.tradeDate ?? fallback?.updatedAt?.slice(0, 10) ?? null,

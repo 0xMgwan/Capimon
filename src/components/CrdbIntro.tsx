@@ -15,6 +15,9 @@ import { DseLogo } from "./DseLogo";
 export function CrdbIntro({ symbol = "CRDB", name = "CRDB Bank Plc" }: { symbol?: string; name?: string }) {
   const { t } = useT();
   const d = useDse().find((x) => x.symbol === symbol);
+  /* A token CAPX bought rather than a DSE share it tokenised: the page must
+     not call it a DSE listing or describe a custody position it has not got. */
+  const external = d?.kind === "external";
   const up = (d?.changePct ?? 0) >= 0;
   /* The exchange's feed is down and the price is the oracle's last one. */
   const fallback = d?.source === "oracle";
@@ -38,7 +41,9 @@ export function CrdbIntro({ symbol = "CRDB", name = "CRDB Bank Plc" }: { symbol?
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <h1 className="font-[family-name:var(--font-display)] text-2xl font-medium tracking-[-0.045em] sm:text-4xl">{symbol}</h1>
-              <span className="rounded-full surface px-2 py-0.5 text-[10px] text-[var(--muted)]">DSE</span>
+              <span className="rounded-full surface px-2 py-0.5 text-[10px] text-[var(--muted)]">
+                {external ? (d?.buyOnly ? t("IPO") : d?.issuer ?? t("Tokenised")) : "DSE"}
+              </span>
             </div>
             <p className="truncate text-[12.5px] text-[var(--muted)] sm:text-sm">
               {symbol === "CRDB" ? t("CRDB Bank Plc") : (d?.name ?? name)}
@@ -60,9 +65,12 @@ export function CrdbIntro({ symbol = "CRDB", name = "CRDB Bank Plc" }: { symbol?
         </div>
       </div>
       <p className="mt-2 line-clamp-2 max-w-xl text-[13.5px] leading-snug text-[var(--muted)] sm:text-sm">
-        {symbol === "CRDB"
-          ? t("Tanzania’s largest bank by assets, listed on the Dar es Salaam Stock Exchange. One CRDBt is one share, held in custody and settled in shillings.")
-          : t("Listed on the Dar es Salaam Stock Exchange. One {sym}t is one share, held in custody and settled in shillings.").replace("{sym}", symbol)}
+        {external
+          ? t("An offer tokenised by {issuer}. CAPX buys the token, holds it, and prices it in shillings; your balance is a claim on what CAPX holds.")
+              .replace("{issuer}", d?.issuer ?? t("its issuer"))
+          : symbol === "CRDB"
+            ? t("Tanzania’s largest bank by assets, listed on the Dar es Salaam Stock Exchange. One CRDBt is one share, held in custody and settled in shillings.")
+            : t("Listed on the Dar es Salaam Stock Exchange. One {sym}t is one share, held in custody and settled in shillings.").replace("{sym}", symbol)}
       </p>
       {/*
         * Said plainly when the exchange is down.
@@ -71,13 +79,22 @@ export function CrdbIntro({ symbol = "CRDB", name = "CRDB Bank Plc" }: { symbol?
         * price that simply has not moved. The price is real — it is the one
         * trades settle at — but it is the last one published, not today's.
         */}
-      {fallback && (
+      {fallback && !external && (
         <div className="mt-2.5 flex items-start gap-2 rounded-xl border border-[#b45309]/35 bg-[#b45309]/[0.06] px-3 py-2 text-[12px] leading-snug">
           <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[#b45309]" />
           <span className="text-[var(--muted)]">
             <span className="font-medium text-[var(--fg)]">{t("DSE data is temporarily unavailable.")}</span>{" "}
             {t("This is the last price CAPX published")}{when ? ` (${when})` : ""}{". "}
             {t("Buying and selling continue at this price.")}
+          </span>
+        </div>
+      )}
+      {external && d?.buyOnly && (
+        <div className="mt-2.5 flex items-start gap-2 rounded-xl border border-[#b45309]/35 bg-[#b45309]/[0.06] px-3 py-2 text-[12px] leading-snug">
+          <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[#b45309]" />
+          <span className="text-[var(--muted)]">
+            <span className="font-medium text-[var(--fg)]">{t("Open offer — buying only.")}</span>{" "}
+            {t("Selling opens when the offer closes and allocation completes. The price is set by CAPX, not by an exchange.")}
           </span>
         </div>
       )}

@@ -506,4 +506,12 @@ export const SW: Record<string, string> = {
   "Opens when the offer closes": "Kutafunguliwa ofa itakapofungwa",
   "Open": "Wazi",
   "CAPX buys this token and holds it. The balance above is read from Base, and customers' claims are recorded in CAPX's ledger.": "CAPX inanunua tokeni hii na kuishikilia. Salio hapo juu linasomwa kutoka Base, na madai ya wateja yameandikwa kwenye daftari la CAPX.",
+  "IPO": "IPO",
+  "Tokenised": "Imetokenishwa",
+  "An offer tokenised by {issuer}. CAPX buys the token, holds it, and prices it in shillings; your balance is a claim on what CAPX holds.": "Ofa iliyotokenishwa na {issuer}. CAPX inanunua tokeni, inaishikilia, na kuipanga bei kwa shilingi; salio lako ni dai juu ya kile CAPX inachoshikilia.",
+  "its issuer": "mtoaji wake",
+  "Open offer — buying only.": "Ofa iko wazi — kununua tu.",
+  "Selling opens when the offer closes and allocation completes. The price is set by CAPX, not by an exchange.": "Kuuza kutafunguliwa ofa itakapofungwa na mgawo kukamilika. Bei inapangwa na CAPX, si soko la hisa.",
+  "CAPX sets this price. A chart builds from each price CAPX publishes.": "CAPX inapanga bei hii. Chati inajengwa kutoka kila bei CAPX inayochapisha.",
+  "The chart fills in day by day as CAPX republishes it.": "Chati itajaa siku baada ya siku CAPX inapochapisha upya.",
 };

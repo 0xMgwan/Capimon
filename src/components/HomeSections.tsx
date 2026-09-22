@@ -200,10 +200,10 @@ export function ProductsSection() {
       <Reveal>
         <div className="eyebrow">{t("And beyond the DSE")}</div>
         <h2 className="display mt-4 max-w-4xl text-[clamp(1.8rem,5.4vw,4.6rem)]">
-          <RevealWords text={t("The world's companies,")} />
+          <RevealWords text={t("Buy and sell leading US stocks,")} />
           <br />
           <span className="contra text-[var(--muted)]">
-            <RevealWords text={t("from the same account.")} delay={0.1} />
+            <RevealWords text={t("directly from your account.")} delay={0.1} />
           </span>
         </h2>
         <p className="mt-6 max-w-lg text-lg text-[var(--muted)]">

@@ -347,7 +347,7 @@ export const SW: Record<string, string> = {
   "Settlement": "Ukamilishaji",
   "Tanzanian shares,": "Nunua Hisa za Tanzania,",
   "The same shillings buy US equities too, priced by Chainlink and settled onchain.": "Shilingi hizo hizo zinanunua pia hisa za Marekani, bei kutoka Chainlink na kukamilishwa onchain.",
-  "Buy and sell leading US stocks,": "Nunua na uza hisa maarufu za Marekani,",
+  "Buy and sell leading US stocks,": "Nunua na Kuuza hisa za Marekani,",
   "US equities": "Hisa za Marekani",
   "Your shillings,": "Shilingi zako,",
   "at work on the DSE.": "zikifanya kazi DSE.",

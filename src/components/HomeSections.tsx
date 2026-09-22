@@ -495,18 +495,29 @@ export function ClosingCTA() {
           <h2 className="display mx-auto mt-5 max-w-4xl text-[clamp(1.95rem,6.5vw,5.5rem)]">
             <RevealWords text={t("Your shillings,")} />{" "}
             <span className="contra">
-              <RevealWords text={t("at work on the DSE.")} delay={0.12} />
+              <RevealWords text={t("from the DSE to Wall Street.")} delay={0.12} />
             </span>
           </h2>
           <p className="mx-auto mt-7 max-w-xl text-lg text-[var(--muted)]">
-            {t("Open an account, fund it from mobile money or your bank, and own a Tanzanian share the same day.")}
+            {t("One account, funded from mobile money or your bank. Own CRDB on the Dar es Salaam Stock Exchange the same day, and US names like NVIDIA and Apple alongside it.")}
           </p>
+          {/* The two markets as facts, not adjectives: what is live on each. */}
+          <div className="mt-7 flex flex-wrap justify-center gap-2 text-[12px]">
+            <span className="inline-flex items-center gap-2 rounded-full border hairline px-3.5 py-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-up)]" />
+              {t("DSE")} · CRDB · {t("in shillings")}
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full border hairline px-3.5 py-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-up)]" />
+              {t("US stocks")} · {data?.markets.length ?? 13} {t("names")} · {t("in dollars")}
+            </span>
+          </div>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
             <Link href="/markets/crdb" className="rounded-full bg-[var(--fg)] px-7 py-4 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95">
               {t("Buy CRDB")} →
             </Link>
-            <Link href="/portfolio" className="rounded-full border hairline px-7 py-4 text-sm font-medium transition-colors hover:surface">
-              {t("Open portfolio")}
+            <Link href="/markets" className="rounded-full border hairline px-7 py-4 text-sm font-medium transition-colors hover:surface">
+              {t("Browse US stocks")} →
             </Link>
           </div>
         </Reveal>

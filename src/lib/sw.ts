@@ -373,4 +373,12 @@ export const SW: Record<string, string> = {
   "You will get an account and a reference to pay from your own bank app. Any Tanzanian bank works; it usually lands within about 10 minutes.": "Utapata akaunti na kumbukumbu ya kulipa kupitia programu ya benki yako. Benki yoyote ya Tanzania inafaa; kwa kawaida hufika ndani ya dakika 10 hivi.",
   "Minimum lot": "Kiwango cha chini",
   "None": "Hakuna",
+  "from the DSE to Wall Street.": "kutoka DSE hadi Wall Street.",
+  "One account, funded from mobile money or your bank. Own CRDB on the Dar es Salaam Stock Exchange the same day, and US names like NVIDIA and Apple alongside it.": "Akaunti moja, inayowekewa pesa kwa simu au benki yako. Miliki CRDB kwenye Soko la Hisa la Dar es Salaam siku hiyo hiyo, pamoja na kampuni za Marekani kama NVIDIA na Apple.",
+  "DSE": "DSE",
+  "in shillings": "kwa shilingi",
+  "US stocks": "Hisa za Marekani",
+  "names": "kampuni",
+  "in dollars": "kwa dola",
+  "Browse US stocks": "Tazama hisa za Marekani",
 };

@@ -22,12 +22,13 @@ export function CrdbChart({ symbol = "CRDB" }: { symbol?: string }) {
   const [candles, setCandles] = useState<Candle[] | null>(null);
   /** Set when the series is the saved copy, because the exchange is down. */
   const [cachedAt, setCachedAt] = useState<string | null>(null);
+  const [source, setSource] = useState<string>("dse");
 
   useEffect(() => {
     let alive = true;
     fetch(`/api/securities/${encodeURIComponent(symbol.toLowerCase())}/history`)
       .then((r) => r.json())
-      .then((d) => { if (alive && d.ok) { setCandles(d.candles ?? []); setCachedAt(d.cachedAt ?? null); } })
+      .then((d) => { if (alive && d.ok) { setCandles(d.candles ?? []); setCachedAt(d.cachedAt ?? null); setSource(d.source ?? "dse"); } })
       .catch(() => { if (alive) setCandles([]); });
     return () => { alive = false; };
   }, [symbol]);
@@ -50,9 +51,11 @@ export function CrdbChart({ symbol = "CRDB" }: { symbol?: string }) {
       format={fmt}
       ranges={TZS_RANGES}
       provenance={(n) =>
-        cachedAt
-          ? `${n} daily closes · saved ${new Date(cachedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}, while DSE data is unavailable`
-          : `${n} daily closes on the Dar es Salaam Stock Exchange`
+        source === "oracle"
+          ? `${n} days of prices published by CAPX · shown while DSE data is unavailable`
+          : cachedAt
+            ? `${n} daily prices · DSE history saved ${new Date(cachedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}${source === "saved+oracle" ? ", then CAPX's published prices" : ""}`
+            : `${n} daily closes on the Dar es Salaam Stock Exchange`
       }
     />
   );

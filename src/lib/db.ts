@@ -245,6 +245,29 @@ export async function migrate() {
           fetched_at timestamptz not null default now()
         )`;
 
+      /*
+       * Every price the oracle has published, read back from its events.
+       *
+       * The chart's last line of defence when the exchange is down: CAPX's own
+       * published prices are permanent on-chain, so a history can always be
+       * drawn from them. `sync_cursors` records how far the reading has got.
+       */
+      await sql`
+        create table if not exists capx.oracle_points (
+          symbol     text not null,
+          price      numeric(38,8) not null,
+          at         timestamptz not null,
+          block      bigint not null,
+          source     text,
+          primary key (symbol, at)
+        )`;
+      await sql`
+        create table if not exists capx.sync_cursors (
+          name  text primary key,
+          block bigint not null,
+          updated_at timestamptz not null default now()
+        )`;
+
       // Reference prices, each with where it came from and when. A price with
       // no provenance is a number somebody typed, and settlement decides what a
       // share is worth (Rule 7).

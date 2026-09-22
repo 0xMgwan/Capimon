@@ -207,7 +207,7 @@ export function ProductsSection() {
           </span>
         </h2>
         <p className="mt-6 max-w-lg text-lg text-[var(--muted)]">
-          {t("The same shillings buy US equities too, priced by Chainlink and settled onchain.")}
+          {t("Expand your investment portfolio, invest in global companies in seconds.")}
         </p>
       </Reveal>
 

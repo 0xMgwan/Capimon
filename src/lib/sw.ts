@@ -346,7 +346,7 @@ export const SW: Record<string, string> = {
   "Open an account, fund it from mobile money or your bank, and own a Tanzanian share the same day.": "Fungua akaunti, iweke pesa kutoka simu au benki yako, na umiliki hisa ya Tanzania siku hiyo hiyo.",
   "Settlement": "Ukamilishaji",
   "Tanzanian shares,": "Nunua Hisa za Tanzania,",
-  "The same shillings buy US equities too, priced by Chainlink and settled onchain.": "Shilingi hizo hizo zinanunua pia hisa za Marekani, bei kutoka Chainlink na kukamilishwa onchain.",
+  "Expand your investment portfolio, invest in global companies in seconds.": "Panua uwekezaji wako, wekeza kwenye kampuni za dunia kwa sekunde chache.",
   "Buy and sell leading US stocks,": "Nunua na Kuuza hisa za Marekani,",
   "US equities": "Hisa za Marekani",
   "Your shillings,": "Shilingi zako,",

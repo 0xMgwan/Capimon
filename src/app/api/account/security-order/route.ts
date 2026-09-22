@@ -5,13 +5,15 @@ import { balanceOf, record } from "@/lib/ledger";
 import { requireDb, bad, boom } from "@/lib/apiHelpers";
 import { assertSolvent } from "@/lib/solvency";
 import { notify } from "@/lib/notify";
-import { crdbMarket, quoteBuyTzs, quoteSellQty, sellQtyOrAll } from "@/lib/dseTrading";
+import { dseMarket, quoteBuyTzs, quoteSellQty, sellQtyOrAll } from "@/lib/dseTrading";
 import { CRDBT_SECURITY } from "@/lib/assets";
 
 export const dynamic = "force-dynamic";
 
 /**
- * A CRDB order.
+ * An order in a tokenised DSE share: CRDB, NMB, or whatever is registered.
+ * `security` defaults to CRDB so clients written before other listings keep
+ * working.
  *
  * Deliberately not routed through the US equities path. That one exists to
  * convert shillings into dollars and sign a swap; here the customer's currency
@@ -36,10 +38,12 @@ export async function POST(req: Request) {
     const amount = Number(body.amount);
     if (!(amount > 0)) return bad("Amount must be greater than zero.");
 
-    const market = await crdbMarket();
+    const market = await dseMarket(String(body.security ?? CRDBT_SECURITY));
+    if (!market) return bad("That security is not listed on CAPX.", "unknown_security");
+    const SEC = market.symbol;
     if (!market.tradable) {
       return NextResponse.json(
-        { ok: false, code: "market_halted", error: market.haltReason ?? "CRDB is not tradable right now." },
+        { ok: false, code: "market_halted", error: market.haltReason ?? `${SEC} is not tradable right now.` },
         { status: 503 },
       );
     }
@@ -66,7 +70,7 @@ export async function POST(req: Request) {
      * nothing and could not be sold for anything. It is cleaner to close the
      * position than to leave a row that looks like a holding and is not.
      */
-    const held = side === "sell" ? await balanceOf(user.id, CRDBT_SECURITY) : 0;
+    const held = side === "sell" ? await balanceOf(user.id, SEC) : 0;
     const quote = side === "buy"
       ? quoteBuyTzs(market.price, amount)                       // amount is shillings
       : quoteSellQty(market.price, sellQtyOrAll(amount, held)); // amount is shares
@@ -94,14 +98,14 @@ export async function POST(req: Request) {
        */
       if (quote.qty > market.availableShares) {
         return bad(
-          `Only ${market.availableShares} CRDB ${market.availableShares === 1 ? "share is" : "shares are"} available. ` +
+          `Only ${market.availableShares} ${SEC} ${market.availableShares === 1 ? "share is" : "shares are"} available. ` +
           `The rest of the custody position is already spoken for.`,
           "insufficient_inventory",
         );
       }
     } else {
       if (quote.qty > held) {
-        return bad(`You hold ${held} CRDB.`, "insufficient_balance");
+        return bad(`You hold ${held} ${SEC}.`, "insufficient_balance");
       }
     }
 
@@ -109,7 +113,7 @@ export async function POST(req: Request) {
     const sql = db();
     const orders = await sql<{ id: string }[]>`
       insert into capx.orders (user_id, side, symbol, qty, price)
-      values (${user.id}, ${side}, ${CRDBT_SECURITY}, ${quote.qty}, ${quote.price})
+      values (${user.id}, ${side}, ${SEC}, ${quote.qty}, ${quote.price})
       returning id`;
     const orderId = orders[0].id;
 
@@ -120,12 +124,12 @@ export async function POST(req: Request) {
               { userId: user.id, kind: "buy", asset: "TZS", amount: (-quote.tzs).toString(),
                 ref: `${orderId}:cash`,
                 metadata: { orderId, price: quote.price, fee: quote.fee, feeBps: quote.feeBps } },
-              { userId: user.id, kind: "buy", asset: CRDBT_SECURITY, amount: quote.qty.toString(),
+              { userId: user.id, kind: "buy", asset: SEC, amount: quote.qty.toString(),
                 ref: `${orderId}:asset`,
                 metadata: { orderId, price: quote.price, currency: "TZS" } },
             ]
           : [
-              { userId: user.id, kind: "sell", asset: CRDBT_SECURITY, amount: (-quote.qty).toString(),
+              { userId: user.id, kind: "sell", asset: SEC, amount: (-quote.qty).toString(),
                 ref: `${orderId}:asset`,
                 metadata: { orderId, price: quote.price, currency: "TZS" } },
               { userId: user.id, kind: "sell", asset: "TZS", amount: quote.tzs.toString(),
@@ -139,8 +143,8 @@ export async function POST(req: Request) {
          where id = ${orderId}`;
 
       await notify({
-        userId: user.id, kind: "trade", ref: `order:${orderId}`, asset: CRDBT_SECURITY,
-        title: `${side === "buy" ? "Bought" : "Sold"} ${quote.qty} CRDB`,
+        userId: user.id, kind: "trade", ref: `order:${orderId}`, asset: SEC,
+        title: `${side === "buy" ? "Bought" : "Sold"} ${quote.qty} ${SEC}`,
         body: `${side === "buy" ? "Cost" : "Proceeds"} ${quote.tzs.toLocaleString()} TZS at ${quote.price.toLocaleString()} TZS a share.`,
       });
 

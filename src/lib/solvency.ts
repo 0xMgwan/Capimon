@@ -98,13 +98,20 @@ export async function checkSolvency(): Promise<Solvency> {
   // TZS), so the trading gate never depends on a rate. This USD value is only
   // for the reported totals — a stale or missing rate cannot mask a shortfall.
   // Only for the dollar totals; a missing CRDB mark cannot mask a share gap.
-  let crdbPriceTzs = 0;
-  if (holdings.holdings.some((h) => h.asset === "CRDB") || liabilities.some((l) => l.asset === "CRDB")) {
-    try {
-      const { readOraclePrice } = await import("./oracle");
-      crdbPriceTzs = (await readOraclePrice("CRDB"))?.price ?? 0;
-    } catch { /* CRDB shown at 0 USD in totals; coverage unaffected */ }
+  // Shilling prices for every DSE share in play, from our oracle.
+  const { dseSecurities } = await import("./dseSecurities");
+  const dseSymbols = new Set((await dseSecurities().catch(() => [])).map((d) => d.symbol));
+  const dseTzs = new Map<string, number>();
+  const inPlay = [...dseSymbols].filter((sym) =>
+    holdings.holdings.some((h) => h.asset === sym) || liabilities.some((l) => l.asset === sym));
+  if (inPlay.length) {
+    const { readOraclePrice } = await import("./oracle");
+    await Promise.all(inPlay.map(async (sym) => {
+      try { dseTzs.set(sym, (await readOraclePrice(sym))?.price ?? 0); }
+      catch { /* shown at 0 USD in totals; coverage unaffected */ }
+    }));
   }
+  const crdbPriceTzs = Math.max(0, ...dseTzs.values());
 
   let tzsUsd = 0;
   if (ntzsConfigured && (liabilities.some((l) => l.asset === "TZS") || omnibus.tzs > 0 || crdbPriceTzs > 0)) {
@@ -121,7 +128,7 @@ export async function checkSolvency(): Promise<Solvency> {
   const priceOf = (asset: string) =>
     asset === "USDC" ? 1
     : asset === "TZS" ? tzsUsd
-    : asset === "CRDB" ? crdbPriceTzs * tzsUsd
+    : dseSymbols.has(asset) ? (dseTzs.get(asset) ?? 0) * tzsUsd
     : markets.find((m) => m.symbol === asset)?.price ?? 0;
 
   const heldOf = (asset: string) =>

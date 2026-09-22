@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { useT } from "@/lib/i18n";
 import { AssetLogo } from "./AssetLogo";
+import { useDse, dseLogoOf } from "@/lib/useDse";
 import { useMarkets } from "@/lib/useMarkets";
 
 type Item = {
@@ -67,15 +68,16 @@ const MONEY_MARK: Record<string, { className: string; draw: React.ReactNode }> =
 
 function KindIcon({ kind, asset }: { kind: string; asset: string | null }) {
   const { data } = useMarkets();
+  const dse = useDse();
 
   if (kind === "trade" && asset) {
     const m = data?.markets.find((x) => x.symbol === asset || x.ticker === asset);
     return (
       <span className="mt-0.5 shrink-0">
         <AssetLogo
-          logo={asset === "CRDB" ? "/crdb.jpg" : m?.logo ?? null}
+          logo={dseLogoOf(dse, asset) !== undefined ? dseLogoOf(dse, asset) ?? null : m?.logo ?? null}
           ticker={m?.ticker ?? asset}
-          color={asset === "CRDB" ? "#0B7D3E" : m?.color ?? "var(--color-accent)"}
+          color={dseLogoOf(dse, asset) !== undefined ? "#0B7D3E" : m?.color ?? "var(--color-accent)"}
           size={32}
         />
       </span>

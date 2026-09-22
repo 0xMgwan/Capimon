@@ -842,8 +842,17 @@ function RegisterSecurity({ onAct, busy, w, sign, asBroker = false }: {
       <Field label="Symbol" v={f.symbol} on={(v) => setF({ ...f, symbol: v.toUpperCase() })} ph="CRDB"
         hint="The security's key in the custody registry and oracle: CRDB, not CRDBt." />
       <Field label="Name" v={f.name} on={(v) => setF({ ...f, name: v })} ph="CRDB Bank Plc" />
-      <Field label="Token address" v={f.tokenAddress} on={(v) => setF({ ...f, tokenAddress: v })} ph="0xb200…60F"
-        hint="Checked against the token on Base before it is saved." />
+      {/*
+        * The token address is filled in, not typed.
+        *
+        * A new security has no token until CAPX creates one, and Create token
+        * below writes the address itself. FIMCO never sees the field; CAPX
+        * only needs it for a token that was created outside the desk.
+        */}
+      {!asBroker && (
+        <Field label="Token address · optional" v={f.tokenAddress} on={(v) => setF({ ...f, tokenAddress: v })} ph="Leave blank — Create token fills it in"
+          hint="Only for a token that already exists on Base. Checked against the chain before it is saved." />
+      )}
       {/*
         * Creating the token from here, signed by the issuer wallet.
         *
@@ -853,9 +862,9 @@ function RegisterSecurity({ onAct, busy, w, sign, asBroker = false }: {
         * derived from the symbol, so a token that already exists is found and
         * filled in rather than created twice.
         */}
-      {f.symbol && f.name && !f.tokenAddress && asBroker && (
-        <p className="-mt-1 mb-3 text-[11px] text-[var(--muted)]">
-          Leave blank if there is no token yet. CAPX creates it with the issuer wallet once the security is registered.
+      {asBroker && (
+        <p className="mb-3 text-[11px] text-[var(--muted)]">
+          No token is needed yet. Once you save, CAPX creates the token on Base with the issuer wallet and links it here.
         </p>
       )}
       {f.symbol && f.name && !f.tokenAddress && !asBroker && (
@@ -908,8 +917,10 @@ function RegisterSecurity({ onAct, busy, w, sign, asBroker = false }: {
           {logoErr ?? "Square works best. Resized to 256px here before upload. Saving without one keeps the existing logo."}
         </span>
       </label>
-      <Field label="Decimals" v={f.decimals} on={(v) => setF({ ...f, decimals: v })} ph="8"
+{!asBroker && (
+              <Field label="Decimals" v={f.decimals} on={(v) => setF({ ...f, decimals: v })} ph="8"
         hint="Read from the token itself when an address is given." />
+      )}
       {asBroker ? (
         <p className="mb-3 text-[11px] text-[var(--muted)]">
           Registered as a draft. CAPX takes it live once custody is attested and the token exists.

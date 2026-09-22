@@ -6,10 +6,14 @@ import { treasuryAddress } from "./treasury";
 import { readOraclePrice, refreshIfStale } from "./oracle";
 import { totalLiabilities } from "./ledger";
 import { FEE_BPS, feeEnabled } from "./fees";
-import { CRDBT, CRDBT_DECIMALS, CRDBT_SECURITY } from "./assets";
+import { CRDBT_DECIMALS, CRDBT_SECURITY } from "./assets";
+import { dseSecurity, type DseSecurity } from "./dseSecurities";
 
 /**
- * Buying and selling CRDB against the treasury's holding.
+ * Buying and selling a tokenised DSE share against the treasury's holding.
+ *
+ * Written for CRDB first and now keyed by symbol: every registered DSE
+ * security with a token trades the same way.
  *
  * Nothing about this touches a swap or a chain transaction. Shillings are
  * already the settlement currency, the price is already quoted in shillings,
@@ -22,7 +26,8 @@ import { CRDBT, CRDBT_DECIMALS, CRDBT_SECURITY } from "./assets";
  * than inferred from what the ledger thinks it has sold.
  */
 
-/** Share quantities carry the token's precision; anything finer is not real. */
+/** Share quantities carry the token's precision; anything finer is not real.
+ *  Every DSE token is created at 8 decimals, so one precision serves all. */
 const QTY_DP = CRDBT_DECIMALS;
 /** Shillings are quoted whole by DSE but balances keep two places. */
 const TZS_DP = 2;
@@ -31,9 +36,11 @@ const roundTo = (n: number, dp: number) => Math.round(n * 10 ** dp) / 10 ** dp;
 /** Round a quantity *down*, so a rounding step can never sell what is not held. */
 const floorTo = (n: number, dp: number) => Math.floor(n * 10 ** dp) / 10 ** dp;
 
-export type CrdbMarket = {
+export type DseMarket = {
   symbol: string;
   name: string;
+  logo: string | null;
+  status: string;
   /** Shillings per share, from the oracle. */
   price: number;
   /** False when the mark has aged past the contract's window. */
@@ -52,39 +59,51 @@ export type CrdbMarket = {
   haltReason: string | null;
 };
 
+/** Kept for callers that still name the old type. */
+export type CrdbMarket = DseMarket;
+
 /** Tokens the treasury holds, in whole shares. */
-async function treasuryShares(): Promise<number> {
+async function treasuryShares(sec: DseSecurity): Promise<number> {
   const addr = treasuryAddress();
   if (!addr) return 0;
   const raw = await publicClient.readContract({
-    address: CRDBT, abi: b20Abi, functionName: "balanceOf", args: [addr],
+    address: sec.token, abi: b20Abi, functionName: "balanceOf", args: [addr],
   });
-  return Number(formatUnits(raw as bigint, CRDBT_DECIMALS));
+  return Number(formatUnits(raw as bigint, sec.decimals));
 }
 
-export async function crdbMarket(): Promise<CrdbMarket> {
+export async function dseMarket(symbol: string): Promise<DseMarket | null> {
+  const sec = await dseSecurity(symbol);
+  if (!sec) return null;
+  const S = sec.symbol;
+
   // Kicked off, never awaited: whoever loaded this page is not waiting on a
   // chain write, and the next reader gets the fresher mark.
-  refreshIfStale(CRDBT_SECURITY);
+  refreshIfStale(S);
 
   const [oracle, custodyShares, liabilities] = await Promise.all([
-    readOraclePrice(CRDBT_SECURITY).catch(() => null),
-    treasuryShares().catch(() => 0),
+    readOraclePrice(S).catch(() => null),
+    treasuryShares(sec).catch(() => 0),
     totalLiabilities().catch(() => []),
   ]);
 
-  const clientShares = liabilities.find((l) => l.asset === CRDBT_SECURITY)?.amount ?? 0;
+  const clientShares = liabilities.find((l) => l.asset === S)?.amount ?? 0;
   const availableShares = Math.max(0, floorTo(custodyShares - clientShares, QTY_DP));
 
   let haltReason: string | null = null;
-  if (!oracle) haltReason = "No price has been published for CRDB yet.";
-  else if (!oracle.fresh) haltReason = "The CRDB price is stale — the exchange has not printed recently enough to trade against.";
-  else if (!(oracle.price > 0)) haltReason = "The published CRDB price is zero.";
-  else if (custodyShares <= 0) haltReason = "No CRDB shares are held in custody.";
+  // Going live is CAPX's decision on the desk; until then nobody can buy.
+  if (sec.status !== "live") haltReason = sec.status === "suspended"
+    ? `${S} trading is suspended.` : `${S} is not open for trading yet.`;
+  else if (!oracle) haltReason = `No price has been published for ${S} yet.`;
+  else if (!oracle.fresh) haltReason = `The ${S} price is stale — the exchange has not printed recently enough to trade against.`;
+  else if (!(oracle.price > 0)) haltReason = `The published ${S} price is zero.`;
+  else if (custodyShares <= 0) haltReason = `No ${S} shares are held in custody.`;
 
   return {
-    symbol: CRDBT_SECURITY,
-    name: "CRDB Bank Plc",
+    symbol: S,
+    name: sec.name,
+    logo: sec.logo,
+    status: sec.status,
     price: oracle?.price ?? 0,
     fresh: oracle?.fresh ?? false,
     updatedAt: oracle?.updatedAt ?? null,
@@ -96,6 +115,11 @@ export async function crdbMarket(): Promise<CrdbMarket> {
     tradable: haltReason === null,
     haltReason,
   };
+}
+
+/** CRDB's market. Always present, since CRDB has a fallback registration. */
+export async function crdbMarket(): Promise<DseMarket> {
+  return (await dseMarket(CRDBT_SECURITY))!;
 }
 
 export type Quote = {

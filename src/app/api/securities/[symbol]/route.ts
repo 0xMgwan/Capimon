@@ -1,23 +1,24 @@
 import { NextResponse } from "next/server";
-import { crdbMarket } from "@/lib/dseTrading";
+import { dseMarket } from "@/lib/dseTrading";
 import { dseQuote, currentPrice } from "@/lib/dse";
-import { CRDBT_SECURITY } from "@/lib/assets";
 
 export const dynamic = "force-dynamic";
 
 /**
- * The CRDB market, as a customer sees it.
+ * One DSE security's market, as a customer sees it.
  *
  * Both prices are reported: the oracle's, which is what a trade actually
  * settles at, and DSE's latest print, which is where that figure came from.
  * Showing only one would hide the gap between them on a day the publisher has
  * not caught up yet, and that gap is the thing worth seeing.
  */
-export async function GET() {
+export async function GET(_req: Request, { params }: { params: Promise<{ symbol: string }> }) {
+  const { symbol } = await params;
   const [market, dse] = await Promise.all([
-    crdbMarket(),
-    dseQuote(CRDBT_SECURITY).catch(() => null),
+    dseMarket(symbol),
+    dseQuote(symbol.toUpperCase()).catch(() => null),
   ]);
+  if (!market) return NextResponse.json({ ok: false, code: "not_found" }, { status: 404 });
 
   return NextResponse.json(
     {

@@ -1,0 +1,27 @@
+import { NextResponse } from "next/server";
+import { dseSecurities } from "@/lib/dseSecurities";
+import { dseQuote, currentPrice } from "@/lib/dse";
+import { FEE_BPS, feeEnabled } from "@/lib/fees";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Every tokenised DSE share customers can see, with today's price.
+ *
+ * Drafts are left out: a security CAPX has not taken live is not something a
+ * customer should find in a list. Priced from DSE directly because this feeds
+ * pickers and tickers; the oracle price a trade settles at is on the
+ * per-security route.
+ */
+export async function GET() {
+  const list = (await dseSecurities()).filter((s) => s.status !== "draft");
+  const securities = await Promise.all(list.map(async (s) => {
+    const q = await dseQuote(s.symbol).catch(() => null);
+    return {
+      symbol: s.symbol, name: s.name, logo: s.logo, status: s.status,
+      price: q ? currentPrice(q) : 0, changePct: q?.changePct ?? 0, tradeDate: q?.tradeDate ?? null,
+      feeBps: feeEnabled ? FEE_BPS : 0,
+    };
+  }));
+  return NextResponse.json({ ok: true, securities }, { headers: { "cache-control": "no-store" } });
+}

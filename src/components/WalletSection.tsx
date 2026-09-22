@@ -8,6 +8,7 @@ import { usd, ledgerAmount } from "@/lib/format";
 import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 import { AssetPicker } from "./AssetPicker";
+import { useDse, dseLogoOf } from "@/lib/useDse";
 import { useMarkets } from "@/lib/useMarkets";
 import { useVenues } from "@/lib/useVenues";
 import { useT } from "@/lib/i18n";
@@ -68,6 +69,7 @@ export function WalletSection({ holdings }: {
   // Buying and selling start from the same searchable list the ticket uses, so
   // choosing a company never means a trip to the markets index and back.
   const { data: marketData } = useMarkets();
+  const dse = useDse();
   const { venues } = useVenues();
   const buyable = useMemo(() => {
     const rank = (sym: string) => (venues[sym]?.tradeable ? 0 : 1);
@@ -604,7 +606,7 @@ export function WalletSection({ holdings }: {
                       glyph: bought ? "↗" : "↘", asset: tr.asset,
                       title: `${bought ? t("Bought") : t("Sold")} ${tr.asset}`,
                       sub: tr.price
-                        ? `${tr.price.toLocaleString()} ${tr.asset === "CRDB" ? "TZS" : "USD"} a share`
+                        ? `${tr.price.toLocaleString()} ${dseLogoOf(dse, tr.asset) !== undefined ? "TZS" : "USD"} a share`
                         : null,
                       main: `${bought ? "−" : "+"}${tr.cash.toLocaleString("en-TZ", { maximumFractionDigits: 2 })} TZS`,
                       extra: `${bought ? "+" : "−"}${tr.qty.toLocaleString("en-US", { maximumFractionDigits: 8 })} ${tr.asset}`,
@@ -620,9 +622,9 @@ export function WalletSection({ holdings }: {
                   <div key={row.key} className="flex items-center gap-3 px-5 py-3.5">
                     {row.asset ? (
                       <AssetLogo
-                        logo={row.asset === "CRDB" ? "/crdb.jpg" : marketData?.markets.find((m) => m.symbol === row.asset)?.logo ?? null}
+                        logo={dseLogoOf(dse, row.asset) !== undefined ? dseLogoOf(dse, row.asset) ?? null : marketData?.markets.find((m) => m.symbol === row.asset)?.logo ?? null}
                         ticker={row.asset}
-                        color={row.asset === "CRDB" ? "#0B7D3E" : marketData?.markets.find((m) => m.symbol === row.asset)?.color ?? "#888"}
+                        color={dseLogoOf(dse, row.asset) !== undefined ? "#0B7D3E" : marketData?.markets.find((m) => m.symbol === row.asset)?.color ?? "#888"}
                         size={32}
                       />
                     ) : (

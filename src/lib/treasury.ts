@@ -409,17 +409,22 @@ export async function treasuryHoldings() {
    * and again in the admin holdings table, because each caller was working the
    * answer out for itself. It belongs here, once, where they all read it.
    */
-  try {
-    const { CRDBT, CRDBT_DECIMALS, CRDBT_SECURITY } = await import("./assets");
-    const raw = await publicClient.readContract({
-      address: CRDBT, abi: b20Abi, functionName: "balanceOf", args: [address],
-    });
-    const qty = Number(formatUnits(raw as bigint, CRDBT_DECIMALS));
-    if (qty > 0) holdings.push({ asset: CRDBT_SECURITY, qty });
-  } catch {
-    // A token that cannot be read is omitted rather than reported as zero:
-    // zero is a claim about the balance, and an unreadable one is not.
-  }
+  // Every tokenised DSE share, not only CRDB: a listing added on the desk has
+  // to count here the moment its first tokens are minted.
+  const { dseSecurities } = await import("./dseSecurities");
+  const dse = await dseSecurities().catch(() => []);
+  await Promise.all(dse.map(async (sec) => {
+    try {
+      const raw = await publicClient.readContract({
+        address: sec.token, abi: b20Abi, functionName: "balanceOf", args: [address],
+      });
+      const qty = Number(formatUnits(raw as bigint, sec.decimals));
+      if (qty > 0) holdings.push({ asset: sec.symbol, qty });
+    } catch {
+      // A token that cannot be read is omitted rather than reported as zero:
+      // zero is a claim about the balance, and an unreadable one is not.
+    }
+  }));
 
   return { address, usdc: Number(formatUnits(usdc as bigint, 6)), holdings };
 }

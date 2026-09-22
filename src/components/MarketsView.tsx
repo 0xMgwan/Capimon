@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useMemo, useState } from "react";
-import { useCrdb, matchesCrdb } from "@/lib/useCrdb";
+import { useDse, matchesDse } from "@/lib/useDse";
+import { DseLogo } from "./DseLogo";
 import { KycPrompt } from "./KycPrompt";
 import { useMarkets } from "@/lib/useMarkets";
 import { MarketTable } from "./MarketTable";
@@ -19,6 +19,9 @@ export function MarketsView() {
   const { data, error } = useMarkets();
   /** Shared with the table below, so one search filters both lists. */
   const [query, setQuery] = useState("");
+  // Every tokenised DSE share, filtered by the same search as the table, so a
+  // listing that ignores the filter never reads as a bug.
+  const dseShown = useDse().filter((d) => matchesDse(d, query));
   const markets = useMemo(() => data?.markets ?? [], [data]);
 
   const { gainers, losers, sectors } = useMemo(() => {
@@ -81,24 +84,31 @@ export function MarketsView() {
       {/* Hidden when the search is looking for something else. A listing that
           ignores the filter above it reads as a bug, and CRDB was the one row
           that never disappeared. */}
-      {matchesCrdb(query) && (
+      {dseShown.length > 0 && (
       <Reveal delay={0.04} className="mt-8">
-        <Link
-          href="/markets/crdb"
-          className="flex items-center gap-4 rounded-2xl border hairline p-4 transition-colors hover:surface sm:p-5"
-        >
-          <Image src="/crdb.jpg" alt="" width={44} height={44} className="shrink-0 rounded-full object-cover" />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-baseline gap-x-2">
-              <span className="font-medium">CRDB Bank Plc</span>
-              <span className="eyebrow">{t("Dar es Salaam")}</span>
-            </div>
-            <p className="mt-0.5 truncate text-[12px] text-[var(--muted)]">
-              {t("Buy Tanzanian shares in shillings, settled in nTZS")}
-            </p>
-          </div>
-          <CrdbTag />
-        </Link>
+        <div className="eyebrow mb-2">{t("Dar es Salaam Stock Exchange")}</div>
+        <div className="grid gap-2">
+          {dseShown.map((d) => (
+            <Link
+              key={d.symbol}
+              href={`/markets/${d.symbol.toLowerCase()}`}
+              className="flex items-center gap-4 rounded-2xl border hairline p-4 transition-colors hover:surface sm:p-5"
+            >
+              <DseLogo logo={d.logo} symbol={d.symbol} size={44} />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="font-medium">{d.name}</span>
+                  <span className="eyebrow">{d.symbol}</span>
+                  {d.status === "suspended" && <span className="text-[10px] text-[var(--color-down)]">{t("suspended")}</span>}
+                </div>
+                <p className="mt-0.5 truncate text-[12px] text-[var(--muted)]">
+                  {t("Buy Tanzanian shares in shillings, settled in nTZS")}
+                </p>
+              </div>
+              <DseTag price={d.price} changePct={d.changePct} />
+            </Link>
+          ))}
+        </div>
       </Reveal>
       )}
 
@@ -182,10 +192,10 @@ function MoverCard({ title, rows }: { title: string; rows: ReturnType<typeof use
   );
 }
 
-/** The live CRDB mark, so the card is not just a link to find out. */
-function CrdbTag() {
-  const d = useCrdb();
-  if (!d) return <div className="h-8 w-20 shrink-0 animate-pulse rounded surface" />;
+/** The live DSE mark, so the card is not just a link to find out. */
+function DseTag({ price, changePct }: { price: number; changePct: number }) {
+  if (!(price > 0)) return <div className="h-8 w-20 shrink-0 animate-pulse rounded surface" />;
+  const d = { price, changePct };
   const up = d.changePct >= 0;
   return (
     <div className="shrink-0 text-right">

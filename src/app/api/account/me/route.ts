@@ -32,12 +32,17 @@ export async function GET() {
      * customer would see the shares they just bought valued at zero, and the
      * portfolio total would quietly omit them.
      */
-    const [bal, markets, entries, costs, crdbTzs, tzsRate] = await Promise.all([
+    const { dseSecurities } = await import("@/lib/dseSecurities");
+    const dse = await dseSecurities().catch(() => []);
+    const [bal, markets, entries, costs, dseTzs, tzsRate] = await Promise.all([
       balances(user.id),
       getMarkets({ depth: 2 }),
       history(user.id, 50),
       positionCosts(user.id),
-      import("@/lib/oracle").then((m) => m.readOraclePrice("CRDB")).then((q) => q?.price ?? 0).catch(() => 0),
+      // Every DSE share's shilling price, keyed by symbol.
+      import("@/lib/oracle").then((m) => Promise.all(dse.map(async (d) =>
+        [d.symbol, (await m.readOraclePrice(d.symbol).catch(() => null))?.price ?? 0] as const)))
+        .then((pairs) => new Map(pairs)).catch(() => new Map<string, number>()),
       ntzsConfigured
         ? getSwapRate("NTZS", "USDC", 100_000)
             .then((r) => { const o = Number(r.expectedOutput ?? 0); return o > 0 ? o / 100_000 : 0; })
@@ -45,8 +50,11 @@ export async function GET() {
         : Promise.resolve(0),
     ]);
 
-    /** CRDB in dollars, so one equity total can hold both markets. */
-    const crdbUsd = crdbTzs > 0 && tzsRate > 0 ? crdbTzs * tzsRate : 0;
+    /** A DSE share in dollars, so one equity total can hold both markets. */
+    const dseUsd = (sym: string) => {
+      const p = dseTzs.get(sym) ?? 0;
+      return p > 0 && tzsRate > 0 ? p * tzsRate : 0;
+    };
 
     // Shilling accounts hold TZS; a legacy USDC balance is still shown.
     const tzs = bal.find((b) => b.asset === "TZS")?.amount ?? 0;
@@ -64,8 +72,8 @@ export async function GET() {
       .filter((b) => b.asset !== "USDC" && b.asset !== "TZS" && Math.abs(b.amount) >= DUST)
       .map((b) => {
         const m = markets.find((x) => x.symbol === b.asset);
-        const isCrdb = b.asset === "CRDB";
-        const price = isCrdb ? crdbUsd : m?.price ?? 0;
+        const d = dse.find((x) => x.symbol === b.asset);
+        const price = d ? dseUsd(b.asset) : m?.price ?? 0;
         // What it cost against what it is worth — the question a holdings
         // list on its own cannot answer.
         const cost = costs.get(b.asset);
@@ -82,10 +90,12 @@ export async function GET() {
         const value = b.amount * price;
         return {
           symbol: b.asset,
-          ticker: isCrdb ? "CRDB" : m?.ticker ?? b.asset,
-          name: isCrdb ? "CRDB Bank Plc" : m?.name ?? b.asset,
-          color: isCrdb ? "#0B7D3E" : m?.color ?? "#888",
-          logo: isCrdb ? "/crdb.jpg" : m?.logo ?? null,
+          ticker: d ? d.symbol : m?.ticker ?? b.asset,
+          name: d ? d.name : m?.name ?? b.asset,
+          color: d ? "#0B7D3E" : m?.color ?? "#888",
+          logo: d ? d.logo : m?.logo ?? null,
+          // Where the position trades, so the client links to the right page.
+          market: d ? "dse" : "us",
           qty: b.amount, price, value, change: m?.change ?? 0,
           avgCost: avgCostUsd,
           // Also in what was actually paid, so a shilling account can be shown

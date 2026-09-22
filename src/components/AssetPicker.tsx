@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import Image from "next/image";
 import { motion, AnimatePresence } from "motion/react";
 import type { Market } from "@/lib/useMarkets";
 import type { Venue } from "@/lib/useVenues";
@@ -11,7 +10,8 @@ import { AssetLogo } from "./AssetLogo";
 import { Sparkline } from "./Sparkline";
 import { usd } from "@/lib/format";
 import { useBodyLock } from "@/lib/useBodyLock";
-import { useCrdb, matchesCrdb } from "@/lib/useCrdb";
+import { useDse, matchesDse, type DseListing } from "@/lib/useDse";
+import { DseLogo } from "./DseLogo";
 import { useT } from "@/lib/i18n";
 
 /**
@@ -20,19 +20,20 @@ import { useT } from "@/lib/i18n";
  * takes the user away from the amount they just chose.
  */
 export function AssetPicker({
-  markets, venues, selected, onSelect, trigger, crdbSelected = false, onSelectCrdb,
+  markets, venues, selected, onSelect, trigger, dseSelected = null, onSelectDse,
 }: {
   markets: Market[];
   venues: Record<string, Venue>;
   selected?: Market;
   onSelect: (ticker: string) => void;
   /**
-   * A ticket that can price CRDB itself passes this, and the CRDB row becomes
-   * a selection instead of a link away. Tickets that only know the dollar
-   * swap leave it out and keep the link.
+   * A ticket that can price DSE shares itself passes this, and each DSE row
+   * becomes a selection instead of a link to its page. Tickets that only know
+   * the dollar swap leave it out and keep the links.
    */
-  onSelectCrdb?: () => void;
-  crdbSelected?: boolean;
+  onSelectDse?: (symbol: string) => void;
+  /** The DSE symbol currently chosen, if the ticket is on one. */
+  dseSelected?: string | null;
   /**
    * Custom opener. Without it the picker draws its own select-style button,
    * which suits a ticket; a caller that already has a button of its own — "Buy
@@ -44,7 +45,7 @@ export function AssetPicker({
   const { t } = useT();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const crdb = useCrdb();
+  const dse = useDse();
   /*
    * Which way the popover opens.
    *
@@ -96,99 +97,66 @@ export function AssetPicker({
   }, [markets, venues, q]);
 
   /*
-   * CRDB is a link unless the ticket says it can price it.
+   * DSE shares are links unless the ticket says it can price them.
    *
    * The dollar ticket converts shillings to dollars and signs a swap — none of
-   * which CRDB does, so there it stays a link to its own page rather than a
-   * fake Chainlink market shaped to fit the row. The hero ticket prices CRDB
-   * in shillings directly and passes onSelectCrdb to make it a real choice.
+   * which a DSE share does, so there each stays a link to its own page rather
+   * than a fake Chainlink market shaped to fit the row. The hero ticket prices
+   * them in shillings directly and passes onSelectDse to make them choices.
    */
-  const showCrdb = matchesCrdb(q);
+  const dseRows = dse.filter((d) => matchesDse(d, q));
+
+  const dseRow = (d: DseListing) => {
+    const inner = (
+      <>
+        <DseLogo logo={d.logo} symbol={d.symbol} size={34} />
+        <span className="min-w-0 flex-1">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate text-sm font-medium">{d.symbol}</span>
+            <span className="shrink-0 rounded-full bg-[var(--color-up)]/12 px-1.5 py-0.5 text-[10px] text-[var(--color-up)]">
+              {t("Shillings")}
+            </span>
+          </span>
+          <span className="block truncate text-[11px] text-[var(--muted)]">{d.name} · Dar es Salaam</span>
+        </span>
+        {/* The same figures every other row carries, so the list reads as one
+            list rather than prices and a link. */}
+        <span className="shrink-0 text-right">
+          {d.price > 0 ? (
+            <>
+              <span className="tnum block text-sm">
+                {d.price.toLocaleString("en-TZ", { maximumFractionDigits: 0 })}
+                <span className="ml-1 text-[10px] font-normal text-[var(--muted)]">TZS</span>
+              </span>
+              <span className={`tnum block text-[11px] ${
+                d.changePct >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                {d.changePct >= 0 ? "+" : ""}{d.changePct.toFixed(2)}%
+              </span>
+            </>
+          ) : (
+            <span className="text-[11px] text-[var(--muted)]">Open →</span>
+          )}
+        </span>
+      </>
+    );
+    const cls = `flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
+      dseSelected === d.symbol ? "surface" : "hover:surface"}`;
+    return onSelectDse ? (
+      <button key={d.symbol} onClick={() => { onSelectDse(d.symbol); setOpen(false); }} className={cls}>{inner}</button>
+    ) : (
+      <Link key={d.symbol} href={`/markets/${d.symbol.toLowerCase()}`} onClick={() => setOpen(false)} className={cls}>{inner}</Link>
+    );
+  };
 
   const list = (
     <div className="scroll-thin max-h-[52vh] overflow-y-auto overscroll-contain p-1.5">
-      {rows.length === 0 && !showCrdb && (
+      {rows.length === 0 && dseRows.length === 0 && (
         <p className="px-3 py-6 text-center text-sm text-[var(--muted)]">No company matches “{q}”.</p>
       )}
-      {showCrdb && (onSelectCrdb ? (
-        <button
-          onClick={() => { onSelectCrdb(); setOpen(false); }}
-          className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
-            crdbSelected ? "surface" : "hover:surface"
-          }`}
-        >
-          <Image src="/crdb.jpg" alt="" width={34} height={34} className="shrink-0 rounded-full object-cover" />
-          <span className="min-w-0 flex-1">
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-sm font-medium">CRDB</span>
-              <span className="shrink-0 rounded-full bg-[var(--color-up)]/12 px-1.5 py-0.5 text-[10px] text-[var(--color-up)]">
-                {t("Shillings")}
-              </span>
-            </span>
-            <span className="block truncate text-[11px] text-[var(--muted)]">
-              CRDB Bank Plc · Dar es Salaam
-            </span>
-          </span>
-          {/* The same three figures every other row carries, so the list reads
-              as one list rather than twelve prices and a link. */}
-          <span className="shrink-0 text-right">
-            {crdb ? (
-              <>
-                <span className="tnum block text-sm">
-                  {crdb.price.toLocaleString("en-TZ", { maximumFractionDigits: 0 })}
-                  <span className="ml-1 text-[10px] font-normal text-[var(--muted)]">TZS</span>
-                </span>
-                <span className={`tnum block text-[11px] ${
-                  crdb.changePct >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
-                  {crdb.changePct >= 0 ? "+" : ""}{crdb.changePct.toFixed(2)}%
-                </span>
-              </>
-            ) : (
-              <span className="text-[11px] text-[var(--muted)]">Open →</span>
-            )}
-          </span>
-        </button>
-      ) : (
-        <Link
-          href="/markets/crdb"
-          onClick={() => setOpen(false)}
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:surface"
-        >
-          <Image src="/crdb.jpg" alt="" width={34} height={34} className="shrink-0 rounded-full object-cover" />
-          <span className="min-w-0 flex-1">
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-sm font-medium">CRDB</span>
-              <span className="shrink-0 rounded-full bg-[var(--color-up)]/12 px-1.5 py-0.5 text-[10px] text-[var(--color-up)]">
-                {t("Shillings")}
-              </span>
-            </span>
-            <span className="block truncate text-[11px] text-[var(--muted)]">
-              CRDB Bank Plc · Dar es Salaam
-            </span>
-          </span>
-          {/* The same three figures every other row carries, so the list reads
-              as one list rather than twelve prices and a link. */}
-          <span className="shrink-0 text-right">
-            {crdb ? (
-              <>
-                <span className="tnum block text-sm">
-                  {crdb.price.toLocaleString("en-TZ", { maximumFractionDigits: 0 })}
-                  <span className="ml-1 text-[10px] font-normal text-[var(--muted)]">TZS</span>
-                </span>
-                <span className={`tnum block text-[11px] ${
-                  crdb.changePct >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
-                  {crdb.changePct >= 0 ? "+" : ""}{crdb.changePct.toFixed(2)}%
-                </span>
-              </>
-            ) : (
-              <span className="text-[11px] text-[var(--muted)]">Open →</span>
-            )}
-          </span>
-        </Link>
-      ))}
+      {dseRows.map(dseRow)}
       {rows.map((m) => {
         const v = venues[m.symbol];
-        const active = !crdbSelected && selected?.symbol === m.symbol;
+        const active = !dseSelected && selected?.symbol === m.symbol;
         return (
           <button
             key={m.symbol}
@@ -246,25 +214,28 @@ export function AssetPicker({
         aria-expanded={open}
         className="flex w-full items-center gap-3 rounded-2xl border hairline px-4 py-3 text-left transition-colors hover:border-[var(--color-accent)]"
       >
-        {crdbSelected ? (
+        {dseSelected ? (() => {
+          const d = dse.find((x) => x.symbol === dseSelected);
+          return (
           <>
-            <Image src="/crdb.jpg" alt="" width={38} height={38} className="shrink-0 rounded-full object-cover" />
+            <DseLogo logo={d?.logo ?? (dseSelected === "CRDB" ? "/crdb.jpg" : null)} symbol={dseSelected} size={38} />
             <span className="min-w-0 flex-1">
-              <span className="block text-[15px] font-medium leading-tight">CRDB</span>
-              <span className="block truncate text-xs text-[var(--muted)]">CRDB Bank Plc · DSE</span>
+              <span className="block text-[15px] font-medium leading-tight">{dseSelected}</span>
+              <span className="block truncate text-xs text-[var(--muted)]">{d?.name ?? dseSelected} · DSE</span>
             </span>
             <span className="tnum shrink-0 text-right">
               <span className="block text-[15px]">
-                {crdb ? `TSh ${crdb.price.toLocaleString("en-TZ", { maximumFractionDigits: 0 })}` : "—"}
+                {d && d.price > 0 ? `TSh ${d.price.toLocaleString("en-TZ", { maximumFractionDigits: 0 })}` : "—"}
               </span>
-              {crdb && (
-                <span className={`block text-[11px] ${crdb.changePct >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
-                  {crdb.changePct >= 0 ? "+" : ""}{crdb.changePct.toFixed(2)}%
+              {d && d.price > 0 && (
+                <span className={`block text-[11px] ${d.changePct >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                  {d.changePct >= 0 ? "+" : ""}{d.changePct.toFixed(2)}%
                 </span>
               )}
             </span>
           </>
-        ) : selected ? (
+          );
+        })() : selected ? (
           <>
             <AssetLogo logo={selected.logo} ticker={selected.ticker} color={selected.color} size={38} />
             <span className="min-w-0 flex-1">

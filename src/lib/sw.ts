@@ -386,4 +386,6 @@ export const SW: Record<string, string> = {
   "Choose your bank": "Chagua benki yako",
   "Mobile money": "Pesa ya simu",
   "Bank": "Benki",
+  "Listed on the Dar es Salaam Stock Exchange. One {sym}t is one share, held in custody and settled in shillings.": "Imeorodheshwa kwenye Soko la Hisa la Dar es Salaam. {sym}t moja ni hisa moja, inashikiliwa kwa dhamana na hulipwa kwa shilingi.",
+  "suspended": "imesimamishwa",
 };

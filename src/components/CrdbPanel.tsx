@@ -1,15 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { useT } from "@/lib/i18n";
 import { haptic } from "@/lib/haptics";
 import { NtzsIcon } from "./icons/Ntzs";
+import { DseLogo } from "./DseLogo";
 
 /**
- * Buying and selling CRDB.
+ * Buying and selling a tokenised DSE share — CRDB first, now any listing.
  *
  * Kept apart from the US ticket rather than folded into it. That panel's whole
  * shape is about converting shillings into dollars and living with slippage;
@@ -20,7 +20,7 @@ import { NtzsIcon } from "./icons/Ntzs";
  */
 
 type Market = {
-  symbol: string; name: string; price: number; fresh: boolean;
+  symbol: string; name: string; logo: string | null; price: number; fresh: boolean;
   updatedAt: string | null; source: string | null;
   custodyShares: number; clientShares: number; availableShares: number;
   feeBps: number; tradable: boolean; haltReason: string | null;
@@ -39,7 +39,7 @@ const PRESETS = [5_000, 20_000, 50_000, 100_000];
 const fmtQty = (n: number) =>
   n.toLocaleString("en-US", { maximumFractionDigits: 8 });
 
-export function CrdbPanel() {
+export function CrdbPanel({ symbol = "CRDB" }: { symbol?: string }) {
   const { t } = useT();
   const { account, refresh } = useCapimonAccount();
   const [data, setData] = useState<{ market: Market; dse: Dse } | null>(null);
@@ -51,11 +51,11 @@ export function CrdbPanel() {
   const [msg, setMsg] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
 
   const load = useCallback(() => {
-    fetch("/api/securities/crdb")
+    fetch(`/api/securities/${encodeURIComponent(symbol.toLowerCase())}`)
       .then((r) => r.json())
       .then((d) => { if (d.ok) setData({ market: d.market, dse: d.dse }); })
       .catch(() => { /* the panel keeps its last good figures */ });
-  }, []);
+  }, [symbol]);
 
   /*
    * Arriving from the hero ticket with an amount already chosen.
@@ -83,7 +83,7 @@ export function CrdbPanel() {
 
   const m = data?.market;
   const price = m?.price ?? 0;
-  const held = account?.positions.find((p) => p.symbol === "CRDB")?.qty ?? 0;
+  const held = account?.positions.find((p) => p.symbol === symbol)?.qty ?? 0;
   const tzsBalance = account?.tzs ?? 0;
 
   const n = Number(raw.replace(/,/g, "")) || 0;
@@ -128,6 +128,7 @@ export function CrdbPanel() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          security: symbol,
           side,
           amount: side === "buy" ? quote.spend : quote.qty,
         }),
@@ -141,8 +142,8 @@ export function CrdbPanel() {
         setMsg({
           tone: "ok",
           text: side === "buy"
-            ? `Bought ${fmtQty(d.qty)} CRDB for ${tzs.format(d.tzs)} TZS.`
-            : `Sold ${fmtQty(d.qty)} CRDB for ${tzs.format(d.tzs)} TZS.`,
+            ? `Bought ${fmtQty(d.qty)} ${symbol} for ${tzs.format(d.tzs)} TZS.`
+            : `Sold ${fmtQty(d.qty)} ${symbol} for ${tzs.format(d.tzs)} TZS.`,
         });
         setRaw("");
         await refresh();
@@ -158,9 +159,9 @@ export function CrdbPanel() {
   return (
     <div className="rounded-3xl border hairline p-5 sm:p-6">
       <div className="flex items-center gap-3">
-        <Image src="/crdb.jpg" alt="" width={40} height={40} className="rounded-full object-cover" />
+        <DseLogo logo={m?.logo ?? (symbol === "CRDB" ? "/crdb.jpg" : null)} symbol={symbol} size={40} />
         <div className="min-w-0">
-          <div className="text-lg font-medium leading-tight">CRDB Bank Plc</div>
+          <div className="text-lg font-medium leading-tight">{m?.name ?? symbol}</div>
           <div className="text-[11px] text-[var(--muted)]">{t("Dar es Salaam Stock Exchange")}</div>
         </div>
         <div className="ml-auto text-right">
@@ -281,7 +282,7 @@ export function CrdbPanel() {
 
       {quote && quote.qty > 0 && (
         <dl className="mt-4 space-y-1.5 rounded-2xl surface px-4 py-3 text-[12px]">
-          <Row label={t(side === "buy" ? "Shares" : "Shares sold")} value={`${fmtQty(quote.qty)} CRDB`} />
+          <Row label={t(side === "buy" ? "Shares" : "Shares sold")} value={`${fmtQty(quote.qty)} ${symbol}`} />
           <Row label={t("Price")} value={`${tzs.format(price)} TZS`} />
           {quote.fee > 0 && (
             <Row label={`Fee (${((m?.feeBps ?? 0) / 100).toFixed(2)}%)`} value={`${tzs2.format(quote.fee)} TZS`} />
@@ -310,10 +311,10 @@ export function CrdbPanel() {
           </Link>
         </div>
       )}
-      {tooFew && <Warn>You hold {fmtQty(held)} CRDB.</Warn>}
+      {tooFew && <Warn>You hold {fmtQty(held)} {symbol}.</Warn>}
       {tooMany && m && (
         <Warn>
-          Only {fmtQty(m.availableShares)} CRDB available. The rest of the custody position is
+          Only {fmtQty(m.availableShares)} {symbol} available. The rest of the custody position is
           already held by other customers.
         </Warn>
       )}
@@ -323,7 +324,7 @@ export function CrdbPanel() {
         disabled={blocked}
         className="mt-4 w-full rounded-full bg-[var(--fg)] py-3 text-[14px] font-medium text-[var(--bg)] disabled:opacity-40"
       >
-        {t(busy ? "Placing…" : side === "buy" ? "Buy CRDB" : "Sell CRDB")}
+        {busy ? t("Placing…") : `${t(side === "buy" ? "Buy" : "Sell")} ${symbol}`}
       </button>
 
       {msg && (

@@ -21,10 +21,12 @@ export async function GET() {
       select symbol, name, token_address, decimals, chain_id, status, metadata
         from capx.securities order by symbol`;
 
-    const securities = await Promise.all(rows.map(async (r) => ({
-      ...r,
-      backing: await backing(r.symbol),
-    })));
+    const securities = await Promise.all(rows.map(async (r) => {
+      // The logo is served on its own route; inlining it would put tens of
+      // kilobytes of base64 into every read of this list.
+      const { logo, ...metadata } = (r.metadata ?? {}) as Record<string, unknown>;
+      return { ...r, metadata, hasLogo: !!logo, backing: await backing(r.symbol) };
+    }));
 
     return NextResponse.json({ ok: true, securities }, { headers: { "cache-control": "no-store" } });
   } catch (e) {

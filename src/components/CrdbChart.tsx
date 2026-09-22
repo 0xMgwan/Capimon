@@ -6,7 +6,7 @@ import type { Candle } from "@/lib/markets";
 import { useT } from "@/lib/i18n";
 
 /**
- * CRDB's price history, one point per session the exchange printed.
+ * A DSE security's price history, one point per session the exchange printed.
  *
  * No "1D" range: DSE prints once a day, so an intraday view would either be a
  * single point or a line through prices that were never quoted. The ranges
@@ -17,18 +17,18 @@ const TZS_RANGES = ["1W", "1M", "ALL"] as const;
 const fmt = (n: number) =>
   `${Math.round(n).toLocaleString("en-TZ")} TZS`;
 
-export function CrdbChart() {
+export function CrdbChart({ symbol = "CRDB" }: { symbol?: string }) {
   const { t } = useT();
   const [candles, setCandles] = useState<Candle[] | null>(null);
 
   useEffect(() => {
     let alive = true;
-    fetch("/api/securities/crdb/history")
+    fetch(`/api/securities/${encodeURIComponent(symbol.toLowerCase())}/history`)
       .then((r) => r.json())
       .then((d) => { if (alive && d.ok) setCandles(d.candles ?? []); })
       .catch(() => { if (alive) setCandles([]); });
     return () => { alive = false; };
-  }, []);
+  }, [symbol]);
 
   if (candles === null) {
     return <div className="h-[240px] animate-pulse rounded-3xl surface sm:h-[320px]" />;

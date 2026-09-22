@@ -333,7 +333,8 @@ export const SW: Record<string, string> = {
   "Tanzania’s largest bank by assets, listed on the Dar es Salaam Stock Exchange. One CRDBt is one share, held in custody and settled in shillings.":
     "Benki kubwa kuliko zote Tanzania kwa mali, iliyoorodheshwa kwenye Soko la Hisa la Dar es Salaam. CRDBt moja ni hisa moja, inashikiliwa kwa dhamana na hulipwa kwa shilingi.",
   // Landing reorder, CRDB quick buy and bank-transfer deposits.
-  "Tanzanian shares in shillings, settled the same day. US shares from the same account.": "Hisa za Tanzania kwa shilingi, zinalipwa siku hiyo hiyo. Hisa za Marekani kutoka akaunti hiyo hiyo.",
+  "Invest locally and globally. Buy and sell tokenized stocks 24/7.":
+    "Wekeza hapa nyumbani na duniani kote. Nunua na uza hisa za kidijitali saa 24/7.",
   "1 year": "Mwaka 1",
   "And beyond the DSE": "Na zaidi ya DSE",
   "Browse US equities": "Tazama hisa za Marekani",

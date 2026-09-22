@@ -1493,7 +1493,12 @@ function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone
           {hl > hq && hq > 0 && <p className="mt-2 text-[11px] text-[var(--color-down)]">Tokenised cannot exceed the shares held.</p>}
         </div>
       )}
-      {!asBroker && (
+      {external && f.tokenAddress && (
+        <p className="-mt-1 mb-3 text-[11px] text-[var(--muted)]">
+          Decimals are read from the token itself when this is saved, so they cannot be set wrong here.
+        </p>
+      )}
+      {!asBroker && !external && (
               <Field label="Decimals" v={f.decimals} on={(v) => setF({ ...f, decimals: v })} ph="8"
         hint="Read from the token itself when an address is given." />
       )}

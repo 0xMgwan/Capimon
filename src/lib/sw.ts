@@ -417,4 +417,6 @@ export const SW: Record<string, string> = {
   "Check it yourself": "Kagua mwenyewe",
   "For the curious: every company on CAPX has a public address where its shares can be counted. Tap one to see it.": "Kwa wadadisi: kila kampuni kwenye CAPX ina anwani ya umma ambapo hisa zake zinaweza kuhesabiwa. Bofya moja kuiona.",
   "These records live on Base, a public network. Nobody, including CAPX, can change what they say without everyone seeing.": "Rekodi hizi ziko kwenye Base, mtandao wa umma. Hakuna mtu, ikiwemo CAPX, anayeweza kubadilisha kilichoandikwa bila kila mtu kuona.",
+  "And more": "Na zaidi",
+  "US equities, from the same account": "Hisa za Marekani, kutoka akaunti hiyo hiyo",
 };

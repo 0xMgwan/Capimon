@@ -52,7 +52,7 @@ export function Hero() {
   const movers = [...(data?.markets ?? [])].sort((a, b) => Math.abs(b.change) - Math.abs(a.change)).slice(0, 2);
 
   return (
-    <section ref={ref} className="relative isolate flex min-h-[76vh] flex-col justify-center overflow-hidden [@supports(height:100svh)]:min-h-[76svh] sm:min-h-[88vh] sm:[@supports(height:100svh)]:min-h-[88svh]">
+    <section ref={ref} className="relative isolate flex flex-col justify-center overflow-hidden sm:min-h-[88vh] sm:[@supports(height:100svh)]:min-h-[88svh]">
       {/* Living mesh backdrop — cheap, GPU-only, and it never blocks the type. */}
       <div className="absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-[var(--bg)]" />
@@ -107,10 +107,19 @@ export function Hero() {
         * scroll below it. The empty half was the right size for it, and the
         * type is large enough that it loses nothing by giving up the space.
         */}
-      <div className="mx-auto w-full max-w-[1400px] px-5 pb-8 pt-8 sm:px-8 sm:pb-12 sm:pt-12">
-        <div className="grid items-center gap-8 lg:grid-cols-[1.15fr_minmax(360px,420px)] lg:gap-12">
+      {/*
+        * On a phone the first screen has one job: show the ticket whole.
+        *
+        * It used to open on a large headline and two full-width buttons, which
+        * pushed the ticket's result and its Review button below the fold — the
+        * page looked cropped. The headline is tighter there, the buttons are a
+        * single line of links, and the ticket runs compact. From tablet width
+        * the two sit side by side.
+        */}
+      <div className="mx-auto w-full max-w-[1400px] px-4 pb-6 pt-4 sm:px-8 sm:pb-12 sm:pt-12">
+        <div className="grid items-center gap-5 md:grid-cols-[1fr_minmax(330px,380px)] md:gap-8 lg:grid-cols-[1.15fr_minmax(360px,420px)] lg:gap-12">
           <div>
-            <h1 className="display text-[clamp(2.2rem,7.5vw,6.5rem)]">
+            <h1 className="display text-[clamp(2rem,9vw,6.5rem)] md:text-[clamp(2.4rem,6vw,6.5rem)]">
               <RevealWords text={t("Own the open")} />
               <br />
               <span className="contra">
@@ -121,15 +130,20 @@ export function Hero() {
             <motion.div
               initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.45, ease: [0.16, 1, 0.3, 1] }}
-              className="mt-6 flex flex-col gap-5 sm:mt-7"
+              className="mt-3 flex flex-col gap-3 sm:mt-7 sm:gap-5"
             >
               {/* Three lines said what one does. A hero is a claim, not a
                   summary — the detail has a whole page of its own. */}
-              <p className="max-w-md text-[17px] leading-snug text-[var(--muted)] sm:text-lg">
+              <p className="max-w-md text-[15px] leading-snug text-[var(--muted)] sm:text-lg">
                 {t("Tanzanian shares in shillings, settled the same day. US shares from the same account.")}
               </p>
 
-              <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+              {/* Phones: one line of links — the ticket below is the call to action. */}
+              <div className="flex items-center gap-5 text-sm font-medium sm:hidden">
+                <Link href="/markets" className="underline-offset-4 hover:underline">{t("Explore markets")} →</Link>
+                <Link href="/how-it-works" className="text-[var(--muted)] underline-offset-4 hover:underline">{t("How it works")}</Link>
+              </div>
+              <div className="hidden sm:flex sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
                 <Link
                   href="/markets"
                   className="group inline-flex items-center justify-center gap-2 rounded-full bg-[var(--fg)] px-6 py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95"

@@ -134,7 +134,7 @@ export function QuickBuy() {
   };
 
   return (
-            <div className="rounded-3xl border hairline bg-[var(--bg)]/70 p-4 shadow-sm backdrop-blur-sm sm:p-5">
+            <div className="rounded-3xl border hairline bg-[var(--bg)]/70 p-3.5 shadow-sm backdrop-blur-sm sm:p-5">
               {/* 1 — size */}
               <div className="flex items-center justify-between gap-2">
                 <div className="eyebrow flex items-center gap-1.5">
@@ -161,23 +161,23 @@ export function QuickBuy() {
                   </div>
                 )}
               </div>
-              <div className="mt-3 flex items-center gap-3 rounded-2xl border hairline px-4 py-3.5 focus-within:border-[var(--color-accent)]">
-                <span className="text-2xl text-[var(--muted)]">{inTzs ? "TSh" : "$"}</span>
+              <div className="mt-2.5 flex items-center gap-3 rounded-2xl border hairline px-4 py-2.5 focus-within:border-[var(--color-accent)] sm:mt-3 sm:py-3.5">
+                <span className="text-xl text-[var(--muted)] sm:text-2xl">{inTzs ? "TSh" : "$"}</span>
                 <input
                   value={custom || String(amount)}
                   onChange={(e) => onCustom(e.target.value)}
                   inputMode="decimal"
                   aria-label={inTzs ? "Amount in shillings" : "Amount in USDC"}
-                  className="tnum w-full bg-transparent text-2xl outline-none"
+                  className="tnum w-full bg-transparent text-xl outline-none sm:text-2xl"
                 />
                 {inTzs ? <NtzsIcon className="h-6 w-6 shrink-0" /> : <UsdcIcon className="h-6 w-6 shrink-0" />}
               </div>
-              <div className="mt-2.5 grid grid-cols-4 gap-2">
+              <div className="mt-2 grid grid-cols-4 gap-1.5 sm:mt-2.5 sm:gap-2">
                 {(inTzs ? PRESETS_TZS : PRESETS).map((p) => (
                   <button
                     key={p}
                     onClick={() => setPreset(p)}
-                    className={`tnum rounded-full border py-2 text-[13px] font-medium transition-all active:scale-95 ${
+                    className={`tnum rounded-full border py-1.5 text-[13px] font-medium transition-all active:scale-95 sm:py-2 ${
                       amount === p && !custom
                         ? "border-transparent bg-[var(--fg)] text-[var(--bg)]"
                         : "hairline hover:surface"
@@ -189,8 +189,8 @@ export function QuickBuy() {
               </div>
 
               {/* 2 — company */}
-              <div className="eyebrow mt-6">{t("Buy")}</div>
-              <div className="mt-3">
+              <div className="eyebrow mt-4 sm:mt-6">{t("Buy")}</div>
+              <div className="mt-2 sm:mt-3">
                 <AssetPicker
                   markets={markets} venues={venues} selected={selected ?? markets[0]}
                   onSelect={(tk) => {
@@ -209,7 +209,7 @@ export function QuickBuy() {
               </div>
 
               {/* 3 — receipt */}
-              <div className="mt-4 rounded-2xl surface p-4">
+              <div className="mt-3 rounded-2xl surface p-3 sm:mt-4 sm:p-4">
                 <div className="eyebrow">{t("You receive")} · {t("oracle-implied")}</div>
                 <AnimatePresence mode="popLayout">
                   <motion.div
@@ -218,7 +218,7 @@ export function QuickBuy() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
                     transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
-                    className={`tnum mt-1.5 flex items-center gap-2.5 text-3xl font-medium tracking-tight ${
+                    className={`tnum mt-1 flex items-center gap-2.5 text-2xl font-medium tracking-tight sm:mt-1.5 sm:text-3xl ${
                       tick === "up" ? "flash-up" : tick === "down" ? "flash-down" : ""
                     }`}
                   >
@@ -249,7 +249,7 @@ export function QuickBuy() {
               <button
                 onClick={go}
                 disabled={isCrdb ? !dse : !selected}
-                className="group mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--fg)] py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
+                className="group mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--fg)] py-3 text-sm font-medium text-[var(--bg)] sm:mt-4 sm:py-3.5 transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
               >
                 {t("Review")} {dsePick ?? selected?.ticker ?? ""} {t("order")}
                 <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
@@ -258,7 +258,7 @@ export function QuickBuy() {
               {/* The long version of this lived here and nobody read it. The
                   asset page gives a real executable quote; this line only has
                   to say that this one is not. */}
-              <p className="mt-3 text-[11px] text-[var(--muted)]">
+              <p className="mt-2 text-[11px] text-[var(--muted)] sm:mt-3">
                 {t("Indicative. Real quote on the")}{" "}
                 <Link href={dsePick ? `/markets/${dsePick.toLowerCase()}` : selected ? `/markets/${selected.ticker.toLowerCase()}` : "/markets"} className="underline underline-offset-2 hover:text-[var(--fg)]">
                   {t("asset page")}

@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { motion, useScroll, useTransform } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
-import { useCrdb } from "@/lib/useCrdb";
+import { useDse, type DseListing } from "@/lib/useDse";
+import { DseLogo } from "./DseLogo";
 import type { Candle } from "@/lib/useMarkets";
 import { useMarkets } from "@/lib/useMarkets";
 import { Reveal, RevealWords } from "./Reveal";
@@ -60,90 +60,123 @@ export function StackStrip() {
 /* ------------------------------------------------------------------ */
 
 /**
- * The flagship: a Tanzanian share, bought in shillings.
+ * The DSE listings, as a compact board.
  *
- * It sits above the US products because it is the product. Everything a
- * visitor sees first should say "the DSE, from your phone, the same day" —
- * dollar equities are the second act, not the headline.
+ * It used to be one CRDB card the height of a screen, which said "one bank"
+ * where the point is "the Tanzanian market". Every tokenised listing now gets
+ * a card of the same size — CRDB, NMB, and whatever is added next with no
+ * code — and the facts that are true of all of them (same-day settlement,
+ * the fee, no minimum) are said once instead of repeated per company.
  */
 export function DseSection() {
   const { t } = useT();
-  const crdb = useCrdb();
+  const listings = useDse().filter((d) => d.status === "live");
+
+  return (
+    <section className="mx-auto max-w-[1400px] px-5 pt-10 sm:px-8 sm:pt-16 lg:pt-20">
+      <Reveal>
+        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+          <div>
+            <div className="eyebrow">{t("Dar es Salaam Stock Exchange")}</div>
+            <h2 className="display mt-3 text-[clamp(1.6rem,4.2vw,3.2rem)]">
+              {t("Tanzanian shares,")}{" "}
+              <span className="contra text-[var(--muted)]">{t("in shillings, same day.")}</span>
+            </h2>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[12px]">
+            {[
+              ["T+0", t("Settlement")],
+              ["1%", t("Fee")],
+              [t("None"), t("Minimum lot")],
+            ].map(([v, k]) => (
+              <span key={k} className="inline-flex items-baseline gap-1.5 rounded-full border hairline px-3 py-1.5">
+                <span className="tnum font-medium">{v}</span>
+                <span className="text-[var(--muted)]">{k}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      </Reveal>
+
+      {/* A swipeable row on phones, a grid from tablets up. */}
+      <div className="scroll-thin -mx-5 mt-6 flex snap-x snap-mandatory gap-3 overflow-x-auto px-5 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-3">
+        {listings.length === 0
+          ? [0, 1].map((i) => <div key={i} className="h-44 w-[80%] shrink-0 animate-pulse rounded-3xl surface sm:w-auto" />)
+          : listings.map((d) => <DseCard key={d.symbol} d={d} />)}
+        {/* Closes the row so a short list never leaves a hole in the grid. */}
+        {listings.length > 0 && (
+          <Link href="/markets"
+            className="group flex w-[60%] shrink-0 snap-start flex-col justify-between rounded-3xl border border-dashed hairline p-5 text-[var(--muted)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--fg)] sm:w-auto">
+            <span className="eyebrow">{t("And more")}</span>
+            <span className="mt-6 text-lg font-medium text-[var(--fg)]">
+              {t("US equities, from the same account")}
+            </span>
+            <span className="mt-3 text-[12px] font-medium">
+              {t("All markets")} <span className="inline-block transition-transform group-hover:translate-x-0.5">→</span>
+            </span>
+          </Link>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function DseCard({ d }: { d: DseListing }) {
+  const { t } = useT();
   const [hist, setHist] = useState<Candle[]>([]);
   useEffect(() => {
     let alive = true;
-    fetch("/api/securities/crdb/history")
+    fetch(`/api/securities/${d.symbol.toLowerCase()}/history`)
       .then((r) => r.json())
-      .then((d) => { if (alive && d.ok) setHist(d.candles ?? []); })
+      .then((j) => { if (alive && j.ok) setHist(j.candles ?? []); })
       .catch(() => {});
     return () => { alive = false; };
-  }, []);
+  }, [d.symbol]);
   const first = hist[0]?.p;
-  const last = crdb?.price ?? hist[hist.length - 1]?.p;
+  const last = d.price || hist[hist.length - 1]?.p;
   const yearPct = first && last ? ((last - first) / first) * 100 : null;
-  const fmt = (n: number) => n.toLocaleString("en-TZ", { maximumFractionDigits: 0 });
+  const up = d.changePct >= 0;
 
   return (
-    <section className="mx-auto max-w-[1400px] px-5 pt-14 sm:px-8 sm:pt-24 lg:pt-32">
-      <Reveal>
-        <div className="eyebrow">{t("Dar es Salaam Stock Exchange")}</div>
-        <h2 className="display mt-4 max-w-4xl text-[clamp(1.8rem,5.4vw,4.6rem)]">
-          <RevealWords text={t("Tanzanian shares,")} />
-          <br />
-          <span className="contra text-[var(--muted)]">
-            <RevealWords text={t("in shillings, same day.")} delay={0.1} />
-          </span>
-        </h2>
-        <p className="mt-6 max-w-lg text-lg text-[var(--muted)]">
-          {t("Buy a fraction of a DSE-listed company from mobile money. No broker visit, no minimum lot, no waiting three days to settle.")}
-        </p>
-      </Reveal>
-
-      <Reveal>
-        <Link
-          href="/markets/crdb"
-          className="group relative mt-8 block overflow-hidden rounded-3xl border hairline p-5 transition-colors hover:border-[var(--color-accent)] sm:mt-14 sm:p-7 lg:p-9"
-        >
-          {hist.length > 4 && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 opacity-[0.12] [&>svg]:h-[55%] [&>svg]:w-full">
-              <Sparkline data={hist} color="var(--color-up)" width={1400} height={260} strokeWidth={2} />
-            </div>
-          )}
-          <div className="relative flex flex-wrap items-start justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <Image src="/crdb.jpg" alt="" width={56} height={56} className="rounded-2xl object-cover" />
-              <div>
-                <div className="font-[family-name:var(--font-display)] text-2xl font-medium tracking-[-0.04em] sm:text-3xl lg:text-4xl">
-                  CRDB Bank Plc
-                </div>
-                <div className="mt-1 text-sm text-[var(--muted)]">{t("Live on CAPX · one CRDBt is one share in custody")}</div>
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="tnum text-3xl font-medium sm:text-4xl">
-                {crdb ? <>TSh {fmt(crdb.price)}</> : "—"}
-              </div>
-              {crdb && (
-                <div className={`tnum mt-1 text-sm ${crdb.changePct >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
-                  {crdb.changePct >= 0 ? "▲" : "▼"} {Math.abs(crdb.changePct).toFixed(2)}% {t("today")}
-                </div>
-              )}
-            </div>
+    <Link
+      href={`/markets/${d.symbol.toLowerCase()}`}
+      className="group relative flex w-[80%] shrink-0 snap-start flex-col overflow-hidden rounded-3xl border hairline p-5 transition-colors hover:border-[var(--color-accent)] sm:w-auto"
+    >
+      <div className="flex items-center gap-3">
+        <DseLogo logo={d.logo} symbol={d.symbol} size={40} />
+        <div className="min-w-0 flex-1">
+          <div className="font-medium leading-tight">{d.symbol}</div>
+          <div className="truncate text-[12px] text-[var(--muted)]">{d.name}</div>
+        </div>
+        <div className="text-right">
+          <div className="tnum text-lg font-medium">
+            {d.price > 0 ? `TSh ${d.price.toLocaleString("en-TZ", { maximumFractionDigits: 0 })}` : "—"}
           </div>
-
-          <div className="relative mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] lg:grid-cols-4">
-            <Stat label={t("1 year")} value={yearPct === null ? "—" : `${yearPct >= 0 ? "+" : ""}${yearPct.toFixed(0)}%`} />
-            <Stat label={t("Settlement")} value="T+0" />
-            <Stat label={t("Fee")} value={crdb ? `${crdb.feeBps / 100}%` : "1%"} />
-            <Stat label={t("Minimum lot")} value={t("None")} />
+          <div className={`tnum text-[11px] ${up ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+            {up ? "▲" : "▼"} {Math.abs(d.changePct).toFixed(2)}% {t("today")}
           </div>
+        </div>
+      </div>
 
-          <span className="relative mt-8 inline-flex items-center gap-2 rounded-full bg-[var(--fg)] px-5 py-3 text-sm font-medium text-[var(--bg)] transition-transform group-hover:scale-[1.03]">
-            {t("Buy CRDB in shillings")} <span>→</span>
+      <div className="mt-4 h-14 [&>svg]:h-14 [&>svg]:w-full">
+        {hist.length > 4 && (
+          <Sparkline data={hist} color={yearPct !== null && yearPct < 0 ? "var(--color-down)" : "var(--color-up)"}
+            width={400} height={56} strokeWidth={1.75} />
+        )}
+      </div>
+
+      <div className="mt-3 flex items-center justify-between text-[12px]">
+        <span className="text-[var(--muted)]">
+          {t("1 year")}{" "}
+          <span className={`tnum font-medium ${yearPct !== null && yearPct < 0 ? "text-[var(--color-down)]" : "text-[var(--fg)]"}`}>
+            {yearPct === null ? "—" : `${yearPct >= 0 ? "+" : ""}${yearPct.toFixed(0)}%`}
           </span>
-        </Link>
-      </Reveal>
-    </section>
+        </span>
+        <span className="font-medium transition-transform group-hover:translate-x-0.5">
+          {t("Buy")} {d.symbol} →
+        </span>
+      </div>
+    </Link>
   );
 }
 

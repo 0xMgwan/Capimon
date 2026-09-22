@@ -107,7 +107,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <Providers>
           <div className="sticky top-0 z-50">
-            <DseTape />
+            {/* The full DSE board, from tablets up. On a phone two tapes ate the
+                top of the screen; the main ticker already leads with the
+                listings CAPX trades. */}
+            <div className="hidden sm:block"><DseTape /></div>
             <TickerTape />
             <Nav />
           </div>

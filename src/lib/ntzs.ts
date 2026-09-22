@@ -215,6 +215,14 @@ export async function createDeposit(input: {
   /** Required for mobile money; a bank transfer takes none. */
   phoneNumber?: string;
   paymentMethod?: PaymentMethod;
+  /**
+   * The account a bank transfer is sent FROM.
+   *
+   * The published docs omit it, but the deployed API refuses a bank_transfer
+   * without it: the narration does not survive TIPS, so the sending account
+   * is how nTZS matches the credit. The deployment wins over the docs.
+   */
+  payerAccountNumber?: string;
 }) {
   const amount = Math.round(input.amountTzs);
   const body: Record<string, unknown> = {
@@ -224,6 +232,7 @@ export async function createDeposit(input: {
   };
   if (input.phoneNumber) body.phoneNumber = input.phoneNumber;
   if (input.userId) body.userId = input.userId;
+  if (input.payerAccountNumber) body.payerAccountNumber = input.payerAccountNumber;
   return call<{ id: string; status: string; reference?: string;
                 instructions?: BankInstructions | string; [k: string]: unknown }>("/api/v1/deposits", {
     method: "POST", body, idempotent: true,

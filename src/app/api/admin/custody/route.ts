@@ -20,7 +20,9 @@ export async function GET(req: Request) {
     await migrate();
     const sql = db();
     const [securities, attestations, issuance, requests] = await Promise.all([
-      sql`select symbol, name, token_address, decimals, chain_id, status from capx.securities order by symbol`,
+      sql`select symbol, name, token_address, decimals, chain_id, status,
+                 (metadata ? 'logo') as has_logo
+            from capx.securities order by symbol`,
       sql`select id::text, security, custodian, quantity::float8 as quantity, locked::float8 as locked,
                  doc_ref, issued_at, expires_at, status, approved_by, approved_at, filed_by,
                  (expires_at <= now()) as expired
@@ -117,16 +119,32 @@ export async function POST(req: Request) {
         }
       }
 
+      /*
+       * The logo arrives already resized in the browser, as a small data URL.
+       * Checked here anyway: only raster images, and small enough that a
+       * listing of every security stays a light response.
+       */
+      let logo: string | null = null;
+      if (body.logo) {
+        logo = String(body.logo);
+        if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(logo) || logo.length > 200_000) {
+          return NextResponse.json({ ok: false, error: "The logo must be a PNG, JPEG or WebP under about 150 KB." }, { status: 400 });
+        }
+      }
+
       await sql`
-        insert into capx.securities (symbol, name, token_address, decimals, chain_id, status)
+        insert into capx.securities (symbol, name, token_address, decimals, chain_id, status, metadata)
         values (${symbol}, ${name}, ${tokenAddress}, ${decimals},
-                ${Number(body.chainId ?? 8453)}, ${String(body.status ?? "draft")})
+                ${Number(body.chainId ?? 8453)}, ${String(body.status ?? "draft")},
+                ${sql.json(logo ? { logo } : {})})
         on conflict (symbol) do update
           set name = excluded.name,
               token_address = coalesce(excluded.token_address, capx.securities.token_address),
               decimals = excluded.decimals,
               chain_id = excluded.chain_id,
-              status = excluded.status`;
+              status = excluded.status,
+              -- A save without a new logo keeps the old one.
+              metadata = capx.securities.metadata || excluded.metadata`;
       return NextResponse.json({ ok: true });
     }
 

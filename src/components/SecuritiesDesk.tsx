@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import {
+  useIssuer, IssuerBar, predictToken, createTokenTx, tokenAbi, registryAbi, MINT_ROLE,
+} from "./IssuerWallet";
+import type { Abi } from "viem";
 
 type Backing = {
   security: string; custodian: string | null;
@@ -10,7 +14,10 @@ type Backing = {
   ratioPct: number | null; headroom: number;
   fresh: boolean; expiresAt: string | null; lastVerified: string | null;
 };
-type Security = { symbol: string; name: string; token_address: string | null; decimals: number; status: string; backing: Backing };
+type Security = {
+  symbol: string; name: string; token_address: string | null; decimals: number; status: string;
+  has_logo?: boolean; backing: Backing;
+};
 type Role = "admin" | "fimco";
 type Request_ = {
   id: string; security: string; kind: "mint" | "burn"; quantity: number; note: string | null;
@@ -115,6 +122,22 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
   };
 
   const isAdmin = data?.role === "admin";
+  const w = useIssuer(data?.contracts.custodyRegistry ?? "");
+
+  /** Runs a wallet-signed step with the desk's busy and error handling. */
+  const sign = async (label: string, fn: () => Promise<void>) => {
+    setBusy(true); setErr(null); setNote(null);
+    try {
+      await fn();
+      setNote(`${label}: done.`);
+      await load(token);
+    } catch (e) {
+      const m = e as { shortMessage?: string; message?: string };
+      setErr(`${label}: ${m.shortMessage ?? m.message ?? "failed"}`);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (!data) {
     return (
@@ -152,6 +175,7 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
       </div>
       <h1 className="display mt-2 text-[clamp(1.8rem,5vw,2.8rem)]">{portal === "fimco" ? "Custody portal." : "Securities desk."}</h1>
       <Pipeline />
+      {isAdmin && <IssuerBar w={w} />}
 
       {(note || err) && (
         <p className={`mt-4 break-words rounded-2xl border hairline px-4 py-3 text-xs ${
@@ -174,9 +198,16 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
             <div key={s.symbol} className={`rounded-3xl border p-5 ${
               under ? "border-[var(--color-down)]/50 bg-[var(--color-down)]/[0.05]" : "hairline"}`}>
               <div className="flex flex-wrap items-baseline justify-between gap-3">
-                <div>
-                  <span className="text-xl font-medium">{s.symbol}</span>
-                  <span className="ml-2 text-sm text-[var(--muted)]">{s.name}</span>
+                <div className="flex items-center gap-3">
+                  {s.has_logo && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={`/api/securities/logo?symbol=${encodeURIComponent(s.symbol)}`} alt=""
+                      className="h-9 w-9 rounded-full border hairline object-cover" />
+                  )}
+                  <span>
+                    <span className="text-xl font-medium">{s.symbol}</span>
+                    <span className="ml-2 text-sm text-[var(--muted)]">{s.name}</span>
+                  </span>
                 </div>
                 <div className={`tnum text-2xl font-medium ${under ? "text-[var(--color-down)]" : "text-[var(--color-up)]"}`}>
                   {b.ratioPct === null ? "—" : `${b.ratioPct.toFixed(2)}%`}
@@ -331,10 +362,10 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
         })}
       </section>
 
-      <RequestsSection data={data} isAdmin={isAdmin} onAct={act} busy={busy} />
+      <RequestsSection data={data} isAdmin={isAdmin} onAct={act} busy={busy} w={w} sign={sign} />
 
       <div className={`mt-8 grid gap-4 ${isAdmin ? "lg:grid-cols-2" : ""}`}>
-        {isAdmin && <RegisterSecurity onAct={act} busy={busy} />}
+        {isAdmin && <RegisterSecurity onAct={act} busy={busy} w={w} sign={sign} />}
         <FileAttestation onAct={act} busy={busy} lockToBroker={!isAdmin}
           securities={data.securities.map((x) => x.symbol)} />
       </div>
@@ -385,7 +416,25 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
                   <p className="text-[11px] text-[#b45309]">
                     Approved but not yet on the registry, so it backs nothing yet. Publish it with the issuer key:
                   </p>
-                  <Cmd text={publishCmd(a, data.contracts.custodyRegistry)} />
+                  <button
+                    disabled={busy || !w.isIssuer}
+                    title={!w.isIssuer ? "Connect the issuer wallet above" : undefined}
+                    onClick={() => void sign(`Publish ${a.security} attestation`, async () => {
+                      await w.send({
+                        address: data.contracts.custodyRegistry as `0x${string}`, abi: registryAbi as Abi,
+                        functionName: "attestCustody",
+                        args: [a.security, a.custodian, BigInt(Math.round(a.quantity)), BigInt(Math.round(a.locked)),
+                               BigInt(Math.floor(new Date(a.expires_at).getTime() / 1000)), a.doc_ref ?? ""],
+                      });
+                    })}
+                    className="mt-2 rounded-full bg-[var(--fg)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--bg)] disabled:opacity-40"
+                  >
+                    Publish with issuer wallet
+                  </button>
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-[11px] text-[var(--muted)]">Or run it with cast</summary>
+                    <Cmd text={publishCmd(a, data.contracts.custodyRegistry)} />
+                  </details>
                 </div>
               )}
             </div>
@@ -534,8 +583,9 @@ function RequestMint({ security, headroom, hasToken, onAct, busy }: {
 }
 
 /** The queue of mint and burn requests, and what each one is waiting for. */
-function RequestsSection({ data, isAdmin, onAct, busy }: {
+function RequestsSection({ data, isAdmin, onAct, busy, w, sign }: {
   data: DeskData; isAdmin: boolean; onAct: (b: Record<string, unknown>) => Promise<void>; busy: boolean;
+  w: ReturnType<typeof useIssuer>; sign: (label: string, fn: () => Promise<void>) => Promise<void>;
 }) {
   const [hashes, setHashes] = useState<Record<string, string>>({});
   return (
@@ -584,10 +634,27 @@ function RequestsSection({ data, isAdmin, onAct, busy }: {
               </div>
               {r.status === "approved" && isAdmin && (
                 <div className="mt-2">
-                  {cmd ? (
+                  {cmd && sec?.token_address && data.contracts.treasury ? (
                     <>
-                      <p className="text-[11px] text-[var(--muted)]">Run with the issuer key, then paste the transaction hash:</p>
-                      <Cmd text={cmd} />
+                      <button
+                        disabled={busy || !w.isIssuer}
+                        title={!w.isIssuer ? "Connect the issuer wallet above" : undefined}
+                        onClick={() => void sign(`Mint ${r.quantity} ${r.security}`, async () => {
+                          const hash = await w.send({
+                            address: sec.token_address as `0x${string}`, abi: tokenAbi as Abi, functionName: "mint",
+                            args: [data.contracts.treasury as `0x${string}`, BigInt(baseUnits(r.quantity, sec.decimals))],
+                          });
+                          // Closed against the mined hash, which the server verifies again.
+                          await onAct({ action: "complete-request", id: r.id, txHash: hash });
+                        })}
+                        className="rounded-full bg-[var(--fg)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--bg)] disabled:opacity-40"
+                      >
+                        Mint with issuer wallet
+                      </button>
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-[11px] text-[var(--muted)]">Or run it with cast and paste the hash</summary>
+                        <Cmd text={cmd} />
+                      </details>
                     </>
                   ) : (
                     <p className="text-[11px] text-[#b45309]">No token address or treasury configured, so there is nothing to mint into.</p>
@@ -619,8 +686,39 @@ function RequestsSection({ data, isAdmin, onAct, busy }: {
   );
 }
 
-function RegisterSecurity({ onAct, busy }: { onAct: (b: Record<string, unknown>) => Promise<void>; busy: boolean }) {
+/**
+ * A logo, centre-cropped to a square and scaled to 256px.
+ *
+ * Done in the browser so a phone photo of a letterhead does not travel to the
+ * server at twelve megapixels; what arrives is a few tens of kilobytes.
+ */
+async function squareLogo(file: File): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => {
+      const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url;
+    });
+    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    const c = document.createElement("canvas");
+    c.width = c.height = 256;
+    const ctx = c.getContext("2d");
+    if (!ctx) throw new Error("no canvas");
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, 256, 256);
+    ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 256, 256);
+    return c.toDataURL("image/webp", 0.86);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function RegisterSecurity({ onAct, busy, w, sign }: {
+  onAct: (b: Record<string, unknown>) => Promise<void>; busy: boolean;
+  w: ReturnType<typeof useIssuer>; sign: (label: string, fn: () => Promise<void>) => Promise<void>;
+}) {
   const [f, setF] = useState({ symbol: "", name: "", tokenAddress: "", decimals: "8", status: "live" });
+  const [logo, setLogo] = useState<string | null>(null);
+  const [logoErr, setLogoErr] = useState<string | null>(null);
   return (
     <div className="rounded-3xl border hairline p-5">
       <div className="eyebrow">Register a security</div>
@@ -638,6 +736,65 @@ function RegisterSecurity({ onAct, busy }: { onAct: (b: Record<string, unknown>)
       <Field label="Name" v={f.name} on={(v) => setF({ ...f, name: v })} ph="CRDB Bank Plc" />
       <Field label="Token address" v={f.tokenAddress} on={(v) => setF({ ...f, tokenAddress: v })} ph="0xb200…60F"
         hint="Checked against the token on Base before it is saved." />
+      {/*
+        * Creating the token from here, signed by the issuer wallet.
+        *
+        * Two transactions: the factory creates it, then the issuer grants
+        * itself the mint role, which a new B20 does not give its admin by
+        * default — CRDBt's first mint failed on exactly that. The address is
+        * derived from the symbol, so a token that already exists is found and
+        * filled in rather than created twice.
+        */}
+      {f.symbol && f.name && !f.tokenAddress && (
+        <div className="-mt-1 mb-3 rounded-xl surface p-3 text-[12px]">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex-1">No token yet. Create <span className="font-medium">{f.symbol}t</span> on Base with the issuer wallet.</span>
+            <button
+              disabled={busy || !w.isIssuer}
+              title={!w.isIssuer ? "Connect the issuer wallet above" : undefined}
+              onClick={() => void sign(`Create ${f.symbol}t`, async () => {
+                if (!w.client || !w.address) throw new Error("Connect the issuer wallet.");
+                const tsym = `${f.symbol}t`;
+                const issuer = w.address as `0x${string}`;
+                const p = await predictToken(w.client, issuer, tsym);
+                if (!p.exists) await w.send(createTokenTx(f.name, tsym, issuer));
+                const has = await w.client.readContract({ address: p.address, abi: tokenAbi, functionName: "hasRole", args: [MINT_ROLE, issuer] });
+                if (!has) await w.send({ address: p.address, abi: tokenAbi as Abi, functionName: "grantRole", args: [MINT_ROLE, issuer] });
+                setF((cur) => ({ ...cur, tokenAddress: p.address }));
+                await onAct({ action: "register-security", ...f, tokenAddress: p.address, decimals: 8, ...(logo ? { logo } : {}) });
+              })}
+              className="rounded-full bg-[var(--fg)] px-3.5 py-1.5 font-medium text-[var(--bg)] disabled:opacity-40"
+            >
+              Create token
+            </button>
+          </div>
+        </div>
+      )}
+      <label className="mb-3 block">
+        <span className="eyebrow">Logo</span>
+        <div className="mt-1.5 flex items-center gap-3">
+          {logo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logo} alt="" className="h-12 w-12 rounded-full border hairline object-cover" />
+          ) : (
+            <span className="grid h-12 w-12 place-items-center rounded-full border border-dashed hairline text-[10px] text-[var(--muted)]">none</span>
+          )}
+          <input
+            type="file" accept="image/png,image/jpeg,image/webp"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              setLogoErr(null);
+              if (!file) return;
+              try { setLogo(await squareLogo(file)); } catch { setLogoErr("That image could not be read."); }
+            }}
+            className="min-w-0 flex-1 text-[12px] file:mr-3 file:rounded-full file:border file:border-[var(--border)] file:bg-transparent file:px-3 file:py-1.5 file:text-[12px]"
+          />
+          {logo && <button onClick={() => setLogo(null)} className="text-[11px] text-[var(--muted)] underline">Remove</button>}
+        </div>
+        <span className="mt-1 block text-[11px] text-[var(--muted)]">
+          {logoErr ?? "Square works best. Resized to 256px here before upload. Saving without one keeps the existing logo."}
+        </span>
+      </label>
       <Field label="Decimals" v={f.decimals} on={(v) => setF({ ...f, decimals: v })} ph="8"
         hint="Read from the token itself when an address is given." />
       <label className="mb-3 block">
@@ -660,7 +817,7 @@ function RegisterSecurity({ onAct, busy }: { onAct: (b: Record<string, unknown>)
         </span>
       </label>
       <button
-        onClick={() => void onAct({ action: "register-security", ...f, decimals: Number(f.decimals) })}
+        onClick={() => void onAct({ action: "register-security", ...f, decimals: Number(f.decimals), ...(logo ? { logo } : {}) })}
         disabled={busy || !f.symbol || !f.name}
         className="mt-2 w-full rounded-full bg-[var(--fg)] py-2.5 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40"
       >

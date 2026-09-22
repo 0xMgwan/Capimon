@@ -40,7 +40,12 @@ export async function POST(req: Request) {
       if (!Number.isFinite(amountTzs) || amountTzs < ABSOLUTE_MIN_TZS) {
         return bad(`The minimum deposit is ${ABSOLUTE_MIN_TZS.toLocaleString()} TZS.`);
       }
-      return bankDeposit(user.id, amountTzs);
+      const payerAccountNumber = String(body.payerAccountNumber ?? "").replace(/[^\d]/g, "");
+      if (payerAccountNumber.length < 6) {
+        return bad("Enter the bank account number you are sending from. That is how the transfer is matched to you.",
+                   "payer_account_required");
+      }
+      return bankDeposit(user.id, amountTzs, payerAccountNumber);
     }
 
     /*
@@ -178,14 +183,13 @@ export async function POST(req: Request) {
  * nTZS issues a one-off reference and the account to pay into; the customer
  * sends exactly that amount from any Tanzanian bank over TIPS with the
  * reference in the description, and nTZS mints once the credit lands. There is
- * no prompt and no payer account to collect — the earlier version asked for
- * one, which the API neither takes nor needs, because the reference is what
- * matches the money to the deposit and our row maps the deposit to the user.
+ * no prompt. The docs say the reference alone matches the money, but the
+ * deployed API also insists on the sending account, so both are collected.
  *
  * The documented shape takes a userId, so this goes to the omnibus wallet
  * directly rather than trying the treasury first.
  */
-async function bankDeposit(userId: string, amountTzs: number) {
+async function bankDeposit(userId: string, amountTzs: number, payerAccountNumber: string) {
   const caps = await capabilities();
   if (!caps.wallets.available) {
     return NextResponse.json(
@@ -199,12 +203,12 @@ async function bankDeposit(userId: string, amountTzs: number) {
   const sql = db();
   const rows = await sql<{ id: string }[]>`
     insert into capx.deposits (user_id, amount_tzs, phone, metadata)
-    values (${userId}, ${amountTzs}, '', ${sql.json({ paymentMethod: "bank_transfer", route: "omnibus-wallet" })})
+    values (${userId}, ${amountTzs}, '', ${sql.json({ paymentMethod: "bank_transfer", route: "omnibus-wallet", payerAccountNumber })})
     returning id`;
   const localId = rows[0].id;
 
   try {
-    const deposit = await createDeposit({ userId: await omnibusUserId(), amountTzs, paymentMethod: "bank_transfer" });
+    const deposit = await createDeposit({ userId: await omnibusUserId(), amountTzs, paymentMethod: "bank_transfer", payerAccountNumber });
     const raw = deposit.instructions;
     const instructions: BankInstructions =
       raw && typeof raw === "object" ? raw : { note: typeof raw === "string" ? raw : undefined };

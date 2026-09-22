@@ -91,6 +91,7 @@ export function WalletSection({ holdings }: {
   const [wdAmount, setWdAmount] = useState(10_000);
   const [bankDetails, setBankDetails] = useState<BankDetails | null>(null);
   const [hiddenRef, setHiddenRef] = useState<string | null>(null);
+  const [payerAccount, setPayerAccount] = useState("");
   const [quote, setQuote] = useState<{ quoteId: string; feeTzs: number; recipientName: string | null } | null>(null);
 
   const loadDeposits = useCallback(async () => {
@@ -141,7 +142,7 @@ export function WalletSection({ holdings }: {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           amountTzs: amount, paymentMethod: method,
-          ...(method === "mobile_money" ? { phoneNumber: phoneToUse } : {}),
+          ...(method === "mobile_money" ? { phoneNumber: phoneToUse } : { payerAccountNumber: payerAccount }),
         }),
       });
       const j = await r.json();
@@ -351,6 +352,16 @@ export function WalletSection({ holdings }: {
                   />
                   {/* A bank transfer is matched by its reference, so it needs no
                       phone and no sending account — only mobile money asks. */}
+                  {/* nTZS matches a bank credit by the account it came from as
+                      well as the reference, so the sending account is asked. */}
+                  {method === "bank_transfer" && (
+                    <input
+                      value={payerAccount}
+                      onChange={(e) => setPayerAccount(e.target.value.replace(/[^\d]/g, ""))}
+                      inputMode="numeric" placeholder={t("Bank account you are sending from")}
+                      className="tnum mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+                    />
+                  )}
                   {method === "mobile_money" && (
                     <input
                       value={phoneToUse}
@@ -361,7 +372,8 @@ export function WalletSection({ holdings }: {
                   )}
                   <button
                     onClick={deposit}
-                    disabled={busy || amount < minTzs || (method === "mobile_money" && !phoneToUse)}
+                    disabled={busy || amount < minTzs || (method === "mobile_money" && !phoneToUse)
+                              || (method === "bank_transfer" && payerAccount.length < 6)}
                     className="mt-3 w-full rounded-full bg-[var(--fg)] py-3 text-sm font-medium text-[var(--bg)] disabled:opacity-50"
                   >
                     {busy
@@ -374,7 +386,7 @@ export function WalletSection({ holdings }: {
                     Minimum {minTzs.toLocaleString()} TZS
                     {account.depositRoute === "ramp" && method === "mobile_money" && " on this rail"}.
                     {method === "bank_transfer" &&
-                      ` ${t("You will get an account and a reference to pay from your own bank app. Any Tanzanian bank works; it usually lands within about 10 minutes.")}`}
+                      ` ${t("Send from the account you enter above. You will get an account and a reference to pay from your bank app; it usually lands within about 10 minutes.")}`}
                   </p>
                 </div>
               </motion.div>

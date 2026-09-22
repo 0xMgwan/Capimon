@@ -269,7 +269,7 @@ export function ProductsSection() {
             <SideCard
               title={t("CAPX Vault")}
               tag="Self-custody"
-              body="Your positions live in your own wallet. CAPX reads the chain directly, so every balance on the portfolio page is an onchain read rather than our ledger."
+              body={t("Your assets, your wallet. We give you access to global capital markets.")}
               stat={<Counter value={equities} format={(n) => `${Math.round(n)} assets`} />}
               statLabel="Tracked live"
               href="/portfolio"

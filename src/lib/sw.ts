@@ -262,6 +262,7 @@ export const SW: Record<string, string> = {
   "CAPX Equities": "CAPX Equities",
   "CAPX Feeds": "CAPX Feeds",
   "CAPX Vault": "CAPX Vault",
+  "Your assets, your wallet. We give you access to global capital markets.": "Mali zako, mkoba wako. Tunakupa fursa ya kuingia kwenye masoko ya mitaji duniani.",
   "CAPX places the trade onchain and records your holding.": "CAPX hufanya biashara kwenye mnyororo na kurekodi umiliki wako.",
   "CAPX will not route this trade. Use issuer mint and redeem instead.": "CAPX haitapitisha biashara hii. Tumia kutengeneza na kukomboa kwa mtoaji badala yake.",
   "Cost basis": "Gharama ya ununuzi",

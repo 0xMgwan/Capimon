@@ -498,4 +498,12 @@ export const SW: Record<string, string> = {
   "You send shillings.": "Unatuma shilingi.",
   "Your shillings become USDC at the live rate.": "Shilingi zako zinabadilika kuwa USDC kwa kiwango cha wakati huo.",
   "Your balance appears.": "Salio lako linaonekana.",
+  "Buying only for now.": "Kwa sasa ni kununua tu.",
+  "Selling opens when the offer closes and allocation completes.": "Kuuza kutafunguliwa ofa itakapofungwa na mgawo kukamilika.",
+  "Held by CAPX": "Inashikiliwa na CAPX",
+  "Token issued by": "Tokeni imetolewa na",
+  "Selling": "Kuuza",
+  "Opens when the offer closes": "Kutafunguliwa ofa itakapofungwa",
+  "Open": "Wazi",
+  "CAPX buys this token and holds it. The balance above is read from Base, and customers' claims are recorded in CAPX's ledger.": "CAPX inanunua tokeni hii na kuishikilia. Salio hapo juu linasomwa kutoka Base, na madai ya wateja yameandikwa kwenye daftari la CAPX.",
 };

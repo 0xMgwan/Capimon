@@ -24,6 +24,7 @@ type Market = {
   updatedAt: string | null; source: string | null;
   custodyShares: number; clientShares: number; availableShares: number;
   feeBps: number; tradable: boolean; haltReason: string | null;
+  kind?: "dse" | "external"; issuer?: string | null; buyOnly?: boolean;
 };
 type Dse = {
   price: number; live: number | null; close: number;
@@ -203,6 +204,19 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
         </p>
       )}
 
+      {/*
+        * No sell side while the venue does not buy back.
+        *
+        * A tokenised IPO is subscription-only until allocation completes;
+        * offering a Sell tab that always refuses would be worse than saying
+        * plainly that selling opens later.
+        */}
+      {m?.buyOnly ? (
+        <p className="mt-4 rounded-xl border border-[#b45309]/35 bg-[#b45309]/[0.06] px-3 py-2 text-[12px] leading-snug text-[var(--muted)]">
+          <span className="font-medium text-[var(--fg)]">{t("Buying only for now.")}</span>{" "}
+          {t("Selling opens when the offer closes and allocation completes.")}
+        </p>
+      ) : (
       <div className="mt-5 grid grid-cols-2 gap-1 rounded-full surface p-1">
         {(["buy", "sell"] as const).map((s) => (
           <button
@@ -216,6 +230,7 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
           </button>
         ))}
       </div>
+      )}
 
       {side === "sell" && (
         <div className="mt-3 flex gap-1 text-[11px]">
@@ -346,8 +361,9 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
         </Link>
       </div>
       <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
-        CAPX holds the shares and your balance is a claim on them. Settlement is in nTZS
-        against a custody position published on Base.
+        {m?.kind === "external"
+          ? `CAPX buys and holds ${m.issuer ? `${m.issuer}'s token` : "the token"}, and your balance is a claim on it. What CAPX holds is public on Base.`
+          : "CAPX holds the shares and your balance is a claim on them. Settlement is in nTZS against a custody position published on Base."}
       </p>
     </div>
   );

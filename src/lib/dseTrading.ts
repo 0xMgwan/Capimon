@@ -41,6 +41,11 @@ export type DseMarket = {
   name: string;
   logo: string | null;
   status: string;
+  /** "dse" — CAPX tokenised it; "external" — CAPX bought and holds someone else's token. */
+  kind: "dse" | "external";
+  issuer: string | null;
+  /** True while the venue does not allow selling back (an open IPO). */
+  buyOnly: boolean;
   /** Shillings per share, from the oracle. */
   price: number;
   /** False when the mark has aged past the contract's window. */
@@ -97,13 +102,20 @@ export async function dseMarket(symbol: string): Promise<DseMarket | null> {
   else if (!oracle) haltReason = `No price has been published for ${S} yet.`;
   else if (!oracle.fresh) haltReason = `The ${S} price is stale — the exchange has not printed recently enough to trade against.`;
   else if (!(oracle.price > 0)) haltReason = `The published ${S} price is zero.`;
-  else if (custodyShares <= 0) haltReason = `No ${S} shares are held in custody.`;
+  else if (custodyShares <= 0) {
+    haltReason = sec.kind === "external"
+      ? `CAPX holds no ${S} yet.`
+      : `No ${S} shares are held in custody.`;
+  }
 
   return {
     symbol: S,
     name: sec.name,
     logo: sec.logo,
     status: sec.status,
+    kind: sec.kind,
+    issuer: sec.issuer,
+    buyOnly: sec.buyOnly,
     price: oracle?.price ?? 0,
     fresh: oracle?.fresh ?? false,
     updatedAt: oracle?.updatedAt ?? null,

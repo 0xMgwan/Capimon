@@ -19,6 +19,10 @@ type Backing = {
 type Security = {
   symbol: string; name: string; token_address: string | null; decimals: number; status: string;
   has_logo?: boolean; backing: Backing;
+  /** "dse" — CAPX tokenised it; "external" — someone else's token, bought and held. */
+  kind?: "dse" | "external"; issuer?: string | null; venue?: string | null; buyOnly?: boolean;
+  /** For an external listing: what the treasury holds and what customers are owed. */
+  held?: number; clientHeld?: number;
 };
 type Role = "admin" | "fimco";
 type Request_ = {
@@ -369,7 +373,7 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
                     * still a draft, and nothing on the card said that going
                     * live was the one thing left to do.
                     */}
-                  {s.status === "draft" && s.token_address && b.issued > 0 && b.fresh && (
+                  {s.status === "draft" && s.token_address && (s.kind === "external" ? (s.held ?? 0) > 0 : b.issued > 0 && b.fresh) && (
                     <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--color-up)]/40 bg-[var(--color-up)]/[0.06] px-3.5 py-2.5 text-[12px]">
                       <span className="flex-1">
                         <span className="font-medium">{s.symbol} is backed and minted.</span>{" "}
@@ -391,10 +395,40 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
                       )}
                     </div>
                   )}
-                  <TokenSetup sec={s} isAdmin={isAdmin} w={w} sign={sign} onAct={act} busy={busy} treasury={data.contracts.treasury} />
+                  {s.kind === "external" ? (
+                    /*
+                      * Bought, not minted.
+                      *
+                      * There is no attestation to approve and nothing to mint:
+                      * CAPX buys this token at the issuer's venue and the
+                      * treasury's balance is the backing. The desk says where
+                      * to buy it and what is covered.
+                      */
+                    <div className="mb-3 rounded-xl surface p-3 text-[12px]">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <span>
+                          <span className="text-[var(--muted)]">Held by CAPX</span>{" "}
+                          <span className="tnum font-medium">{(s.held ?? b.underlying).toLocaleString()}</span>
+                        </span>
+                        <span>
+                          <span className="text-[var(--muted)]">Owed to customers</span>{" "}
+                          <span className="tnum font-medium">{(s.clientHeld ?? b.clientHeld ?? 0).toLocaleString()}</span>
+                        </span>
+                        {s.issuer && <span className="text-[var(--muted)]">Issued by {s.issuer}</span>}
+                        {s.buyOnly && <span className="text-[#b45309]">buying only</span>}
+                      </div>
+                      <p className="mt-1.5 text-[11px] text-[var(--muted)]">
+                        {s.venue
+                          ? `Buy more at: ${s.venue}. The treasury's balance is the backing, so it rises when CAPX buys.`
+                          : "Backed by whatever the treasury holds; buy more at the issuer's venue."}
+                      </p>
+                    </div>
+                  ) : (
+                    <TokenSetup sec={s} isAdmin={isAdmin} w={w} sign={sign} onAct={act} busy={busy} treasury={data.contracts.treasury} />
+                  )}
                   {s.token_address && (
                     <>
-                      {isAdmin && b.headroom > 0 && (
+                      {isAdmin && s.kind !== "external" && b.headroom > 0 && (
                         <div className="mb-2 flex flex-wrap items-center gap-2">
                           <button disabled={busy || !w.isIssuer}
                             title={!w.isIssuer ? "Connect the issuer wallet above" : undefined}
@@ -412,12 +446,14 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
                           <span className="text-[11px] text-[var(--muted)]">Custody covers {b.headroom.toLocaleString()} more than exist.</span>
                         </div>
                       )}
-                      {!isAdmin && (
+                      {!isAdmin && s.kind !== "external" && (
                         <p className="mb-2 text-[11px] text-[var(--muted)]">
                           To add shares, file an updated holding below with the new total. CAPX approves and mints the difference.
                         </p>
                       )}
-                      <RequestMint security={s.symbol} headroom={b.headroom} unallocated={b.unallocated ?? 0} hasToken onAct={act} busy={busy} burnOnly />
+                      {s.kind !== "external" && (
+                        <RequestMint security={s.symbol} headroom={b.headroom} unallocated={b.unallocated ?? 0} hasToken onAct={act} busy={busy} burnOnly />
+                      )}
                     </>
                   )}
                 </div>
@@ -1287,6 +1323,19 @@ function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone
     symbol: preset?.symbol ?? "", name: preset?.name ?? "", tokenAddress: preset?.token_address ?? "",
     decimals: String(preset?.decimals ?? 8), status: preset?.status ?? (asBroker ? "draft" : "live"),
   });
+  /*
+   * Two kinds of listing.
+   *
+   * A DSE share CAPX tokenises itself needs an attestation, a token and a
+   * mint. A token somebody else issued — a tokenised IPO — needs none of
+   * that: CAPX buys it, holds it, and the balance is the backing. The form
+   * asks which, because everything downstream differs.
+   */
+  const [ext, setExt] = useState({
+    kind: (preset?.kind ?? "dse") as "dse" | "external",
+    issuer: preset?.issuer ?? "", venue: preset?.venue ?? "", buyOnly: preset?.buyOnly ?? false,
+  });
+  const external = ext.kind === "external";
   const [logo, setLogo] = useState<string | null>(null);
   /** The logo already on file, shown until a new one is chosen. */
   const existingLogo = preset?.has_logo ? `/api/securities/logo?symbol=${encodeURIComponent(preset.symbol)}&v=${bust}` : null;
@@ -1337,8 +1386,12 @@ function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone
         * only needs it for a token that was created outside the desk.
         */}
       {!asBroker && (
-        <Field label="Token address · optional" v={f.tokenAddress} on={(v) => setF({ ...f, tokenAddress: v })} ph="Leave blank — Create token fills it in"
-          hint="Only for a token that already exists on Base. Checked against the chain before it is saved." />
+        <Field label={external ? "Token address" : "Token address · optional"} v={f.tokenAddress}
+          on={(v) => setF({ ...f, tokenAddress: v })}
+          ph={external ? "0x… the token CAPX will hold" : "Leave blank — Create token fills it in"}
+          hint={external
+            ? "The issuer's own token on Base. Checked against the chain, and its decimals read from it."
+            : "Only for a token that already exists on Base. Checked against the chain before it is saved."} />
       )}
       {/*
         * Creating the token from here, signed by the issuer wallet.
@@ -1386,7 +1439,45 @@ function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone
             : "Square works best. Resized to 256px here before upload. Saving without one keeps the existing logo.")}
         </span>
       </label>
-{listing && (
+{!asBroker && (
+        <label className="mb-3 block">
+          <span className="eyebrow">Listing type</span>
+          <div className="mt-1.5 flex gap-2">
+            {([["dse", "CAPX tokenises it"], ["external", "Someone else's token"]] as const).map(([k, l]) => (
+              <button key={k} onClick={() => setExt({ ...ext, kind: k })}
+                className={`flex-1 rounded-xl border px-3 py-2 text-[12.5px] font-medium transition-colors ${
+                  ext.kind === k ? "border-[var(--fg)] bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"}`}>
+                {l}
+              </button>
+            ))}
+          </div>
+          <span className="mt-1 block text-[11px] text-[var(--muted)]">
+            {external
+              ? "CAPX buys this token and holds it; the treasury's balance is the backing. No attestation, no minting."
+              : "FIMCO attests custody, CAPX creates the token and mints against it."}
+          </span>
+        </label>
+      )}
+      {external && !asBroker && (
+        <>
+          <Field label="Issued by" v={ext.issuer} on={(v) => setExt({ ...ext, issuer: v })} ph="GetEquity"
+            hint="Named wherever this listing's backing is shown." />
+          <Field label="Where CAPX buys it" v={ext.venue} on={(v) => setExt({ ...ext, venue: v })}
+            ph="GetEquity Onchain pool · Base · pays in cNGN" hint="For the desk's own reference." />
+          <label className="mb-3 flex items-start gap-2.5 rounded-xl surface p-3 text-[12px]">
+            <input type="checkbox" checked={ext.buyOnly} onChange={(e) => setExt({ ...ext, buyOnly: e.target.checked })}
+              className="mt-0.5 h-4 w-4" />
+            <span>
+              <span className="font-medium">Buying only for now</span>
+              <span className="mt-0.5 block text-[11px] text-[var(--muted)]">
+                For an open IPO the venue does not buy back yet. Customers see why, and a sell is refused
+                rather than credited against something CAPX cannot sell.
+              </span>
+            </span>
+          </label>
+        </>
+      )}
+      {listing && (
         <div className="mb-3 rounded-2xl surface p-3.5">
           <div className="eyebrow">What FIMCO holds</div>
           <Field label="Shares held" v={hold.quantity} on={(v) => setHold({ ...hold, quantity: v.replace(/[^0-9.]/g, "") })} ph="1000" />
@@ -1402,7 +1493,12 @@ function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone
           {hl > hq && hq > 0 && <p className="mt-2 text-[11px] text-[var(--color-down)]">Tokenised cannot exceed the shares held.</p>}
         </div>
       )}
-      {!asBroker && (
+      {external && f.tokenAddress && (
+        <p className="-mt-1 mb-3 text-[11px] text-[var(--muted)]">
+          Decimals are read from the token itself when this is saved, so they cannot be set wrong here.
+        </p>
+      )}
+      {!asBroker && !external && (
               <Field label="Decimals" v={f.decimals} on={(v) => setF({ ...f, decimals: v })} ph="8"
         hint="Read from the token itself when an address is given." />
       )}
@@ -1429,7 +1525,7 @@ function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone
       )}
       <button
         onClick={() => void (async () => {
-          const ok = await onAct({ action: "register-security", ...f, decimals: Number(f.decimals), ...(logo ? { logo } : {}) });
+          const ok = await onAct({ action: "register-security", ...f, ...ext, decimals: Number(f.decimals), ...(logo ? { logo } : {}) });
           if (ok === false) return;
           if (listing) {
             const filed = await onAct({
@@ -1444,6 +1540,7 @@ function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone
           onDone?.();
         })()}
         disabled={busy || !f.symbol || !f.name
+          || (external && !/^0x[0-9a-fA-F]{40}$/.test(f.tokenAddress.trim()))
           || (listing && (!(hq > 0) || hl > hq || !hold.docRef.trim() || !hold.expiresAt))}
         className="mt-2 w-full rounded-full bg-[var(--fg)] py-2.5 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40"
       >

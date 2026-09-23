@@ -336,137 +336,21 @@ function readBankList(r: unknown): { code: string; name: string }[] {
   }).filter((b) => b.code);
 }
 
-/**
- * Banks hiding in the biller catalogue.
- *
- * The public API has no bank-list endpoint — the OpenAPI document names
- * thirty-two paths and none of them is one, which is why `/withdrawals/banks`
- * answers 500: it is being read as `/withdrawals/{id}` with an id of "banks".
- *
- * But withdrawals and bill payments run on the same Selcom rail, and Selcom's
- * biller catalogue in Tanzania carries bank deposits as billers. So the list
- * exists, under another name, at an endpoint that is documented — which is
- * very likely where the nTZS app gets it too.
- *
- * Matched loosely and on purpose: an entry counts as a bank if it is
- * categorised as one or simply says so in its name, in either language. A
- * false positive is a code that fails at the quote, before money moves; a
- * false negative is a customer who cannot withdraw.
- */
-/** Every entry in the catalogue, whatever it is nested inside. */
-function flattenBillers(r: unknown): { entry: Record<string, unknown>; group: string }[] {
-  const out: { entry: Record<string, unknown>; group: string }[] = [];
-
-  const takeList = (list: unknown, group: string) => {
-    if (!Array.isArray(list)) return;
-    for (const item of list) {
-      if (typeof item !== "object" || !item) continue;
-      const o = item as Record<string, unknown>;
-      /*
-       * A category is an entry with its own entries. The catalogue is served
-       * grouped — `{ enabled, categories, note }` — so the billers are a
-       * level down from where a flat read looks, and the group's own name is
-       * the strongest clue about what is in it.
-       */
-      const nested = o.billers ?? o.items ?? o.entries ?? o.list ?? o.options;
-      if (Array.isArray(nested)) {
-        takeList(nested, String(o.name ?? o.label ?? o.category ?? o.code ?? group));
-        continue;
-      }
-      out.push({ entry: o, group });
-    }
-  };
-
-  if (Array.isArray(r)) takeList(r, "");
-  else if (typeof r === "object" && r) {
-    const o = r as Record<string, unknown>;
-    for (const key of ["categories", "billers", "data", "results", "items"]) {
-      takeList(o[key], key === "categories" ? "" : key);
-    }
-  }
-  return out;
-}
-
-function banksFromBillers(r: unknown): { code: string; name: string }[] {
-  const seen = new Set<string>();
-  const banks: { code: string; name: string }[] = [];
-
-  for (const { entry: o, group } of flattenBillers(r)) {
-    const code = String(o.code ?? o.billerCode ?? o.fiCode ?? o.fi_code ?? o.id ?? "").trim();
-    const name = String(o.name ?? o.billerName ?? o.label ?? code).trim();
-    if (!code || seen.has(code.toUpperCase())) continue;
-
-    // The group it sits in counts as much as its own name: a category called
-    // "Banks" makes every entry in it a bank, whatever each one is called.
-    /*
-     * Only an explicit mark counts.
-     *
-     * Matching on "the reference is an account number" put ECOWATER, GOFIBER
-     * and ZESHA in a bank picker: almost every biller asks for an account
-     * number, so that test says nothing. A water company offered as a bank is
-     * worse than a short list — one is incomplete, the other is wrong, and a
-     * payout sent to a biller code is not a payout to a bank.
-     */
-    const haystack = [group, o.category, o.type, o.group, o.sector, name]
-      .filter(Boolean).map((v) => String(v).toLowerCase()).join(" ");
-    if (!/\b(bank|benki)/.test(haystack)) continue;
-
-    seen.add(code.toUpperCase());
-    banks.push({ code, name });
-  }
-  return banks;
-}
-
 export async function withdrawalBanksDetailed(): Promise<BankLookup> {
   const tried: BankLookup["tried"] = [];
-  let sample: Record<string, unknown> | null = null;
 
   /*
-   * The catalogue first, because it is the endpoint that is actually
-   * documented. The dedicated paths below are tried anyway in case one of
-   * them starts answering.
+   * These are tried in case one of them starts answering.
+   *
+   * None of them is documented. nTZS's own endpoint inventory — the docs
+   * page, the OpenAPI document and llms-full.txt all agree — lists no bank
+   * endpoint at all, so "full list in the API reference" describes something
+   * that is not there. The biller catalogue is not it either: it is bills,
+   * and reading banks out of it produced ECOWATER and GOFIBER.
+   *
+   * So the fallback list is the honest state of affairs until nTZS publish
+   * the codes, and the typed-code path is how somebody banks anywhere else.
    */
-  try {
-    const billers = await call<unknown>("/api/v1/spend/billers");
-    const banks = banksFromBillers(billers);
-    const total = flattenBillers(billers).length;
-    tried.push({ path: "/api/v1/spend/billers", outcome: `${banks.length} banks of ${total} billers` });
-    if (banks.length) return { banks, tried };
-    /*
-     * Nothing matched — so report what there was to match against.
-     *
-     * An entry when there are entries; otherwise the response's own shape,
-     * because "0 of 0" leaves two very different explanations open: a
-     * catalogue we cannot read, and a catalogue that is genuinely empty
-     * because the Spend capability was never granted.
-     */
-    const flat = flattenBillers(billers);
-    const o = (typeof billers === "object" && billers ? billers : {}) as Record<string, unknown>;
-
-    /*
-     * Values, not field names.
-     *
-     * We now know an entry carries `code`, `referenceLabel` and
-     * `referenceKind` and no name or category — so the question is no longer
-     * what the fields are called but what is in them. The groups are listed
-     * too: whether there is a banking category at all is the thing that
-     * decides whether this catalogue is the right place to be looking.
-     */
-    sample = flat.length
-      ? {
-          groups: [...new Set(flat.map((f) => f.group).filter(Boolean))].join(", ") || "none",
-          examples: flat.slice(0, 6).map((f) =>
-            `${f.entry.code ?? "?"}[${f.entry.referenceKind ?? "?"}:${f.entry.referenceLabel ?? "?"}]`).join(" "),
-        }
-      : o.note
-        // The catalogue says why it is empty; it is the most useful thing here.
-        ? { "catalogue says": String(o.note).slice(0, 200) }
-        : { "response keys": Object.keys(o).join(", ") || "none" };
-  } catch (e) {
-    const raw = e instanceof Error ? e.message : "failed";
-    tried.push({ path: "/api/v1/spend/billers", outcome: raw.slice(0, 120) });
-  }
-
   for (const path of [
     "/api/v1/withdrawals/banks",
     "/api/v1/withdrawals/institutions",
@@ -475,8 +359,6 @@ export async function withdrawalBanksDetailed(): Promise<BankLookup> {
     try {
       const r = await call<unknown>(path);
       const banks = readBankList(r);
-      /* Summarised, never echoed: one of these paths answers with a whole
-         HTML error page, and pasting that under a form helps nobody. */
       tried.push({
         path,
         outcome: banks.length
@@ -491,7 +373,7 @@ export async function withdrawalBanksDetailed(): Promise<BankLookup> {
       tried.push({ path, outcome: /<!DOCTYPE|<html/i.test(raw) ? "not an API route (HTML page)" : raw.slice(0, 120) });
     }
   }
-  return { banks: [], tried, sample };
+  return { banks: [], tried, sample: null };
 }
 
 export async function withdrawalBanks(): Promise<{ code: string; name: string }[]> {

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import { requireDb, bad, boom } from "@/lib/apiHelpers";
 import { decodeImage, kycFor, submitKyc } from "@/lib/kyc";
+import { sendMail, opsEmail } from "@/lib/mail";
+import { after } from "next/server";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +44,7 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => ({}));
     const docType = String(body.docType ?? "").toLowerCase();
+    const docNumber = body.docNumber ? String(body.docNumber).trim().slice(0, 64) : null;
     if (!DOC_TYPES.has(docType)) return bad("Choose which document you are submitting.");
 
     let doc, selfie;
@@ -55,9 +58,41 @@ export async function POST(req: Request) {
     const id = await submitKyc({
       userId: user.id,
       docType,
-      docNumber: body.docNumber ? String(body.docNumber).trim().slice(0, 64) : null,
+      docNumber,
       doc,
       selfie,
+    });
+
+    /*
+     * Tell the reviewers, after the customer has their answer.
+     *
+     * Sent with `after` so a slow or failing mail provider cannot delay or
+     * break a submission that is already saved. The notice carries who and
+     * what, never the document or the selfie: those are the most sensitive
+     * things CAPX holds and they stay behind the desk's login rather than
+     * sitting in an inbox. Replies go to the customer.
+     */
+    after(async () => {
+      const at = new Date().toLocaleString("en-GB", { timeZone: "Africa/Dar_es_Salaam" });
+      const r = await sendMail({
+        subject: `KYC to review — ${user.name ?? user.email}`,
+        replyTo: user.email,
+        text: [
+          `${user.name ?? "A customer"} submitted identity verification.`,
+          ``,
+          `Name      ${user.name ?? "—"}`,
+          `Email     ${user.email}`,
+          `Phone     ${user.phone ?? "—"}`,
+          `Document  ${docType.replace(/_/g, " ")}${docNumber ? ` · ${docNumber}` : ""}`,
+          `Submitted ${at} (EAT)`,
+          ``,
+          `Review it, with the document and selfie, on the securities desk:`,
+          `https://www.capx.broker/admin`,
+          ``,
+          `The photographs are not attached; they stay behind the desk's login.`,
+        ].join("\n"),
+      });
+      if (!r.sent) console.warn(`KYC notice to ${opsEmail} not sent: ${r.reason}`);
     });
 
     return NextResponse.json({ ok: true, id, status: "pending" });

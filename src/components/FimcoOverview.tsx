@@ -105,11 +105,21 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
         body: JSON.stringify({ action: "open-account" }),
       });
       const j = await r.json();
+      /*
+       * Every step, not only the failures.
+       *
+       * "attestation refused" on its own reads as a dead end. "identity
+       * attached, then attestation refused, account now pending_review" is
+       * the same facts and a different conclusion — the account is waiting on
+       * somebody at nTZS rather than on us.
+       */
+      const steps = (j.steps ?? []) as { step: string; ok: boolean; detail: string }[];
       setMsg(j.ok
         ? `Wallet issued: ${j.wallet}.`
-        : (j.steps ?? []).filter((s: { ok: boolean }) => !s.ok)
-            .map((s: { step: string; detail: string }) => `${s.step}: ${s.detail}`).join(" · ")
-          || j.error || "Could not open the wallet.");
+        : [
+            ...steps.map((s) => `${s.ok ? "✓" : "✕"} ${s.step}: ${s.detail}`),
+            j.kycStatus ? `Account is now “${j.kycStatus}”.` : null,
+          ].filter(Boolean).join("\n") || j.error || "Could not open the wallet.");
       setReload((n) => n + 1);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Could not open the wallet");
@@ -325,7 +335,9 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
                   You can take up to what is owed; nothing else touches this balance.</>
               )}
             </p>
-            {msg && <p className="mt-2 text-[12px] text-[var(--muted)]">{msg}</p>}
+            {msg && (
+              <p className="mt-2 whitespace-pre-line text-[12px] leading-relaxed text-[var(--muted)]">{msg}</p>
+            )}
           </div>
 
         {acct.entries.length > 0 && (

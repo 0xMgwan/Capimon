@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { pollWhileVisible } from "@/lib/usePoll";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { useT } from "@/lib/i18n";
 import { AssetLogo } from "./AssetLogo";
@@ -131,8 +132,8 @@ export function NotificationBell() {
     // during an effect cascades a second render before the first has painted.
     const tick = () => { if (alive) void load(); };
     const first = setTimeout(tick, 0);
-    const id = setInterval(tick, 30_000);
-    return () => { alive = false; clearTimeout(first); clearInterval(id); };
+    const stop = pollWhileVisible(tick, 30_000);
+    return () => { alive = false; clearTimeout(first); stop(); };
   }, [account, load]);
 
   /*

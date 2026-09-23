@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { publicCache } from "@/lib/httpCache";
 import { parseUnits, formatUnits } from "viem";
 import { ASSETS, USDC_BASE } from "@/lib/assets";
 import { getMarkets } from "@/lib/markets";
@@ -69,7 +70,7 @@ export async function GET() {
     }
     return NextResponse.json(
       { ok: true, probeSize: PROBE_USDC, asOf: Math.floor(cache!.at / 1000), venues: cache!.data },
-      { headers: { "cache-control": "no-store" } },
+      { headers: publicCache(120) },
     );
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "probe failed" }, { status: 502 });

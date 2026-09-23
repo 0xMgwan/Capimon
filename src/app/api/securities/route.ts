@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { publicCache } from "@/lib/httpCache";
 import { db, migrate, dbConfigured } from "@/lib/db";
 import { backing } from "@/lib/custody";
 
@@ -45,7 +46,7 @@ export async function GET() {
       };
     }));
 
-    return NextResponse.json({ ok: true, securities }, { headers: { "cache-control": "no-store" } });
+    return NextResponse.json({ ok: true, securities }, { headers: publicCache(30) });
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : "Could not load securities" },

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { publicCache } from "@/lib/httpCache";
 import { getMarkets } from "@/lib/markets";
 
 export const revalidate = 0;
@@ -39,7 +40,7 @@ export async function GET() {
         },
         markets,
       },
-      { headers: { "cache-control": "no-store" } },
+      { headers: publicCache(15) },
     );
   } catch (e) {
     const message = e instanceof Error ? e.message : "upstream RPC error";
@@ -49,7 +50,7 @@ export async function GET() {
         totals: { tvl: cache.data.reduce((s, m) => s + m.tvl, 0), assets: cache.data.length,
           listed: cache.data.filter((m) => m.supply > 0).length,
           lastUpdate: Math.max(...cache.data.map((m) => m.updatedAt)) },
-        markets: cache.data }, { headers: { "cache-control": "no-store" } });
+        markets: cache.data }, { headers: publicCache(15) });
     }
     return NextResponse.json({ ok: false, error: message }, { status: 502 });
   }

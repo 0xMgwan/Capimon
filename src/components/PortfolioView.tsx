@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { pollWhileVisible } from "@/lib/usePoll";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { isAddress } from "viem";
@@ -60,8 +61,8 @@ export function PortfolioView() {
     };
     // Deferred so the first read does not set state inside the effect body.
     const first = setTimeout(load, 0);
-    const id = setInterval(load, 20_000);
-    return () => { alive = false; clearTimeout(first); clearInterval(id); };
+    const stop = pollWhileVisible(load, 20_000);
+    return () => { alive = false; clearTimeout(first); stop(); };
   }, [address]);
 
   // Signed into a custodial account and no wallet connected: that book is the

@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { pollWhileVisible } from "@/lib/usePoll";
 
 export type CustodialPosition = {
   symbol: string; ticker: string; name: string; color: string; logo: string | null;
@@ -81,8 +82,8 @@ export function CapimonAccountProvider({ children }: { children: React.ReactNode
 
   useEffect(() => {
     const first = setTimeout(refresh, 0);
-    const id = setInterval(refresh, 30_000);
-    return () => { clearTimeout(first); clearInterval(id); };
+    const stop = pollWhileVisible(refresh, 30_000);
+    return () => { clearTimeout(first); stop(); };
   }, [refresh]);
 
   return (

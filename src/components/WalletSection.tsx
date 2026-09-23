@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { pollWhileVisible } from "@/lib/usePoll";
 import { motion, AnimatePresence } from "motion/react";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { NtzsIcon } from "./icons/Ntzs";
@@ -133,8 +134,8 @@ export function WalletSection({ holdings }: {
     const first = setTimeout(tick, 0);
     // Watch closely while something is in flight, idle otherwise. The server
     // credits it either way — this only decides how soon the screen catches up.
-    const id = setInterval(tick, pendingCount > 0 ? 6_000 : 30_000);
-    return () => { alive = false; clearTimeout(first); clearInterval(id); };
+    const stop = pollWhileVisible(tick, pendingCount > 0 ? 6_000 : 30_000);
+    return () => { alive = false; clearTimeout(first); stop(); };
   }, [loadDeposits, refresh, pendingCount]);
 
   /* The newest open bank transfer, so its details survive a reload. */

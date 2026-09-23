@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { publicCache } from "@/lib/httpCache";
 import { isAddress } from "viem";
 import { getWalletHistory } from "@/lib/history";
 
@@ -15,13 +16,13 @@ export async function GET(req: Request) {
   const key = address.toLowerCase();
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) {
-    return NextResponse.json({ ok: true, cached: true, ...hit.data }, { headers: { "cache-control": "no-store" } });
+    return NextResponse.json({ ok: true, cached: true, ...hit.data }, { headers: publicCache(300) });
   }
 
   try {
     const data = await getWalletHistory(address as `0x${string}`);
     cache.set(key, { at: Date.now(), data });
-    return NextResponse.json({ ok: true, ...data }, { headers: { "cache-control": "no-store" } });
+    return NextResponse.json({ ok: true, ...data }, { headers: publicCache(300) });
   } catch (e) {
     if (hit) {
       return NextResponse.json({ ok: true, stale: true, ...hit.data }, { headers: { "cache-control": "no-store" } });

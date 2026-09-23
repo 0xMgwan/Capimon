@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { pollWhileVisible } from "@/lib/usePoll";
 import Link from "next/link";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { useT } from "@/lib/i18n";
@@ -82,8 +83,8 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
 
   useEffect(() => {
     load();
-    const id = setInterval(load, 60_000);
-    return () => clearInterval(id);
+    const stop = pollWhileVisible(load, 60_000);
+    return () => stop();
   }, [load]);
 
   const m = data?.market;

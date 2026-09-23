@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { pollWhileVisible } from "@/lib/usePoll";
 import { useT } from "@/lib/i18n";
 
 type Backing = {
@@ -59,8 +60,8 @@ export function ProofOfReserves() {
         .then((j) => { if (alive && j.ok) setSecurities(j.securities ?? []); })
         .catch(() => { if (alive) setSecurities([]); });
     const first = setTimeout(load, 0);
-    const id = setInterval(load, 30_000);
-    return () => { alive = false; clearTimeout(first); clearInterval(id); };
+    const stop = pollWhileVisible(load, 30_000);
+    return () => { alive = false; clearTimeout(first); stop(); };
   }, []);
 
   return (

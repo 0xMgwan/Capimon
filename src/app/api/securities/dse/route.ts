@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { publicCache } from "@/lib/httpCache";
 import { dseSecurities } from "@/lib/dseSecurities";
 import { dseQuote, currentPrice } from "@/lib/dse";
 import { FEE_BPS, feeEnabled } from "@/lib/fees";
@@ -48,5 +49,5 @@ export async function GET() {
       feeBps: feeEnabled ? FEE_BPS : 0,
     };
   }));
-  return NextResponse.json({ ok: true, securities }, { headers: { "cache-control": "no-store" } });
+  return NextResponse.json({ ok: true, securities }, { headers: publicCache(20) });
 }

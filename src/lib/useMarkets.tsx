@@ -27,7 +27,15 @@ type Ctx = {
 
 const MarketsCtx = createContext<Ctx>({ data: null, ticks: {}, error: null, loading: true, refresh: () => {} });
 
-const POLL_MS = 10_000;
+/*
+ * Twenty seconds, not ten.
+ *
+ * The endpoint is now cached at the edge for fifteen, so polling faster than
+ * that mostly re-reads the same cached answer — it costs a request per reader
+ * and buys nothing. A share price that is twenty seconds old is still a live
+ * price; a bill for showing it is not.
+ */
+const POLL_MS = 20_000;
 
 export function MarketsProvider({ children, initial }: { children: React.ReactNode; initial?: Snapshot | null }) {
   const [data, setData] = useState<Snapshot | null>(initial ?? null);

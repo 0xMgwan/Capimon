@@ -185,10 +185,16 @@ export async function POST(req: Request) {
      * same reason.
      */
     if (body.action === "sweep-fees") {
-      const { sweepFees, feePosition } = await import("@/lib/feeSweep");
+      const { sweepFees, sweepBrokerFees, feePosition } = await import("@/lib/feeSweep");
       try {
         const { id, amount, txHash } = await sweepFees({ force: body.force === true });
-        return NextResponse.json({ ok: true, id, amount, txHash, position: await feePosition() });
+        /*
+         * The broker's share moves in the same action, to its own account.
+         * After CAPX's leg, and never able to fail it: a broker account that
+         * is not set up yet leaves their fees where they already were.
+         */
+        const broker = await sweepBrokerFees().catch(() => ({ ok: false as const, reason: "failed" }));
+        return NextResponse.json({ ok: true, id, amount, txHash, broker, position: await feePosition() });
       } catch (e) {
         return NextResponse.json(
           { ok: false, error: e instanceof Error ? e.message : "sweep failed",

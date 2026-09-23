@@ -44,7 +44,8 @@ type Admin = {
               unavailable?: string } | null;
   totalsExtra: { settledOrders: number; failedOrders: number; feesTzs: number };
   fees?: {
-    position: { charged: number; broker: number; capx: number; swept: number; unswept: number; destination: string | null;
+    position: { charged: number; broker: number; brokerSwept: number; brokerUnswept: number;
+                brokerDestination: string | null; capx: number; swept: number; unswept: number; destination: string | null;
                 minimum: number; sweepable: boolean; reason: string | null;
                 belowMinimum: boolean } | null;
     sweeps: { id: string; amount_tzs: number; destination: string; status: string;
@@ -402,6 +403,13 @@ export function AdminPanel() {
               <div>
                 <div className="eyebrow">Broker&rsquo;s share</div>
                 <div className="mt-1 text-[var(--muted)]">−{TZS(data.fees.position.broker)}</div>
+                <div className="mt-0.5 text-[10px] text-[var(--muted)]">
+                  {data.fees.position.brokerDestination
+                    ? data.fees.position.brokerUnswept > 0
+                      ? `${TZS(data.fees.position.brokerUnswept)} still to move`
+                      : "all moved to their account"
+                    : "no account yet — stays in the float"}
+                </div>
               </div>
               <div><div className="eyebrow">Swept out</div><div className="mt-1">{TZS(data.fees.position.swept)}</div></div>
               <div><div className="eyebrow">Yours, in float</div>

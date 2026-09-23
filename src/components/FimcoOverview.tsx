@@ -196,9 +196,9 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
           <div>
             <div className="eyebrow">Your account</div>
             <p className="mt-1 max-w-xl text-[12px] leading-relaxed text-[var(--muted)]">
-              Every trade credits your share here. The shillings sit in the CAPX settlement
-              account until a payout is made, exactly as customers&rsquo; do — this is the record
-              of what is owed, and both desks read the same rows.
+              Every trade credits your share here. The shillings are moved into an nTZS
+              account that holds nothing but your fees, and a withdrawal is paid from it —
+              this is the record of what is owed, and both desks read the same rows.
             </p>
           </div>
           <div className="text-right">

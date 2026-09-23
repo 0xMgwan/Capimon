@@ -459,6 +459,11 @@ export async function migrate() {
           "ntzs_status text", "ntzs_reference text", "swap_ref text", "transfer_tx text",
           "rate_tzs_usdc numeric(38,8)", "metadata jsonb not null default '{}'::jsonb",
         ],
+        fee_sweeps: [
+          /* Which side of the split this leg moved: capx | fimco. Older rows
+             predate the split and are all CAPX's, which the default says. */
+          "party text not null default 'capx'",
+        ],
         ops_contacts: [
           /*
            * Where a counterparty's money is paid. Theirs to set, because the

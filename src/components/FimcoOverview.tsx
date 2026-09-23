@@ -361,12 +361,12 @@ function PayoutAccount({ token, isAdmin, saved, onSaved }: {
   useEffect(() => {
     if (form.method !== "bank" || banks.length) return;
     let alive = true;
-    fetch("/api/ntzs/banks", { cache: "no-store" })
+    fetch("/api/ntzs/banks", { headers: { authorization: `Bearer ${token}` }, cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (alive && j.ok) setBanks(j.banks ?? []); })
       .catch(() => { /* the field still accepts a code */ });
     return () => { alive = false; };
-  }, [form.method, banks.length]);
+  }, [form.method, banks.length, token]);
 
   const save = async () => {
     setBusy(true); setErr(null);

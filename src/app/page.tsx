@@ -1,6 +1,6 @@
 import { Hero } from "@/components/Hero";
 import {
-  StackStrip, DseSection, ProductsSection, LiveBoard, StatsBand, BeliefSection, PillarsSection, ClosingCTA,
+  StackStrip, DseSection, ProductsSection, AutoInvestBand, LiveBoard, StatsBand, BeliefSection, PillarsSection, ClosingCTA,
 } from "@/components/HomeSections";
 
 export default function Home() {
@@ -21,6 +21,7 @@ export default function Home() {
       <StackStrip />
       <DseSection />
       <ProductsSection />
+      <AutoInvestBand />
 
       <div className="hidden md:block">
         <LiveBoard />

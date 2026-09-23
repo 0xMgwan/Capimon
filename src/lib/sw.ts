@@ -453,6 +453,44 @@ export const SW: Record<string, string> = {
   "CAPX lets you buy shares listed on the Dar es Salaam Stock Exchange, and US shares, with Tanzanian shillings. Shares bought through a CAPX account are held on your behalf by CAPX with a licensed DSE broker. A holding tracks the price of the underlying share: it is a representation of that share on the blockchain, not registered shareholding, and it carries no dividend entitlement and no voting or other shareholder rights. CAPX is not an exchange or an investment adviser, and nothing here is investment advice. Share prices can fall as well as rise. US shares are not available to US persons.":
     "CAPX inakuwezesha kununua hisa zilizoorodheshwa kwenye Soko la Hisa la Dar es Salaam, na hisa za Marekani, kwa shilingi za Tanzania. Hisa zinazonunuliwa kupitia akaunti ya CAPX zinashikiliwa kwa niaba yako na CAPX pamoja na dalali wa DSE mwenye leseni. Umiliki wako unafuata bei ya hisa husika: ni uwakilishi wa hisa hiyo kwenye blockchain, si umiliki uliosajiliwa, na hauambatani na haki ya gawio wala haki ya kupiga kura au haki nyingine za mwanahisa. CAPX si soko la hisa wala mshauri wa uwekezaji, na hakuna chochote hapa ni ushauri wa uwekezaji. Bei za hisa zinaweza kushuka au kupanda. Hisa za Marekani hazipatikani kwa raia wa Marekani.",
   // The brand tagline, kept as it is said rather than translated literally.
+  // Standing orders.
+  "Automatic investing": "Uwekezaji wa kiotomatiki",
+  "Invest on payday, every payday.": "Wekeza siku ya mshahara, kila mshahara.",
+  "Set an amount and a day, and CAPX buys for you — weekly or monthly, in any listed share. It spends only what is already in your account, and you can pause it whenever you like.":
+    "Weka kiasi na siku, na CAPX itanunua kwa niaba yako — kila wiki au kila mwezi, katika hisa yoyote iliyoorodheshwa. Hutumia tu kilichopo kwenye akaunti yako, na unaweza kusimamisha wakati wowote.",
+  "For example": "Kwa mfano",
+  "on the 1st of each month": "tarehe 1 ya kila mwezi",
+  "Buy the same amount on the same day, without thinking about it.":
+    "Nunua kiasi kilekile siku ileile, bila kufikiria.",
+  "New plan": "Mpango mpya",
+  "Close": "Funga",
+  "Share": "Hisa",
+  "Amount each time": "Kiasi kila mara",
+  "Every week": "Kila wiki",
+  "Every month": "Kila mwezi",
+  "Day": "Siku",
+  "Day of the month": "Tarehe ya mwezi",
+  "The 28th is the last day offered, so every month has one.":
+    "Tarehe 28 ndiyo ya mwisho inayotolewa, ili kila mwezi iwe nayo.",
+  "Start plan": "Anza mpango",
+  "It spends the shillings already in your account. If the balance is short that day, nothing is bought and we tell you.":
+    "Hutumia shilingi zilizopo kwenye akaunti yako. Kama salio halitoshi siku hiyo, hakuna kinachonunuliwa na tutakujulisha.",
+  "Could not save your plan": "Imeshindikana kuhifadhi mpango wako",
+  "Pause": "Simamisha",
+  "Resume": "Endelea",
+  "every": "kila",
+  "day": "tarehe",
+  "of each month": "ya kila mwezi",
+  "next": "ifuatayo",
+  "paused": "imesimamishwa",
+  "bought": "zimenunuliwa",
+  "Sunday": "Jumapili",
+  "Monday": "Jumatatu",
+  "Tuesday": "Jumanne",
+  "Wednesday": "Jumatano",
+  "Thursday": "Alhamisi",
+  "Friday": "Ijumaa",
+  "Saturday": "Jumamosi",
   "Capital in Motion": "Capital in Motion",
 
   // --- account creation (AccountForm, JoinFlow) ---

@@ -7,6 +7,8 @@ import { Counter } from "./Counter";
 import { Reveal } from "./Reveal";
 import { WalletSection } from "./WalletSection";
 import { KycPrompt } from "./KycPrompt";
+import { RecurringBuys } from "./RecurringBuys";
+import { useDse } from "@/lib/useDse";
 import { usd, costLabel } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { NtzsIcon } from "./icons/Ntzs";
@@ -22,6 +24,8 @@ export function CustodialPortfolio() {
    * about how they are read.
    */
   const { currency, setCurrency, canShowTzs, format: money } = useCurrency();
+  // Hooks before the early return: a plan can only be made in something live.
+  const dse = useDse();
   if (!account) return null;
 
   const { tzs, cashTzs, positions, equity, total } = account;
@@ -109,6 +113,15 @@ export function CustodialPortfolio() {
       {/* Above the money, because an unverified account is a limit on what
           they can do with it. */}
       <div className="mt-3"><KycPrompt /></div>
+
+      {/*
+        * Under the balance, because a standing order spends it.
+        *
+        * A plan is only offered in something that is actually trading: an
+        * external listing that has closed, or a suspended share, would take
+        * the money and refuse the order every month.
+        */}
+      <RecurringBuys securities={dse.filter((d) => d.status === "live").map((d) => ({ symbol: d.symbol, name: d.name }))} />
 
       {/*
         * Money first, then what it bought.

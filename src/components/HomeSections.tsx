@@ -461,6 +461,48 @@ export function BeliefSection() {
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * Standing orders, said on the landing page.
+ *
+ * It belongs here rather than in the feature list because it is an answer to
+ * the objection most people actually have — not "is this safe" but "I will
+ * never remember to do it". Short, and on every screen size, since the phone
+ * is where somebody would set one up.
+ */
+export function AutoInvestBand() {
+  const { t } = useT();
+  return (
+    <section className="border-y hairline">
+      <div className="mx-auto flex max-w-[1400px] flex-col gap-6 px-5 py-12 sm:px-8 sm:py-16 md:flex-row md:items-center md:justify-between">
+        <div className="max-w-xl">
+          <div className="eyebrow">{t("Automatic investing")}</div>
+          <h2 className="display mt-3 text-[clamp(1.5rem,4vw,2.6rem)]">
+            {t("Invest on payday, every payday.")}
+          </h2>
+          <p className="mt-3 text-[17px] leading-relaxed text-[var(--muted)]">
+            {t("Set an amount and a day, and CAPX buys for you — weekly or monthly, in any listed share. It spends only what is already in your account, and you can pause it whenever you like.")}
+          </p>
+        </div>
+        <div className="shrink-0">
+          <div className="rounded-3xl border hairline p-5 sm:p-6">
+            <div className="tnum text-[13px] text-[var(--muted)]">{t("For example")}</div>
+            <div className="mt-2 text-[22px] font-medium tracking-[-0.03em] sm:text-[26px]">
+              50,000 TZS → CRDB
+            </div>
+            <div className="mt-1 text-[13px] text-[var(--muted)]">{t("on the 1st of each month")}</div>
+            <Link href="/join"
+              className="mt-5 inline-block rounded-full bg-[var(--fg)] px-5 py-2.5 text-[13px] font-medium text-[var(--bg)]">
+              {t("Open an account")}
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
 const PILLARS = [
   { t: "Native precompiles", b: "B20 tokens are not redeployed contracts. They are native to Base, audited by Base and Spearbit, with Cantina and HackerOne bounty coverage." },
   { t: "Verifiable marks", b: "Chainlink total-return feeds publish price × multiplier onchain. CAPX reads updatedAt and flags anything stale rather than showing a confident lie." },

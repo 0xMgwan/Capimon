@@ -262,6 +262,35 @@ export async function migrate() {
           primary key (symbol, at)
         )`;
       await sql`
+        /*
+         * Standing orders: buy this much of this share, this often.
+         *
+         * The schedule is a next-run timestamp rather than a cron expression,
+         * because the question the worker asks is "what is due now" and a
+         * timestamp answers it with an index instead of a parse. Advancing it
+         * is the worker's own job, so a run that fails does not silently skip
+         * a month.
+         */
+        create table if not exists capx.recurring_buys (
+          id          uuid primary key default gen_random_uuid(),
+          user_id     uuid not null references capx.users(id) on delete cascade,
+          symbol      text not null,
+          amount_tzs  numeric(38,2) not null,
+          /* weekly | monthly */
+          cadence     text not null,
+          /* 0–6 for weekly, 1–28 for monthly. Capped at 28 so every month has one. */
+          day_of      int not null,
+          next_run    timestamptz not null,
+          /* active | paused */
+          status      text not null default 'active',
+          last_run_at timestamptz,
+          last_error  text,
+          runs        int not null default 0,
+          misses      int not null default 0,
+          created_at  timestamptz not null default now()
+        )`;
+
+      await sql`
         create table if not exists capx.ops_contacts (
           /* Which party these addresses belong to: "fimco" today. */
           party      text primary key,
@@ -411,6 +440,9 @@ export async function migrate() {
       await sql`create unique index if not exists ledger_ref_idx on capx.ledger_entries(ref) where ref is not null`;
       await sql`create index if not exists notif_user_idx on capx.notifications(user_id, id desc)`;
       await sql`create unique index if not exists notif_ref_idx on capx.notifications(ref) where ref is not null`;
+      await sql`create index if not exists recurring_due_idx
+                  on capx.recurring_buys(next_run) where status = 'active'`;
+      await sql`create index if not exists recurring_user_idx on capx.recurring_buys(user_id, created_at desc)`;
       await sql`create index if not exists custody_sec_idx on capx.custody_attestations(security, created_at desc)`;
       await sql`create index if not exists issuance_sec_idx on capx.issuance_events(security, created_at desc)`;
       await sql`create index if not exists fee_sweeps_status_idx on capx.fee_sweeps(status, created_at desc)`;

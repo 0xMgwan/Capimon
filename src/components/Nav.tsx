@@ -35,6 +35,16 @@ export function Nav() {
   const { t } = useT();
   const signedIn = !!account || isConnected;
   const links = LINKS.filter((l) => !(l.hideWhenSignedIn && signedIn));
+  /*
+   * The operations desks are not the website.
+   *
+   * Markets, Portfolio and Open account are for customers; on a desk they are
+   * a row of links to somewhere else above work that has its own navigation,
+   * and they make an internal tool look like a marketing page. The desks keep
+   * the wordmark and lose the rest.
+   */
+  const isDesk = path?.startsWith("/admin") ?? false;
+  const navLinks = isDesk ? [] : links;
   // The menu belongs to the route it was opened on, so navigating closes it.
   const [menuAt, setMenuAt] = useState<string | null>(null);
   const menu = menuAt === path;
@@ -78,7 +88,7 @@ export function Nav() {
           </Link>
 
           <div className="hidden items-center gap-1 md:flex">
-            {links.map((l) => {
+            {navLinks.map((l) => {
               const active = path === l.href || path.startsWith(l.href + "/");
               return (
                 <Link
@@ -109,11 +119,13 @@ export function Nav() {
             * which is where a dropdown should line up.
             */}
           <div className="relative flex items-center gap-2">
-            <LangToggle />
+            {!isDesk && <LangToggle />}
             <ThemeToggle />
             {/* Renders nothing when signed out, so it never crowds a visitor. */}
-            <NotificationBell />
-            <WalletButton />
+            {!isDesk && <NotificationBell />}
+            {/* A customer sign-in button on an operations desk is an invitation
+                to the wrong account; the desk has its own token. */}
+            {!isDesk && <WalletButton />}
             {/*
               * Only while there is no tab bar.
               *
@@ -167,7 +179,7 @@ export function Nav() {
                     </button>
                   </div>
                   <div className="mt-5 grid gap-1">
-                    {links.map((l) => (
+                    {navLinks.map((l) => (
                       <Link
                         key={l.href}
                         href={l.href}

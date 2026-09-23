@@ -50,10 +50,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   if (!dbConfigured) return NextResponse.json({ ok: false, code: "not_configured" }, { status: 503 });
   const role = roleOf(req);
-  if (role !== "admin") {
-    return NextResponse.json(
-      { ok: false, code: "forbidden", error: "Payouts are CAPX's to record." }, { status: 403 });
-  }
+  if (!role) return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
 
   try {
     const body = await req.json().catch(() => ({}));
@@ -99,6 +96,19 @@ export async function POST(req: Request) {
         ok: true, ...r, sent: true, reference: sent.reference,
         entries: await brokerEntries(undefined, 60),
       });
+    }
+
+    /*
+     * Writing down a transfer that happened elsewhere is CAPX's alone: it
+     * asserts money left a CAPX account, and the party whose balance it
+     * reduces is not the party who can know that. Sending is different —
+     * that is the broker taking their own earnings over a rail that will
+     * refuse if the money is not there.
+     */
+    if (role !== "admin") {
+      return NextResponse.json(
+        { ok: false, code: "forbidden",
+          error: "Only CAPX can record a payment made outside the app." }, { status: 403 });
     }
 
     const r = await recordPayout({ amountTzs, note, by: ACTOR[role] });

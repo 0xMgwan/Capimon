@@ -211,10 +211,15 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
         <PayoutAccount token={token} isAdmin={isAdmin} saved={acct.payout}
           onSaved={() => setReload((n) => n + 1)} />
 
-        {isAdmin && (
-          <div className="mt-3 rounded-2xl surface p-3">
+        {/*
+          * Both sides can send; only CAPX can write down a transfer made
+          * elsewhere. Taking your own earnings over a rail that refuses when
+          * the money is not there is a different act from asserting that
+          * money already left somebody else's bank account.
+          */}
+        <div className="mt-3 rounded-2xl surface p-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="eyebrow mr-1">Pay out</span>
+              <span className="eyebrow mr-1">{isAdmin ? "Pay out" : "Withdraw"}</span>
               <input
                 value={payout} onChange={(e) => setPayout(e.target.value.replace(/[^0-9]/g, ""))}
                 placeholder="Amount in TZS"
@@ -226,25 +231,34 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
                 className="min-w-0 flex-1 rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
               />
               <button onClick={() => void pay("send")}
-                disabled={busy || !(Number(payout) > 0) || !acct.payout}
-                title={acct.payout ? undefined : "FIMCO has not saved an account yet"}
+                disabled={busy || !(Number(payout) > 0) || !acct.payout || Number(payout) > acct.balance}
+                title={acct.payout ? undefined : "No payout account saved yet"}
                 className="rounded-full bg-[var(--fg)] px-4 py-2 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40">
-                {busy ? "Sending…" : "Send now"}
+                {busy ? "Sending…" : isAdmin ? "Send now" : "Withdraw"}
               </button>
-              <button onClick={() => void pay("record")} disabled={busy || !(Number(payout) > 0)}
-                className="rounded-full border hairline px-4 py-2 text-[13px] hover:bg-[var(--bg)] disabled:opacity-40">
-                Record only
-              </button>
+              {isAdmin && (
+                <button onClick={() => void pay("record")} disabled={busy || !(Number(payout) > 0)}
+                  className="rounded-full border hairline px-4 py-2 text-[13px] hover:bg-[var(--bg)] disabled:opacity-40">
+                  Record only
+                </button>
+              )}
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
-              <span className="text-[var(--fg)]">Send now</span> pays the account below from the
-              settlement account, over the same rail a customer withdrawal uses.{" "}
-              <span className="text-[var(--fg)]">Record only</span> writes down a transfer you
-              already made by hand, so the ledger still matches the bank.
+              {isAdmin ? (
+                <>
+                  <span className="text-[var(--fg)]">Send now</span> pays the account below from the
+                  settlement account, over the same rail a customer withdrawal uses.{" "}
+                  <span className="text-[var(--fg)]">Record only</span> writes down a transfer CAPX
+                  already made by hand — a bank transfer sent outside the app — so the ledger still
+                  matches the bank.
+                </>
+              ) : (
+                <>Paid to the account below, over the same rail a customer withdrawal uses.
+                  You can take up to what is owed; nothing else touches this balance.</>
+              )}
             </p>
             {msg && <p className="mt-2 text-[12px] text-[var(--muted)]">{msg}</p>}
           </div>
-        )}
 
         {acct.entries.length > 0 && (
           <div className="mt-4 overflow-hidden rounded-2xl border hairline">

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Lockup } from "./Logo";
 import { useT } from "@/lib/i18n";
 
@@ -33,6 +34,11 @@ const COLS = [
 
 export function Footer() {
   const { t } = useT();
+  /* The desks are an internal tool, not a page of the site: a column of
+     customer links and a marketing disclosure under a custody ledger is
+     furniture from somewhere else. */
+  const path = usePathname();
+  if (path?.startsWith("/admin")) return null;
   return (
     <footer className="border-t hairline">
       <div className="mx-auto max-w-[1400px] px-5 py-10 sm:px-8 sm:py-16">

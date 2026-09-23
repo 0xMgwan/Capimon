@@ -27,6 +27,23 @@ export type FeeSweep = {
   settled_at: string | null;
 };
 
+/**
+ * What the broker has earned and not been paid — their part of the fees that
+ * are still sitting in the omnibus.
+ *
+ * Read from the broker ledger rather than recomputed from a rate, because the
+ * rate has changed once already: trades settled at 100bps accrued nothing to
+ * the broker, and applying today's split to them would sweep money that was
+ * never theirs out of CAPX's own revenue.
+ */
+export async function brokerAccrued(): Promise<number> {
+  await migrate();
+  const rows = await db()<{ total: string | null }[]>`
+    select coalesce(sum(amount_tzs), 0)::text as total
+      from capx.broker_ledger where kind = 'fee'`;
+  return Number(rows[0]?.total ?? 0);
+}
+
 /** Everything ever charged, from the entries that charged it. */
 export async function feesCharged(): Promise<number> {
   await migrate();
@@ -60,6 +77,10 @@ export async function feesSwept(): Promise<number> {
 
 export type FeePosition = {
   charged: number;
+  /** The brokers' share of `charged`, which is not CAPX's to sweep. */
+  broker: number;
+  /** What is actually CAPX's: charged less the brokers' share. */
+  capx: number;
   swept: number;
   unswept: number;
   destination: string | null;
@@ -79,8 +100,23 @@ export type FeePosition = {
 };
 
 export async function feePosition(): Promise<FeePosition> {
-  const [charged, swept] = await Promise.all([feesCharged(), feesSwept()]);
-  const unswept = Math.round((charged - swept) * 100) / 100;
+  const [charged, swept, broker] = await Promise.all([feesCharged(), feesSwept(), brokerAccrued()]);
+
+  /*
+   * Only CAPX's share is sweepable.
+   *
+   * A fee is charged once and split two ways. Both halves sit in the omnibus
+   * until they are moved, and sweeping the whole figure would send the
+   * broker's half to CAPX's own wallet — leaving the broker ledger claiming
+   * money that is no longer there, which is the shortfall this system exists
+   * to make impossible.
+   *
+   * Subtracted in full rather than only the unpaid part: a payout to the
+   * broker also leaves the omnibus, so their earnings are never CAPX's to
+   * sweep whether they have been paid yet or not.
+   */
+  const capx = Math.round((charged - broker) * 100) / 100;
+  const unswept = Math.round((capx - swept) * 100) / 100;
 
   let reason: string | null = null;
   if (!feeSweepConfigured) reason = "No sweep destination is configured (FEE_SWEEP_ADDRESS).";
@@ -90,7 +126,7 @@ export async function feePosition(): Promise<FeePosition> {
   }
 
   return {
-    charged, swept, unswept,
+    charged, broker, capx, swept, unswept,
     destination: feeSweepConfigured ? FEE_SWEEP_ADDRESS : null,
     minimum: FEE_SWEEP_MIN_TZS,
     sweepable: reason === null,

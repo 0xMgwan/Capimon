@@ -2,6 +2,23 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usd } from "@/lib/format";
+import { DeskNav, type DeskSection } from "./DeskNav";
+
+/**
+ * The rooms of the operations desk.
+ *
+ * The page had grown to a solvency banner, two custody panels, a fee sweep, a
+ * mail check and six tabs of records on one scroll. Same treatment as the
+ * securities desk: a list down the side, so somebody who came to check one
+ * thing can go to it.
+ */
+const OPS_SECTIONS: DeskSection[] = [
+  { id: "position", label: "Position", hint: "Solvency, float and totals" },
+  { id: "custody", label: "Custody", hint: "Held at nTZS and onchain" },
+  { id: "fees", label: "Fees", hint: "Charged, owed and swept" },
+  { id: "email", label: "Email", hint: "Whether notices go out" },
+  { id: "records", label: "Records", hint: "Deposits, users, orders, KYC" },
+];
 
 /** One position, with who holds it and what it cost them. */
 type HolderRow = {
@@ -27,7 +44,7 @@ type Admin = {
               unavailable?: string } | null;
   totalsExtra: { settledOrders: number; failedOrders: number; feesTzs: number };
   fees?: {
-    position: { charged: number; swept: number; unswept: number; destination: string | null;
+    position: { charged: number; broker: number; capx: number; swept: number; unswept: number; destination: string | null;
                 minimum: number; sweepable: boolean; reason: string | null;
                 belowMinimum: boolean } | null;
     sweeps: { id: string; amount_tzs: number; destination: string; status: string;
@@ -271,7 +288,11 @@ export function AdminPanel() {
 
   return (
     <div className="mx-auto max-w-[1400px] px-5 pb-16 pt-7 sm:px-8 sm:pt-9">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="lg:flex lg:items-start lg:gap-10">
+      <DeskNav sections={OPS_SECTIONS} title="Operations"
+        subtitle="What CAPX holds, what it owes, and what moved." />
+      <div className="min-w-0 flex-1">
+      <div id="position" className="flex scroll-mt-24 flex-wrap items-end justify-between gap-4">
         <div>
           <div className="eyebrow">Operations</div>
           <h1 className="display mt-1.5 text-[clamp(1.5rem,3vw,2.1rem)]">Custody desk.</h1>
@@ -372,12 +393,18 @@ export function AdminPanel() {
         * not taken out, and that gap is the thing worth acting on.
         */}
       {data.fees?.position && (
-        <div className="mt-4 rounded-2xl border hairline px-4 py-3">
+        <div id="fees" className="mt-4 scroll-mt-24 rounded-2xl border hairline px-4 py-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="tnum grid flex-1 grid-cols-3 gap-4 text-sm">
+            <div className="tnum grid flex-1 grid-cols-2 gap-4 text-sm sm:grid-cols-4">
               <div><div className="eyebrow">Fees charged</div><div className="mt-1">{TZS(data.fees.position.charged)}</div></div>
+              {/* The broker's cut, shown because it explains why the sweepable
+                  figure is smaller than the fees taken. It is not CAPX's. */}
+              <div>
+                <div className="eyebrow">Broker&rsquo;s share</div>
+                <div className="mt-1 text-[var(--muted)]">−{TZS(data.fees.position.broker)}</div>
+              </div>
               <div><div className="eyebrow">Swept out</div><div className="mt-1">{TZS(data.fees.position.swept)}</div></div>
-              <div><div className="eyebrow">In float</div>
+              <div><div className="eyebrow">Yours, in float</div>
                 <div className="mt-1">{TZS(data.fees.position.unswept)}</div></div>
             </div>
             {/* Forcing is offered only for the minimum — the one refusal an
@@ -431,7 +458,7 @@ export function AdminPanel() {
         );
       })()}
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <div id="custody" className="mt-4 grid gap-4 scroll-mt-24 lg:grid-cols-2">
         {/* Shillings sit at nTZS; shares and USDC sit onchain. */}
         <div className="rounded-2xl border hairline p-5">
           <div className="eyebrow">Held at nTZS</div>
@@ -518,9 +545,9 @@ export function AdminPanel() {
         <Cell label="Fees (held)" value={TZS(data.totalsExtra?.feesTzs ?? 0)} />
       </div>
 
-      <MailCheck token={token} />
+      <div id="email" className="scroll-mt-24"><MailCheck token={token} /></div>
 
-      <div className="mt-6 flex gap-1 overflow-x-auto rounded-full border hairline p-1">
+      <div id="records" className="mt-6 flex scroll-mt-24 gap-1 overflow-x-auto rounded-full border hairline p-1">
         {tabs.map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`flex-1 rounded-full px-4 py-2 text-[13px] font-medium transition-colors ${
@@ -777,6 +804,8 @@ export function AdminPanel() {
             ))}
           </tbody>
         </table>
+      </div>
+      </div>
       </div>
     </div>
   );

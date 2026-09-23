@@ -154,7 +154,16 @@ body { font-variation-settings: "wdth" 100; }
 
 /* --- motion ------------------------------------------------------ */
 @keyframes marquee { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
-.marquee-track { animation: marquee var(--marquee-duration, 40s) linear infinite; will-change: transform; }
+/*
+ * No will-change here.
+ *
+ * It promotes the strip to its own layer for the entire session, and on iOS a
+ * layer that has been promoted that long comes back from the background blank
+ * often enough to matter — the animation still running, the content gone. The
+ * transform animates on the compositor regardless; the hint bought nothing
+ * and cost the one failure nobody can diagnose from a screenshot.
+ */
+.marquee-track { animation: marquee var(--marquee-duration, 40s) linear infinite; }
 
 /* Nothing behind an overlay needs to keep animating. Paused rather than hidden,
    so the strip resumes mid-scroll instead of jumping. */

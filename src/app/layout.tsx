@@ -3,6 +3,7 @@ import { Archivo, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 import { Nav } from "@/components/Nav";
+import { MarqueeKeeper } from "@/components/MarqueeKeeper";
 import { Footer } from "@/components/Footer";
 import { TickerTape } from "@/components/TickerTape";
 import { DseTape } from "@/components/DseTape";
@@ -121,6 +122,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <MobileTabs />
           <Haptics />
           <ThemeColor />
+          <MarqueeKeeper />
           <AppLaunch />
         </Providers>
       </body>

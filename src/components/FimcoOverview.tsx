@@ -29,6 +29,8 @@ type Payout = {
 
 type Account = {
   balance: number;
+  /** The part of the balance that has been swept and can be taken now. */
+  available: number;
   payout: Payout | null;
   /** The nTZS account their fees are swept into, and why it is as it is. */
   wallet?: {
@@ -253,6 +255,14 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
           <div className="text-right">
             <div className="eyebrow">Balance</div>
             <div className="tnum text-2xl font-medium">{TZS(acct.balance)}</div>
+            {/* Two true figures that are not the same: what is owed, and the
+                part of it that has been moved into the fee account and can
+                therefore be taken without touching customer float. */}
+            {acct.available < acct.balance && (
+              <div className="mt-0.5 text-[11px] text-[var(--muted)]">
+                {TZS(acct.available)} available now
+              </div>
+            )}
           </div>
         </div>
 
@@ -320,7 +330,7 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
                 className="min-w-0 flex-1 rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
               />
               <button onClick={() => void pay("send")}
-                disabled={busy || !(Number(payout) > 0) || !acct.payout || Number(payout) > acct.balance}
+                disabled={busy || !(Number(payout) > 0) || !acct.payout || Number(payout) > acct.available}
                 title={acct.payout ? undefined : "No payout account saved yet"}
                 className="rounded-full bg-[var(--fg)] px-4 py-2 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40">
                 {busy ? "Sending…" : isAdmin ? "Send now" : "Withdraw"}
@@ -343,7 +353,10 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
                 </>
               ) : (
                 <>Paid to the account below, over the same rail a customer withdrawal uses.
-                  You can take up to what is owed; nothing else touches this balance.</>
+                  {acct.available < acct.balance
+                    ? <> You can take {TZS(acct.available)} now; the rest is earned but has not been
+                        moved into the fee account yet.</>
+                    : <> You can take up to what is owed; nothing else touches this balance.</>}</>
               )}
             </p>
             {msg && (

@@ -30,16 +30,34 @@ export async function GET(req: Request) {
       payoutFor("fimco"),
       // Only CAPX is shown the wallet: it is an operational detail of where
       // the money sits, not part of the statement of what is owed.
-      role === "admin"
-        ? import("@/lib/brokerAccount").then(async (m) => ({
-            balance: await m.brokerNtzsBalance().catch(() => null),
-            status: m.brokerAccountStatus(),
-          })).catch(() => null)
-        : null,
+      /*
+       * Read for both roles, shown differently.
+       *
+       * The broker needs the figure — it is what decides whether their
+       * withdrawal goes through — but not the address, which is an
+       * operational detail of where CAPX keeps the money.
+       */
+      import("@/lib/brokerAccount").then(async (m) => ({
+        balance: await m.brokerNtzsBalance().catch(() => null),
+        status: m.brokerAccountStatus(),
+      })).catch(() => null),
     ]);
 
+    /*
+     * What can be taken right now, as distinct from what is owed.
+     *
+     * Both figures are true and they are not the same: the balance is the
+     * claim, and this is the part of it that has been swept into the fee
+     * account and is therefore payable without touching customer float. Shown
+     * to the broker as well as to CAPX — they are the ones who would
+     * otherwise be refused without knowing why — but the wallet itself stays
+     * CAPX's to see.
+     */
+    const swept = account?.balance?.walletAddress ? account.balance.tzs : null;
+    const available = swept === null ? balance : Math.min(balance, swept);
+
     return NextResponse.json({
-      ok: true, role, balance, entries, daily, bySecurity, payout, split: FEE_SPLIT,
+      ok: true, role, balance, available, entries, daily, bySecurity, payout, split: FEE_SPLIT,
       wallet: role === "admin"
         ? {
             address: account?.balance?.walletAddress ?? null,

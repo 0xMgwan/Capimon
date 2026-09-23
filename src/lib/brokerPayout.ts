@@ -36,25 +36,36 @@ export async function payBroker(
     : `${dest.phoneNumber}`;
 
   /*
-   * Paid from the broker's own account when their swept fees are sitting in
-   * it, and from the omnibus when they are not.
+   * Once the fee account exists, it is the only account that pays.
    *
-   * Which one holds the money depends on whether a sweep has run since the
-   * fees were earned, and the answer is a balance we can read rather than an
-   * assumption. Paying from an empty broker account would fail a withdrawal
-   * of money that genuinely exists; always paying from the omnibus would
-   * leave the broker account filling up with nothing to do.
+   * The obvious fallback — pay from the omnibus when the fee account is short
+   * — is the one thing this separation exists to prevent. The money would be
+   * genuinely theirs and genuinely in the omnibus, so nothing would be
+   * *wrong*, but a broker withdrawal would be drawing on the shillings that
+   * back customer balances, silently, at the moment nobody is watching. A
+   * refusal is an inconvenience; that is a mixing of funds.
+   *
+   * So a withdrawal larger than what has been swept is refused and says what
+   * is missing. The omnibus is used only while there is no fee account at
+   * all, because then there is nothing to separate from.
    */
-  const { brokerNtzsBalance } = await import("./brokerAccount");
-  const brokerAccount = await brokerNtzsBalance();
-  const fromBroker = !!brokerAccount && brokerAccount.tzs >= amountTzs;
+  const { brokerNtzsBalance, brokerAccountConfigured } = await import("./brokerAccount");
+  const brokerAccount = brokerAccountConfigured ? await brokerNtzsBalance() : null;
 
   let payer: string;
+  const fromBroker = !!brokerAccount?.walletAddress;
   if (fromBroker) {
+    if (brokerAccount!.tzs < amountTzs) {
+      throw new Error(
+        `The fee account holds ${Math.floor(brokerAccount!.tzs).toLocaleString()} TZS. `
+        + "The rest has been earned but not yet swept into it, so it cannot be withdrawn yet.",
+      );
+    }
     payer = brokerAccount!.id;
   } else {
-    // The settlement account has to be holding shillings before it can send
-    // them; this mints from the float if it is not.
+    // No fee account yet: the fees are in the settlement account because
+    // there is nowhere else for them to be. It has to be holding shillings
+    // before it can send them, so this mints from the float if it is not.
     const { ensureNtzsHasTzs } = await import("./ntzsFunding");
     await ensureNtzsHasTzs(amountTzs);
     payer = await omnibusUserId();

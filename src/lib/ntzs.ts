@@ -338,10 +338,20 @@ export async function withdrawalBanksDetailed(): Promise<BankLookup> {
     try {
       const r = await call<unknown>(path);
       const banks = readBankList(r);
-      tried.push({ path, outcome: banks.length ? `${banks.length} banks` : `no list in ${typeof r === "object" ? Object.keys(r ?? {}).join(",") || "empty object" : typeof r}` });
+      /* Summarised, never echoed: one of these paths answers with a whole
+         HTML error page, and pasting that under a form helps nobody. */
+      tried.push({
+        path,
+        outcome: banks.length
+          ? `${banks.length} banks`
+          : typeof r === "object" && r
+            ? `no list (keys: ${Object.keys(r).join(", ") || "none"})`
+            : "not a list",
+      });
       if (banks.length) return { banks, tried };
     } catch (e) {
-      tried.push({ path, outcome: e instanceof Error ? e.message.slice(0, 160) : "failed" });
+      const raw = e instanceof Error ? e.message : "failed";
+      tried.push({ path, outcome: /<!DOCTYPE|<html/i.test(raw) ? "not an API route (HTML page)" : raw.slice(0, 120) });
     }
   }
   return { banks: [], tried };

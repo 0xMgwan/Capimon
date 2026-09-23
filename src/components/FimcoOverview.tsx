@@ -412,6 +412,7 @@ function PayoutAccount({ token, isAdmin, saved, onSaved }: {
   /* When the list is the fallback rather than nTZS's own, say so: three banks
      where there should be thirty-eight is a fact an operator can act on. */
   const [bankNote, setBankNote] = useState<string | null>(null);
+  const [otherBank, setOtherBank] = useState(false);
   const [form, setForm] = useState<Payout>(saved ?? { method: "mobile", phoneNumber: "" });
 
   useEffect(() => {
@@ -495,14 +496,42 @@ function PayoutAccount({ token, isAdmin, saved, onSaved }: {
             />
           ) : (
             <>
+              {/*
+                * A picker, and a way past it.
+                *
+                * nTZS reaches thirty-eight banks but publishes no list we can
+                * read, so the picker is three fallback names — and a broker
+                * whose bank is not among them had no way to be paid at all.
+                * The code can be typed instead, and it is not taken on trust:
+                * a payout is quoted before it is sent, and an unknown code
+                * fails the quote with nothing moved.
+                */}
               <select
-                value={form.bankCode ?? ""}
-                onChange={(e) => setForm({ ...form, bankCode: e.target.value })}
+                value={otherBank ? "__other" : form.bankCode ?? ""}
+                onChange={(e) => {
+                  if (e.target.value === "__other") { setOtherBank(true); setForm({ ...form, bankCode: "" }); }
+                  else { setOtherBank(false); setForm({ ...form, bankCode: e.target.value }); }
+                }}
                 className="rounded-xl border hairline bg-transparent px-3 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
               >
                 <option value="">Choose a bank</option>
                 {banks.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}
+                <option value="__other">Another bank — enter its code</option>
               </select>
+              {otherBank && (
+                <>
+                  <input
+                    value={form.bankCode ?? ""}
+                    onChange={(e) => setForm({ ...form, bankCode: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "") })}
+                    placeholder="Bank code, e.g. NBC"
+                    className="rounded-xl border hairline bg-transparent px-3 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+                  />
+                  <p className="text-[11px] text-[var(--muted)]">
+                    The canonical FI code nTZS uses. It is checked when a payout is priced, before
+                    any money moves — a wrong code fails there rather than paying the wrong account.
+                  </p>
+                </>
+              )}
               {bankNote && <p className="text-[11px] text-[#b45309]">{bankNote}</p>}
               <input
                 value={form.accountNumber ?? ""}

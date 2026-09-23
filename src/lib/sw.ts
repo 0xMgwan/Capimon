@@ -456,6 +456,8 @@ export const SW: Record<string, string> = {
   // Standing orders.
   // Push notifications.
   "I am not sending this one": "Sitatuma hii",
+  "My bank is not listed": "Benki yangu haipo kwenye orodha",
+  "Bank code, e.g. NBC": "Msimbo wa benki, mfano NBC",
   "Notifications": "Arifa",
   "Deposits, fills, and your portfolio morning and evening.":
     "Amana, manunuzi, na taarifa ya mali yako asubuhi na jioni.",

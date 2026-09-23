@@ -102,6 +102,8 @@ export function WalletSection({ holdings }: {
   const [wdBank, setWdBank] = useState("");
   const [wdAccount, setWdAccount] = useState("");
   const [banks, setBanks] = useState<{ code: string; name: string }[]>([]);
+  /* For the banks nTZS reaches but does not list. */
+  const [otherBank, setOtherBank] = useState(false);
   const [quote, setQuote] = useState<{ quoteId: string; feeTzs: number; recipientName: string | null; destination?: string } | null>(null);
 
   const loadDeposits = useCallback(async () => {
@@ -486,13 +488,36 @@ export function WalletSection({ holdings }: {
                   />
                   {wdTo === "bank" ? (
                     <>
+                      {/*
+                        * The list nTZS publishes is three names; it pays to
+                        * thirty-eight banks. Somebody banking with the other
+                        * thirty-five could not withdraw at all, so the code
+                        * can be typed — and the quote below checks it before
+                        * anything moves, answering with the account holder's
+                        * name when it is right.
+                        */}
                       <select
-                        value={wdBank} onChange={(e) => { setWdBank(e.target.value); setQuote(null); }}
+                        value={otherBank ? "__other" : wdBank}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setOtherBank(v === "__other");
+                          setWdBank(v === "__other" ? "" : v);
+                          setQuote(null);
+                        }}
                         className="mt-2 w-full rounded-xl border hairline bg-[var(--bg)] px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
                       >
                         <option value="">{t("Choose your bank")}</option>
                         {banks.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}
+                        <option value="__other">{t("My bank is not listed")}</option>
                       </select>
+                      {otherBank && (
+                        <input
+                          value={wdBank}
+                          onChange={(e) => { setWdBank(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "")); setQuote(null); }}
+                          placeholder={t("Bank code, e.g. NBC")}
+                          className="mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+                        />
+                      )}
                       <input
                         value={wdAccount}
                         onChange={(e) => { setWdAccount(e.target.value.replace(/[^\d]/g, "")); setQuote(null); }}

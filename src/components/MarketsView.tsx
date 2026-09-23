@@ -65,7 +65,8 @@ export function MarketsView() {
               </span>
               <span className="block truncate text-[11px] leading-tight text-[var(--muted)]">{d.name}</span>
             </span>
-            <DseTag price={d.price} changePct={d.changePct} last={d.source === "oracle"} />
+            <DseTag price={d.price} changePct={d.changePct}
+              last={d.source === "oracle"} set={d.source === "capx"} />
           </Link>
         ))}
       </div>
@@ -123,7 +124,13 @@ export function MarketsView() {
 
 
 /** The live DSE mark, so the card is not just a link to find out. */
-function DseTag({ price, changePct, last = false }: { price: number; changePct: number; last?: boolean }) {
+function DseTag({ price, changePct, last = false, set = false }: {
+  price: number; changePct: number;
+  /** The exchange is down and this is its last published price. */
+  last?: boolean;
+  /** CAPX set this price by hand, for a listing the exchange does not quote. */
+  set?: boolean;
+}) {
   if (!(price > 0)) return <div className="h-8 w-20 shrink-0 animate-pulse rounded surface" />;
   const d = { price, changePct };
   const up = d.changePct >= 0;
@@ -133,7 +140,10 @@ function DseTag({ price, changePct, last = false }: { price: number; changePct: 
         {d.price.toLocaleString("en-TZ", { maximumFractionDigits: 0 })}
         <span className="ml-1 text-[10px] font-normal text-[var(--muted)]">TZS</span>
       </div>
-      {last ? (
+      {set ? (
+        // No exchange quotes this, so there is no day's move to report.
+        <div className="text-[11px] text-[var(--muted)]">set by CAPX</div>
+      ) : last ? (
         // The exchange is down; this is the last published price, not a flat day.
         <div className="text-[11px] text-[#b45309]">last price</div>
       ) : (

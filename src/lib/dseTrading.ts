@@ -82,9 +82,15 @@ export async function dseMarket(symbol: string): Promise<DseMarket | null> {
   if (!sec) return null;
   const S = sec.symbol;
 
-  // Kicked off, never awaited: whoever loaded this page is not waiting on a
-  // chain write, and the next reader gets the fresher mark.
-  refreshIfStale(S);
+  /*
+   * Kicked off, never awaited: whoever loaded this page is not waiting on a
+   * chain write, and the next reader gets the fresher mark.
+   *
+   * Only for a share the exchange actually prints. An external listing —
+   * a tokenised IPO, another issuer's equity — has no DSE quote to fetch, so
+   * this would be a lookup that can only fail.
+   */
+  if (sec.kind !== "external") refreshIfStale(S);
 
   const [oracle, custodyShares, liabilities] = await Promise.all([
     readOraclePrice(S).catch(() => null),
@@ -100,7 +106,19 @@ export async function dseMarket(symbol: string): Promise<DseMarket | null> {
   if (sec.status !== "live") haltReason = sec.status === "suspended"
     ? `${S} trading is suspended.` : `${S} is not open for trading yet.`;
   else if (!oracle) haltReason = `No price has been published for ${S} yet.`;
-  else if (!oracle.fresh) haltReason = `The ${S} price is stale — the exchange has not printed recently enough to trade against.`;
+  /*
+   * Staleness halts a share that is supposed to price itself, and only that.
+   *
+   * A DSE price going quiet means the exchange has stopped printing and our
+   * mark is drifting away from a market that is still moving — trading on is
+   * how a settlement ends up at yesterday's number. An external listing has
+   * no such feed: its price is one CAPX set deliberately and it stands until
+   * CAPX sets another. Ageing it out halted a market for no reason anybody
+   * could act on, since there was nothing to refresh it from.
+   */
+  else if (!oracle.fresh && sec.kind !== "external") {
+    haltReason = `The ${S} price is stale — the exchange has not printed recently enough to trade against.`;
+  }
   else if (!(oracle.price > 0)) haltReason = `The published ${S} price is zero.`;
   else if (custodyShares <= 0) {
     haltReason = sec.kind === "external"
@@ -117,7 +135,9 @@ export async function dseMarket(symbol: string): Promise<DseMarket | null> {
     issuer: sec.issuer,
     buyOnly: sec.buyOnly,
     price: oracle?.price ?? 0,
-    fresh: oracle?.fresh ?? false,
+    // A price CAPX maintains by hand is current by definition: it is what we
+    // last said it was, and nothing else was going to update it.
+    fresh: sec.kind === "external" ? !!oracle : (oracle?.fresh ?? false),
     updatedAt: oracle?.updatedAt ?? null,
     source: oracle?.source ?? null,
     custodyShares,

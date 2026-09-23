@@ -11,8 +11,12 @@ import { useEffect, useState } from "react";
 export type DseListing = {
   symbol: string; name: string; logo: string | null; status: string;
   price: number; changePct: number; tradeDate: string | null; feeBps: number;
-  /** "dse" when live from the exchange, "oracle" when the exchange is down. */
-  source?: "dse" | "oracle" | "none";
+  /**
+   * Where the shown price came from: "dse" live from the exchange, "oracle"
+   * the last published mark while the exchange is down, "capx" a price CAPX
+   * set by hand for a listing the exchange does not quote.
+   */
+  source?: "dse" | "oracle" | "capx" | "none";
   /** "external": a token another issuer made, which CAPX buys and holds. */
   kind?: "dse" | "external";
   issuer?: string | null;

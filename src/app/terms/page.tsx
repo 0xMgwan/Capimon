@@ -74,9 +74,9 @@ const SECTIONS: Section[] = [
   {
     h: "What your holding carries, and what it does not",
     p: [
-      "A holding in a CAPX account is exposure to the price of the underlying share. It is not registered shareholding. The shares sit with a licensed broker and the register at the exchange shows that broker, not you.",
+      "A holding in a CAPX account is a representation, on the blockchain, of the underlying share. The share itself is held by a custodian or a special purpose vehicle, and the register at the exchange shows that entity rather than you. What you hold is exposure to its price, not registered shareholding.",
       "For Tanzanian securities, no dividends are passed through to your account and no voting or other governance rights attach to your holding. Where a dividend is paid on shares held in custody against CAPX tokens, it is received by the custodian and is not distributed to accounts. Your return, if any, comes from the price of the share.",
-      "For US shares, the token is issued by a third party, and corporate actions including dividends are reflected by an on-chain multiplier applied to the token rather than paid to you as cash. That is how those tokens work; it is not something CAPX decides. No voting rights attach there either.",
+      "For US shares, the token is issued by a third party against shares held by its own custodian or special purpose vehicle, and dividends are carried through: they are reflected by an on-chain multiplier applied to the token rather than paid to you as cash, so the value reaches you without a payment arriving in your account. That is how those tokens work; it is not something CAPX decides. No voting rights attach there either.",
       "Neither kind of holding carries a right to attend a general meeting, to vote, to receive shareholder communications, or to be entered on the issuer's register. If those rights matter to you, buy the share itself through a licensed broker instead.",
     ],
   },

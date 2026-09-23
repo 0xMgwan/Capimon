@@ -26,7 +26,14 @@ export async function GET() {
    * published mark, so that is what is shown, marked as not live.
    */
   const securities = await Promise.all(list.map(async (s) => {
-    const q = await dseQuote(s.symbol).catch(() => null);
+    /*
+     * An external listing is not on the exchange, so it is never asked for.
+     * Its price is one CAPX published by hand, and reporting it as a DSE
+     * fallback would put "last price, the exchange is down" under a number
+     * the exchange never had an opinion about.
+     */
+    const external = s.kind === "external";
+    const q = external ? null : await dseQuote(s.symbol).catch(() => null);
     const fallback = q ? null : await readOraclePrice(s.symbol).catch(() => null);
     return {
       symbol: s.symbol, name: s.name, logo: s.logo, status: s.status,
@@ -34,7 +41,7 @@ export async function GET() {
       price: q ? currentPrice(q) : fallback?.price ?? 0,
       changePct: q?.changePct ?? 0,
       tradeDate: q?.tradeDate ?? fallback?.updatedAt?.slice(0, 10) ?? null,
-      source: q ? "dse" : fallback ? "oracle" : "none",
+      source: external ? (fallback ? "capx" : "none") : q ? "dse" : fallback ? "oracle" : "none",
       // When the shown price was set: the exchange's session, or the oracle's
       // last publication when the exchange is unreachable.
       asOf: q ? null : fallback?.updatedAt ?? null,

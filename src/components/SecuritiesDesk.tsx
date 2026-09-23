@@ -8,6 +8,23 @@ import type { Abi } from "viem";
 import { DeskNav, type DeskSection } from "./DeskNav";
 import { FimcoOverview } from "./FimcoOverview";
 
+/**
+ * The rooms of the CAPX desk.
+ *
+ * The same idea as the broker's, with the sections CAPX actually has: the
+ * price feed and the issuer wallet are theirs alone, and the customer tabs
+ * live on the operations page rather than here.
+ */
+const CAPX_SECTIONS: DeskSection[] = [
+  { id: "custody", label: "Securities", hint: "Backing, drift and headroom" },
+  { id: "filing", label: "Register & attest", hint: "List a security, file custody" },
+  { id: "attestations", label: "Attestations", hint: "Approve, refuse, tokenise" },
+  { id: "requests", label: "Requests", hint: "Mints and burns to decide" },
+  { id: "issuance", label: "Issuance", hint: "Every mint and burn" },
+  { id: "prices", label: "Price feed", hint: "Marks settlement prices against" },
+  { id: "settings", label: "Notices", hint: "Where FIMCO is emailed" },
+];
+
 /** The rooms of the broker's portal, in the order they are worked through. */
 const FIMCO_SECTIONS: DeskSection[] = [
   { id: "overview", label: "Overview", hint: "What the arrangement earns" },
@@ -269,11 +286,13 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
         * theirs to see everything at once — the same content, read
         * differently, so the navigation differs and the sections do not.
         */}
-      <div className={isFimcoPortal ? "mt-6 lg:flex lg:items-start lg:gap-10" : ""}>
-        {isFimcoPortal && (
-          <DeskNav sections={FIMCO_SECTIONS} title="Custody portal"
-            subtitle="Everything CAPX holds with FIMCO, and what it earns." />
-        )}
+      <div className="mt-6 lg:flex lg:items-start lg:gap-10">
+        <DeskNav
+          sections={isFimcoPortal ? FIMCO_SECTIONS : CAPX_SECTIONS}
+          title={isFimcoPortal ? "Custody portal" : "Securities desk"}
+          subtitle={isFimcoPortal
+            ? "Everything CAPX holds with FIMCO, and what it earns."
+            : "Custody, issuance and the price feed."} />
         <div className="min-w-0 flex-1">
       {isFimcoPortal && <FimcoOverview token={token} isAdmin={isAdmin} />}
       <Pipeline />
@@ -585,7 +604,9 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
         })}
       </section>
 
-      <RequestsSection data={data} isAdmin={isAdmin} onAct={act} busy={busy} w={w} sign={sign} />
+      <div id="requests" className="scroll-mt-24">
+        <RequestsSection data={data} isAdmin={isAdmin} onAct={act} busy={busy} w={w} sign={sign} />
+      </div>
 
       <div id="filing" className="mt-8 grid gap-4 scroll-mt-24 lg:grid-cols-2">
         <div id="register-form">
@@ -600,7 +621,11 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
 
       {portal === "fimco" && <div id="customers" className="scroll-mt-24"><CustomersSection token={token} /></div>}
 
-      {isAdmin && <OracleAdmin token={token} busy={busy} setBusy={setBusy} setErr={setErr} setNote={setNote} />}
+      {isAdmin && (
+        <div id="prices" className="scroll-mt-24">
+          <OracleAdmin token={token} busy={busy} setBusy={setBusy} setErr={setErr} setNote={setNote} />
+        </div>
+      )}
 
       <section id="attestations" className="mt-8 scroll-mt-24">
         <div className="eyebrow mb-2">Attestations</div>

@@ -48,6 +48,58 @@ export async function contactsFor(party: Party): Promise<string[]> {
   }
 }
 
+/**
+ * Where a party is paid.
+ *
+ * Mobile money or a bank account, kept as they entered it, with the name it
+ * is held in so a payment can be checked before it is sent. Only ever set by
+ * the party themselves.
+ */
+export type PayoutDestination = {
+  method: "mobile" | "bank";
+  phoneNumber?: string;
+  bankCode?: string;
+  accountNumber?: string;
+  accountName?: string;
+};
+
+export async function payoutFor(party: Party): Promise<PayoutDestination | null> {
+  if (!dbConfigured) return null;
+  try {
+    await migrate();
+    const [row] = await db()<{ payout: PayoutDestination | null }[]>`
+      select payout from capx.ops_contacts where party = ${party}`;
+    return row?.payout ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function setPayout(party: Party, dest: PayoutDestination | null, by: string): Promise<void> {
+  await migrate();
+  await db()`
+    insert into capx.ops_contacts (party, payout, updated_by, updated_at)
+    values (${party}, ${dest ? JSON.stringify(dest) : null}::jsonb, ${by}, now())
+    on conflict (party) do update
+      set payout = excluded.payout, updated_by = excluded.updated_by, updated_at = now()`;
+}
+
+/** Tidies a destination, or says what is missing. */
+export function parsePayout(raw: unknown): PayoutDestination | { error: string } {
+  const d = (raw ?? {}) as Record<string, unknown>;
+  const method = d.method === "bank" ? "bank" : "mobile";
+  if (method === "bank") {
+    const bankCode = String(d.bankCode ?? "").trim().toUpperCase();
+    const accountNumber = String(d.accountNumber ?? "").replace(/[^\d]/g, "");
+    if (!/^[A-Z0-9_]{2,16}$/.test(bankCode)) return { error: "Choose a bank." };
+    if (accountNumber.length < 6) return { error: "Enter the account number." };
+    return { method, bankCode, accountNumber, accountName: String(d.accountName ?? "").trim().slice(0, 80) || undefined };
+  }
+  const phoneNumber = String(d.phoneNumber ?? "").replace(/[^\d]/g, "");
+  if (phoneNumber.length < 9) return { error: "Enter the mobile money number." };
+  return { method, phoneNumber, accountName: String(d.accountName ?? "").trim().slice(0, 80) || undefined };
+}
+
 export async function setContacts(party: Party, emails: string[], by: string): Promise<void> {
   await migrate();
   await db()`

@@ -459,6 +459,14 @@ export async function migrate() {
           "ntzs_status text", "ntzs_reference text", "swap_ref text", "transfer_tx text",
           "rate_tzs_usdc numeric(38,8)", "metadata jsonb not null default '{}'::jsonb",
         ],
+        ops_contacts: [
+          /*
+           * Where a counterparty's money is paid. Theirs to set, because the
+           * account a payment lands in is not something we should be typing
+           * on their behalf — and CAPX decides when it moves, not where.
+           */
+          "payout jsonb",
+        ],
         custody_attestations: [
           /* Who filed it, as distinct from who it names as custodian. */
           "filed_by text",

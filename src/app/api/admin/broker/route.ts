@@ -4,6 +4,7 @@ import { roleOf, ACTOR } from "@/lib/adminAuth";
 import {
   brokerBalance, brokerEntries, brokerDaily, brokerBySecurity, recordPayout, FEE_SPLIT,
 } from "@/lib/brokerLedger";
+import { payoutFor } from "@/lib/opsContacts";
 
 export const dynamic = "force-dynamic";
 
@@ -21,15 +22,16 @@ export async function GET(req: Request) {
   if (!role) return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
 
   try {
-    const [balance, entries, daily, bySecurity] = await Promise.all([
+    const [balance, entries, daily, bySecurity, payout] = await Promise.all([
       brokerBalance(),
       brokerEntries(undefined, 60),
       brokerDaily(undefined, 30),
       brokerBySecurity(),
+      payoutFor("fimco"),
     ]);
 
     return NextResponse.json({
-      ok: true, role, balance, entries, daily, bySecurity, split: FEE_SPLIT,
+      ok: true, role, balance, entries, daily, bySecurity, payout, split: FEE_SPLIT,
     }, { headers: { "cache-control": "no-store" } });
   } catch (e) {
     return NextResponse.json(
@@ -57,6 +59,48 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const amountTzs = Math.round(Number(body.amountTzs));
     const note = body.note ? String(body.note).slice(0, 300) : null;
+
+    /*
+     * A payment that actually moves the money.
+     *
+     * "send" disburses from the settlement account to the destination the
+     * broker themselves saved, through the same nTZS rail a customer
+     * withdrawal uses. "record" is the other case: a transfer already made
+     * by hand, outside the app, that the ledger has to be told about — both
+     * exist because both happen, and the ledger must match the bank either
+     * way.
+     *
+     * The ledger row is written after the money has gone, not before. A row
+     * claiming a payment that never left is worse than a payment with no row,
+     * because the first is invisible and the second shows up as a difference
+     * anybody can see.
+     */
+    if (body.action === "send") {
+      const dest = await payoutFor("fimco");
+      if (!dest) {
+        return NextResponse.json(
+          { ok: false, error: "FIMCO has not saved a payout account yet." }, { status: 409 });
+      }
+      const owed = await brokerBalance();
+      if (!(amountTzs > 0)) return NextResponse.json({ ok: false, error: "Enter an amount." }, { status: 400 });
+      if (amountTzs > owed) {
+        return NextResponse.json(
+          { ok: false, error: `Only ${Math.round(owed).toLocaleString()} TZS is owed.` }, { status: 409 });
+      }
+
+      const { payBroker } = await import("@/lib/brokerPayout");
+      const sent = await payBroker(amountTzs, dest);
+
+      const r = await recordPayout({
+        amountTzs, by: ACTOR[role], ref: `payout:${sent.reference}`,
+        note: [note, sent.label, sent.reference].filter(Boolean).join(" · ").slice(0, 300),
+      });
+      return NextResponse.json({
+        ok: true, ...r, sent: true, reference: sent.reference,
+        entries: await brokerEntries(undefined, 60),
+      });
+    }
+
     const r = await recordPayout({ amountTzs, note, by: ACTOR[role] });
     return NextResponse.json({ ok: true, ...r, entries: await brokerEntries(undefined, 60) });
   } catch (e) {

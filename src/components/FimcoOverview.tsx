@@ -22,8 +22,14 @@ type Entry = {
   note: string | null; createdBy: string | null; createdAt: string;
 };
 
+type Payout = {
+  method: "mobile" | "bank";
+  phoneNumber?: string; bankCode?: string; accountNumber?: string; accountName?: string;
+};
+
 type Account = {
   balance: number;
+  payout: Payout | null;
   entries: Entry[];
   daily: { day: string; earned: number; trades: number }[];
   bySecurity: { security: string; earned: number; trades: number }[];
@@ -58,20 +64,27 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
     return () => { alive = false; };
   }, [token, reload]);
 
-  const pay = async () => {
+  /*
+   * "send" moves the money; "record" only writes down a transfer that was
+   * made by hand. Both exist because both happen, and the ledger has to match
+   * the bank either way.
+   */
+  const pay = async (action: "send" | "record") => {
     setBusy(true); setMsg(null);
     try {
       const r = await fetch("/api/admin/broker", {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-        body: JSON.stringify({ amountTzs: Number(payout), note: note || null }),
+        body: JSON.stringify({ action, amountTzs: Number(payout), note: note || null }),
       });
       const j = await r.json();
-      if (!j.ok) throw new Error(j.error ?? "Could not record the payout");
-      setMsg(`Recorded. ${TZS(j.balance)} still owed.`);
+      if (!j.ok) throw new Error(j.error ?? "Could not complete the payout");
+      setMsg(j.sent
+        ? `Sent. ${TZS(j.balance)} still owed. Reference ${j.reference}.`
+        : `Recorded. ${TZS(j.balance)} still owed.`);
       setPayout(""); setNote(""); setReload((n) => n + 1);
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Could not record the payout");
+      setMsg(e instanceof Error ? e.message : "Could not complete the payout");
     } finally {
       setBusy(false);
     }
@@ -194,24 +207,42 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
           </div>
         </div>
 
+        {/* Where the money goes, named by the party it belongs to. */}
+        <PayoutAccount token={token} isAdmin={isAdmin} saved={acct.payout}
+          onSaved={() => setReload((n) => n + 1)} />
+
         {isAdmin && (
-          <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl surface p-3">
-            <span className="eyebrow mr-1">Record a payout</span>
-            <input
-              value={payout} onChange={(e) => setPayout(e.target.value.replace(/[^0-9]/g, ""))}
-              placeholder="Amount in TZS"
-              className="w-40 rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
-            />
-            <input
-              value={note} onChange={(e) => setNote(e.target.value)}
-              placeholder="Reference — bank transfer, date"
-              className="min-w-0 flex-1 rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
-            />
-            <button onClick={() => void pay()} disabled={busy || !(Number(payout) > 0)}
-              className="rounded-full bg-[var(--fg)] px-4 py-2 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40">
-              {busy ? "Recording…" : "Record"}
-            </button>
-            {msg && <span className="w-full text-[12px] text-[var(--muted)]">{msg}</span>}
+          <div className="mt-3 rounded-2xl surface p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="eyebrow mr-1">Pay out</span>
+              <input
+                value={payout} onChange={(e) => setPayout(e.target.value.replace(/[^0-9]/g, ""))}
+                placeholder="Amount in TZS"
+                className="w-40 rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+              />
+              <input
+                value={note} onChange={(e) => setNote(e.target.value)}
+                placeholder="Note — optional"
+                className="min-w-0 flex-1 rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+              />
+              <button onClick={() => void pay("send")}
+                disabled={busy || !(Number(payout) > 0) || !acct.payout}
+                title={acct.payout ? undefined : "FIMCO has not saved an account yet"}
+                className="rounded-full bg-[var(--fg)] px-4 py-2 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40">
+                {busy ? "Sending…" : "Send now"}
+              </button>
+              <button onClick={() => void pay("record")} disabled={busy || !(Number(payout) > 0)}
+                className="rounded-full border hairline px-4 py-2 text-[13px] hover:bg-[var(--bg)] disabled:opacity-40">
+                Record only
+              </button>
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
+              <span className="text-[var(--fg)]">Send now</span> pays the account below from the
+              settlement account, over the same rail a customer withdrawal uses.{" "}
+              <span className="text-[var(--fg)]">Record only</span> writes down a transfer you
+              already made by hand, so the ledger still matches the bank.
+            </p>
+            {msg && <p className="mt-2 text-[12px] text-[var(--muted)]">{msg}</p>}
           </div>
         )}
 
@@ -243,6 +274,132 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * The account a payout lands in — the broker's to name, not CAPX's to type.
+ *
+ * An operations team copying a counterparty's account number out of a message
+ * is how money reaches the wrong account. CAPX can see it, so a payment can
+ * be checked before it is sent, and cannot change it.
+ */
+function PayoutAccount({ token, isAdmin, saved, onSaved }: {
+  token: string; isAdmin: boolean; saved: Payout | null; onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [banks, setBanks] = useState<{ code: string; name: string }[]>([]);
+  const [form, setForm] = useState<Payout>(saved ?? { method: "mobile", phoneNumber: "" });
+
+  useEffect(() => {
+    if (form.method !== "bank" || banks.length) return;
+    let alive = true;
+    fetch("/api/ntzs/banks", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (alive && j.ok) setBanks(j.banks ?? []); })
+      .catch(() => { /* the field still accepts a code */ });
+    return () => { alive = false; };
+  }, [form.method, banks.length]);
+
+  const save = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch("/api/admin/contacts", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ payout: form }),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error ?? "Could not save");
+      setEditing(false); onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const describe = (p: Payout) =>
+    p.method === "bank"
+      ? `${p.bankCode} · ${p.accountNumber}${p.accountName ? ` · ${p.accountName}` : ""}`
+      : `${p.phoneNumber}${p.accountName ? ` · ${p.accountName}` : ""}`;
+
+  return (
+    <div className="mt-4 rounded-2xl border hairline p-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="eyebrow">Paid to</div>
+          <p className="mt-0.5 truncate text-[13px]">
+            {saved ? describe(saved) : <span className="text-[var(--muted)]">No account saved yet</span>}
+          </p>
+        </div>
+        {isAdmin ? (
+          <span className="text-[11px] text-[var(--muted)]">FIMCO sets this</span>
+        ) : (
+          <button onClick={() => { setForm(saved ?? { method: "mobile", phoneNumber: "" }); setEditing((v) => !v); }}
+            className="rounded-full border hairline px-3 py-1.5 text-[12px] hover:surface">
+            {editing ? "Cancel" : saved ? "Change" : "Add an account"}
+          </button>
+        )}
+      </div>
+
+      {editing && !isAdmin && (
+        <div className="mt-3 grid gap-2">
+          <div className="grid grid-cols-2 gap-2">
+            {(["mobile", "bank"] as const).map((m) => (
+              <button key={m}
+                onClick={() => setForm({ ...form, method: m })}
+                className={`rounded-xl border px-3 py-2 text-[13px] font-medium transition-colors ${
+                  form.method === m ? "border-[var(--fg)] bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"
+                }`}>
+                {m === "mobile" ? "Mobile money" : "Bank account"}
+              </button>
+            ))}
+          </div>
+
+          {form.method === "mobile" ? (
+            <input
+              value={form.phoneNumber ?? ""}
+              onChange={(e) => setForm({ ...form, phoneNumber: e.target.value.replace(/[^0-9]/g, "") })}
+              placeholder="255712345678"
+              className="rounded-xl border hairline bg-transparent px-3 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+            />
+          ) : (
+            <>
+              <select
+                value={form.bankCode ?? ""}
+                onChange={(e) => setForm({ ...form, bankCode: e.target.value })}
+                className="rounded-xl border hairline bg-transparent px-3 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+              >
+                <option value="">Choose a bank</option>
+                {banks.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}
+              </select>
+              <input
+                value={form.accountNumber ?? ""}
+                onChange={(e) => setForm({ ...form, accountNumber: e.target.value.replace(/[^0-9]/g, "") })}
+                placeholder="Account number"
+                className="rounded-xl border hairline bg-transparent px-3 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+              />
+            </>
+          )}
+
+          <input
+            value={form.accountName ?? ""}
+            onChange={(e) => setForm({ ...form, accountName: e.target.value })}
+            placeholder="Account name, so a payment can be checked"
+            className="rounded-xl border hairline bg-transparent px-3 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+          />
+
+          {err && <p className="text-[12px] text-[var(--color-down)]">{err}</p>}
+          <button onClick={() => void save()} disabled={busy}
+            className="rounded-full bg-[var(--fg)] px-4 py-2.5 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40">
+            {busy ? "Saving…" : "Save account"}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

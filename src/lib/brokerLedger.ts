@@ -109,9 +109,13 @@ export async function brokerBySecurity(party = BROKER_PARTY): Promise<{ security
  * CAPX's to record, never the broker's: a party that can credit its own
  * account is not keeping a ledger. The amount is negative on the row because
  * the balance is the sum of the rows and a payout reduces what is owed.
+ *
+ * `ref` makes it idempotent where a real disbursement is involved: the money
+ * leaves once, and a retry of the request that sent it must not write a
+ * second row claiming it left twice.
  */
 export async function recordPayout(input: {
-  amountTzs: number; note: string | null; by: string; party?: string;
+  amountTzs: number; note: string | null; by: string; party?: string; ref?: string | null;
 }): Promise<{ id: string; balance: number }> {
   const party = input.party ?? BROKER_PARTY;
   if (!(input.amountTzs > 0)) throw new Error("A payout must be greater than zero.");
@@ -121,8 +125,8 @@ export async function recordPayout(input: {
   }
   await migrate();
   const [row] = await db()<{ id: string }[]>`
-    insert into capx.broker_ledger (party, kind, amount_tzs, note, created_by)
-    values (${party}, 'payout', ${-input.amountTzs}, ${input.note}, ${input.by})
+    insert into capx.broker_ledger (party, kind, amount_tzs, note, created_by, ref)
+    values (${party}, 'payout', ${-input.amountTzs}, ${input.note}, ${input.by}, ${input.ref ?? null})
     returning id::text`;
   return { id: row.id, balance: await brokerBalance(party) };
 }

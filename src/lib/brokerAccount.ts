@@ -19,12 +19,23 @@ import { upsertUser, getUser, attestKyc } from "./ntzs";
  * to open it the broker leg is skipped and their fees stay in the omnibus,
  * which is where they were before. A missing account must never mean a
  * missing fee.
+ *
+ * It opens on CAPX's own identity rather than FIMCO's, which is honest about
+ * what it is today: a CAPX account earmarked for money CAPX owes. The
+ * separation being bought is of funds, not of ownership. An account in
+ * FIMCO's name would be the stronger arrangement and is the eventual answer,
+ * but it is theirs to agree to in writing, and this does not wait on that.
+ *
+ * So every field except the external id falls back to the omnibus. Upstream
+ * is idempotent on externalId, so a different one is exactly what makes this
+ * a second account rather than a second name for the first.
  */
-const EXTERNAL_ID = process.env.NTZS_BROKER_EXTERNAL_ID ?? "capx-broker-fimco";
-const EMAIL = process.env.NTZS_BROKER_EMAIL ?? "";
-const NAME = process.env.NTZS_BROKER_NAME ?? "FIMCO fee account";
-const NIDA = process.env.NTZS_BROKER_NIDA ?? "";
-const PHONE = process.env.NTZS_BROKER_PHONE ?? "";
+const EXTERNAL_ID = process.env.NTZS_BROKER_EXTERNAL_ID ?? "capx-broker-fees";
+const EMAIL = process.env.NTZS_BROKER_EMAIL ?? process.env.NTZS_OMNIBUS_EMAIL ?? "treasury@capx.finance";
+const NAME = process.env.NTZS_BROKER_NAME
+  ?? `${process.env.NTZS_OMNIBUS_NAME ?? "CAPX Treasury"} · broker fees`;
+const NIDA = process.env.NTZS_BROKER_NIDA ?? process.env.NTZS_OMNIBUS_NIDA ?? "";
+const PHONE = process.env.NTZS_BROKER_PHONE ?? process.env.NTZS_OMNIBUS_PHONE ?? "";
 const CONFIGURED_ID = process.env.NTZS_BROKER_USER_ID ?? "";
 const VERIFIED_BY = process.env.NTZS_KYC_VERIFIED_BY ?? EMAIL;
 
@@ -62,8 +73,17 @@ async function provision(): Promise<string> {
   }
 
   if (!wallet) {
+    /*
+     * The likeliest cause, said out loud: this account carries the same NIDA
+     * as the omnibus, and nTZS may decline to issue a second wallet against
+     * an identity it has already verified. That is a conversation with them
+     * rather than something to retry, so the message points at it instead of
+     * reading as a transient failure.
+     */
     throw new Error(
-      "The broker fee account has no nTZS wallet yet — nTZS holds it until the account clears compliance.",
+      "The broker fee account has no nTZS wallet yet. nTZS holds it until the account clears "
+      + "compliance — and it carries the same identity as the omnibus, which they may decline "
+      + "to verify twice. Ask nTZS, or open it on FIMCO's own identity.",
     );
   }
   return user.id;

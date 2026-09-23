@@ -30,6 +30,8 @@ type Payout = {
 type Account = {
   balance: number;
   payout: Payout | null;
+  /** The nTZS account their fees are swept into, when it has a wallet. */
+  wallet?: { address: string | null; tzs: number } | null;
   entries: Entry[];
   daily: { day: string; earned: number; trades: number }[];
   bySecurity: { security: string; earned: number; trades: number }[];
@@ -85,6 +87,28 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
       setPayout(""); setNote(""); setReload((n) => n + 1);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Could not complete the payout");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openAccount = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fetch("/api/admin/broker", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "open-account" }),
+      });
+      const j = await r.json();
+      setMsg(j.ok
+        ? `Wallet issued: ${j.wallet}.`
+        : (j.steps ?? []).filter((s: { ok: boolean }) => !s.ok)
+            .map((s: { step: string; detail: string }) => `${s.step}: ${s.detail}`).join(" · ")
+          || j.error || "Could not open the wallet.");
+      setReload((n) => n + 1);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Could not open the wallet");
     } finally {
       setBusy(false);
     }
@@ -206,6 +230,33 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
             <div className="tnum text-2xl font-medium">{TZS(acct.balance)}</div>
           </div>
         </div>
+
+        {/*
+          * The account their fees actually sit in.
+          *
+          * nTZS holds the wallet until the account clears KYC, and an account
+          * with no wallet cannot be swept into — so when that is the state,
+          * the desk says so and offers the one action that fixes it rather
+          * than failing quietly at the next sweep.
+          */}
+        {isAdmin && acct.wallet && !acct.wallet.address && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl border border-[#b45309]/40 bg-[#b45309]/[0.06] p-3">
+            <span className="min-w-0 flex-1 text-[12px] leading-relaxed text-[var(--muted)]">
+              The fee account exists but nTZS has not issued its wallet, so fees cannot be swept
+              into it yet and withdrawals are paid from the settlement account.
+            </span>
+            <button onClick={() => void openAccount()} disabled={busy}
+              className="shrink-0 rounded-full bg-[var(--fg)] px-4 py-2 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40">
+              {busy ? "Opening…" : "Open the wallet"}
+            </button>
+          </div>
+        )}
+        {isAdmin && acct.wallet?.address && (
+          <p className="tnum mt-3 text-[11px] text-[var(--muted)]">
+            Fee account {acct.wallet.address.slice(0, 10)}…{acct.wallet.address.slice(-6)} ·
+            holding {TZS(acct.wallet.tzs)}
+          </p>
+        )}
 
         {/* Where the money goes, named by the party it belongs to. */}
         <PayoutAccount token={token} isAdmin={isAdmin} saved={acct.payout}

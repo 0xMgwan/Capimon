@@ -22,16 +22,22 @@ export async function GET(req: Request) {
   if (!role) return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
 
   try {
-    const [balance, entries, daily, bySecurity, payout] = await Promise.all([
+    const [balance, entries, daily, bySecurity, payout, account] = await Promise.all([
       brokerBalance(),
       brokerEntries(undefined, 60),
       brokerDaily(undefined, 30),
       brokerBySecurity(),
       payoutFor("fimco"),
+      // Only CAPX is shown the wallet: it is an operational detail of where
+      // the money sits, not part of the statement of what is owed.
+      role === "admin"
+        ? import("@/lib/brokerAccount").then((m) => m.brokerNtzsBalance()).catch(() => null)
+        : null,
     ]);
 
     return NextResponse.json({
       ok: true, role, balance, entries, daily, bySecurity, payout, split: FEE_SPLIT,
+      wallet: role === "admin" ? { address: account?.walletAddress ?? null, tzs: account?.tzs ?? 0 } : null,
     }, { headers: { "cache-control": "no-store" } });
   } catch (e) {
     return NextResponse.json(
@@ -56,6 +62,25 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const amountTzs = Math.round(Number(body.amountTzs));
     const note = body.note ? String(body.note).slice(0, 300) : null;
+
+    /*
+     * Opening the fee account's wallet.
+     *
+     * nTZS creates the account on first contact but holds the wallet until
+     * KYC clears, and under the reliance agreement CAPX attests its own. This
+     * runs that and reports each step, because an account that exists with no
+     * wallet and no explanation is the state it was stuck in.
+     */
+    if (body.action === "open-account") {
+      const { openBrokerAccount, brokerAccountConfigured } = await import("@/lib/brokerAccount");
+      if (!brokerAccountConfigured) {
+        return NextResponse.json(
+          { ok: false, error: "No identity is configured for the fee account (NTZS_OMNIBUS_NIDA or NTZS_BROKER_NIDA)." },
+          { status: 409 });
+      }
+      const result = await openBrokerAccount();
+      return NextResponse.json({ ok: !!result.wallet, ...result });
+    }
 
     /*
      * A payment that actually moves the money.

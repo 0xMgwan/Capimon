@@ -1,5 +1,5 @@
 import "server-only";
-import { upsertUser, getUser, attestKyc } from "./ntzs";
+import { upsertUser, getUser, attestKyc, retroKyc } from "./ntzs";
 
 /**
  * A second nTZS account, holding nothing but the broker's fees.
@@ -45,7 +45,28 @@ export const brokerAccountConfigured = !!(CONFIGURED_ID || (EMAIL && (NIDA || PH
 let cached: string | null = CONFIGURED_ID || null;
 let inflight: Promise<string> | null = null;
 
-async function provision(): Promise<string> {
+/**
+ * Opens the account and gets it a wallet, saying what happened at each step.
+ *
+ * nTZS issues the wallet once an account has cleared KYC, and under the
+ * reliance agreement CAPX attests its own. The account was created without a
+ * wallet because the attestation never ran or was refused, and both were
+ * previously swallowed — so this records the reason for each attempt and
+ * reports them together rather than leaving an account that exists, has no
+ * wallet, and does not say why.
+ */
+export type Provisioning = {
+  id: string | null;
+  wallet: string | null;
+  kycStatus: string | null;
+  steps: { step: string; ok: boolean; detail: string }[];
+};
+
+async function provisionVerbose(): Promise<Provisioning> {
+  const steps: Provisioning["steps"] = [];
+  const note = (step: string, ok: boolean, detail: string) => steps.push({ step, ok, detail });
+  const reason = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 300);
+
   const user = await upsertUser({
     externalId: EXTERNAL_ID,
     email: EMAIL,
@@ -54,39 +75,77 @@ async function provision(): Promise<string> {
     ...(NIDA ? { nidaNumber: NIDA } : {}),
     ...(PHONE ? { phone: PHONE } : {}),
   });
+  note("account", true, `id ${user.id}, external id ${EXTERNAL_ID}`);
 
-  let wallet = user.walletAddress ?? (await getUser(user.id).catch(() => null))?.walletAddress;
+  let latest = await getUser(user.id).catch(() => null);
+  let wallet = user.walletAddress ?? latest?.walletAddress ?? null;
+  if (wallet) note("wallet", true, "already issued");
 
-  // Same route the omnibus takes: without instant NIDA verification on the
-  // partner account, the wallet is issued on an attestation we make ourselves.
+  if (!NIDA) {
+    note("identity", false,
+      "No NIDA configured (NTZS_BROKER_NIDA or NTZS_OMNIBUS_NIDA). nTZS cannot verify the "
+      + "account, so it never issues a wallet.");
+  }
+
+  /*
+   * The same two routes the omnibus takes, in the same order: attach the
+   * identity to an account still sitting at "none", then attest it. Both are
+   * idempotent, so running this again on a half-open account is safe.
+   */
+  if (!wallet && NIDA && PHONE && (latest?.kycStatus ?? user.kycStatus ?? "none") === "none") {
+    try {
+      const done = await retroKyc(user.id, { nidaNumber: NIDA, phone: PHONE });
+      wallet = done.walletAddress ?? wallet;
+      note("kyc", true, wallet ? "identity attached, wallet issued" : "identity attached");
+    } catch (e) {
+      note("kyc", false, reason(e));
+    }
+  }
+
   if (!wallet && NIDA) {
-    const attested = await attestKyc(user.id, {
-      decision: "approved",
-      country: "TZ",
-      idType: "NATIONAL_ID",
-      idNumber: NIDA,
-      fullName: NAME,
-      reference: EXTERNAL_ID,
-      verifiedBy: VERIFIED_BY,
-    }).catch(() => null);
-    wallet = attested?.walletAddress ?? (await getUser(user.id).catch(() => null))?.walletAddress ?? null;
+    try {
+      const attested = await attestKyc(user.id, {
+        decision: "approved",
+        country: "TZ",
+        idType: "NATIONAL_ID",
+        idNumber: NIDA,
+        fullName: NAME,
+        reference: EXTERNAL_ID,
+        verifiedBy: VERIFIED_BY,
+      });
+      wallet = attested.walletAddress ?? wallet;
+      note("attestation", true, wallet ? "accepted, wallet issued" : "accepted");
+    } catch (e) {
+      note("attestation", false, reason(e));
+    }
   }
 
   if (!wallet) {
-    /*
-     * The likeliest cause, said out loud: this account carries the same NIDA
-     * as the omnibus, and nTZS may decline to issue a second wallet against
-     * an identity it has already verified. That is a conversation with them
-     * rather than something to retry, so the message points at it instead of
-     * reading as a transient failure.
-     */
+    latest = await getUser(user.id).catch(() => null);
+    wallet = latest?.walletAddress ?? null;
+    if (wallet) note("wallet", true, "issued, found on a re-read");
+  }
+
+  return { id: user.id, wallet, kycStatus: latest?.kycStatus ?? user.kycStatus ?? null, steps };
+}
+
+/** Runs provisioning and reports it, without throwing. For the desk. */
+export async function openBrokerAccount(): Promise<Provisioning> {
+  const result = await provisionVerbose();
+  if (result.wallet && result.id) cached = result.id;
+  return result;
+}
+
+async function provision(): Promise<string> {
+  const r = await provisionVerbose();
+  if (!r.wallet) {
+    const why = r.steps.filter((s) => !s.ok).map((s) => `${s.step}: ${s.detail}`).join(" · ");
     throw new Error(
-      "The broker fee account has no nTZS wallet yet. nTZS holds it until the account clears "
-      + "compliance — and it carries the same identity as the omnibus, which they may decline "
-      + "to verify twice. Ask nTZS, or open it on FIMCO's own identity.",
+      `The broker fee account has no nTZS wallet yet.${why ? ` ${why}` : ""} `
+      + "It carries the same identity as the omnibus, which nTZS may decline to verify twice.",
     );
   }
-  return user.id;
+  return r.id!;
 }
 
 export async function brokerNtzsUserId(): Promise<string> {

@@ -117,7 +117,7 @@ export function IssuerBar({ w }: { w: ReturnType<typeof useIssuer> }) {
       <span className="eyebrow">Issuer wallet</span>
       {!w.isConnected ? (
         <>
-          {w.connectors.filter((c) => c.id === "coinbaseWalletSDK" || c.type === "injected").slice(0, 3).map((c) => (
+          {w.connectors.filter((c) => c.id === "coinbaseWalletSDK" || c.id === "metaMaskSDK" || c.type === "injected").slice(0, 3).map((c) => (
             <button key={c.uid}
               onClick={() => {
                 setErr(null);

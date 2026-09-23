@@ -1,11 +1,19 @@
 import { createConfig, http, cookieStorage, createStorage } from "wagmi";
 import { base } from "wagmi/chains";
-import { injected, coinbaseWallet } from "wagmi/connectors";
+import { injected, coinbaseWallet, metaMask, walletConnect } from "wagmi/connectors";
 
 /**
- * The three wallets CAPX supports. Coinbase Wallet uses its own SDK so it also
- * covers Smart Wallet with no extension installed; MetaMask and Phantom connect
- * through their injected providers.
+ * The three wallets CAPX supports.
+ *
+ * Coinbase and MetaMask each connect through their own SDK. That matters on a
+ * phone: the SDK opens the wallet app to approve and hands control straight
+ * back to the browser the customer was already in, which is the flow people
+ * expect. Opening our site inside the wallet's browser instead — which is all
+ * a deep link can do — moves them into an app they did not ask to be in.
+ *
+ * Phantom has no such SDK for the web. In its own browser and as a desktop
+ * extension it injects a provider like anything else, and on a phone it is
+ * reachable through WalletConnect when a project id is configured.
  */
 export const WALLETS = [
   {
@@ -17,16 +25,18 @@ export const WALLETS = [
     alwaysAvailable: true,
   },
   {
-    id: "metaMask",
+    // The SDK connector's own id, not "metaMask": wagmi calls it this.
+    id: "metaMaskSDK",
     name: "MetaMask",
-    hint: "Browser extension",
+    hint: "Extension or the app on your phone",
     install: "https://metamask.io/download/",
-    alwaysAvailable: false,
+    /** The SDK reaches the phone app with nothing installed in the browser. */
+    alwaysAvailable: true,
   },
   {
     id: "phantom",
     name: "Phantom",
-    hint: "Browser extension",
+    hint: "Extension, or the app over WalletConnect",
     install: "https://phantom.app/download",
     alwaysAvailable: false,
   },
@@ -42,12 +52,39 @@ export type WalletId = (typeof WALLETS)[number]["id"];
  */
 export const SMART_WALLET_ID = "coinbaseWalletSDK" as const;
 
+/**
+ * WalletConnect's project id, which is what lets a phone wallet with no SDK
+ * of its own — Phantom, here — sign for a page open in the phone's browser.
+ *
+ * Optional: without it the other two still work, and Phantom falls back to
+ * its own browser. One is free from dashboard.reown.com.
+ */
+export const WC_PROJECT_ID = process.env.NEXT_PUBLIC_WC_PROJECT_ID ?? "";
+export const walletConnectReady = !!WC_PROJECT_ID;
+
 export const wagmiConfig = createConfig({
   chains: [base],
   connectors: [
-    coinbaseWallet({ appName: "CAPX", preference: "all" }),
-    injected({ target: "metaMask", shimDisconnect: true }),
+    // "all" offers both the app and a passkey Smart Wallet; the SDK's own
+    // types want it as an object now that the SDK is actually installed.
+    coinbaseWallet({ appName: "CAPX", preference: { options: "all" } }),
+    metaMask({
+      // Shown on MetaMask's own confirmation screen, so it says who is asking.
+      dappMetadata: { name: "CAPX", url: "https://www.capx.broker" },
+    }),
     injected({ target: "phantom", shimDisconnect: true }),
+    ...(WC_PROJECT_ID
+      ? [walletConnect({
+          projectId: WC_PROJECT_ID,
+          showQrModal: true,
+          metadata: {
+            name: "CAPX",
+            description: "Tokenised shares, settled in shillings.",
+            url: "https://www.capx.broker",
+            icons: ["https://www.capx.broker/apple-icon"],
+          },
+        })]
+      : []),
   ],
   transports: {
     [base.id]: http(process.env.NEXT_PUBLIC_BASE_RPC_URL ?? "https://mainnet.base.org"),
@@ -94,7 +131,7 @@ export function hasInjected(id: WalletId): boolean {
   // Several wallets installed at once put themselves in a list rather than
   // fighting over the one global.
   const all = eth.providers?.length ? eth.providers : [eth];
-  if (id === "metaMask") return all.some((p) => p.isMetaMask);
+  if (id === "metaMaskSDK") return all.some((p) => p.isMetaMask);
   if (id === "coinbaseWalletSDK") return all.some((p) => p.isCoinbaseWallet);
   return false;
 }
@@ -102,7 +139,7 @@ export function hasInjected(id: WalletId): boolean {
 /** The URL that opens this page inside the wallet's own browser. */
 export function walletDeepLink(id: WalletId, href: string): string | null {
   const url = new URL(href);
-  if (id === "metaMask") {
+  if (id === "metaMaskSDK") {
     // MetaMask takes the address without its scheme.
     return `https://metamask.app.link/dapp/${url.host}${url.pathname}${url.search}`;
   }
@@ -122,10 +159,16 @@ export function walletDeepLink(id: WalletId, href: string): string | null {
  * and "install" on a desktop without it — which is the only case where
  * sending somebody to a download page is the right answer.
  */
-export function connectRoute(id: WalletId): "connect" | "deepLink" | "install" {
+export function connectRoute(id: WalletId): "connect" | "walletConnect" | "deepLink" | "install" {
   if (hasInjected(id)) return "connect";
-  // Coinbase's SDK needs no extension: it can reach the app or make a Smart
-  // Wallet from a passkey, so it connects even with nothing installed.
-  if (id === "coinbaseWalletSDK") return "connect";
-  return isMobile() ? "deepLink" : "install";
+  /*
+   * Both SDKs reach their app on a phone and return the customer to the page
+   * they were on, so neither needs an extension or a detour through a wallet
+   * browser.
+   */
+  if (id === "coinbaseWalletSDK" || id === "metaMaskSDK") return "connect";
+  if (!isMobile()) return "install";
+  // Phantom, on a phone: WalletConnect keeps the page where it is. Without a
+  // project id the only thing left is Phantom's own browser.
+  return walletConnectReady ? "walletConnect" : "deepLink";
 }

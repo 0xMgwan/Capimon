@@ -15,7 +15,7 @@ import { useT } from "@/lib/i18n";
 
 const ICONS: Record<string, (p: { className?: string }) => React.ReactElement> = {
   coinbaseWalletSDK: CoinbaseIcon,
-  metaMask: MetaMaskIcon,
+  metaMaskSDK: MetaMaskIcon,
   phantom: PhantomIcon,
 };
 
@@ -102,7 +102,7 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
             <div className="grid grid-cols-3 gap-2">
               {WALLETS.map((w) => {
                 const connector = connectors.find((c) => c.id === w.id);
-                const Icon = ICONS[w.id];
+                const Icon = ICONS[w.id] ?? (() => <span aria-hidden />);
                 return (
                   <button
                     key={w.id}
@@ -120,22 +120,26 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
                         const link = walletDeepLink(w.id, window.location.href);
                         if (link) { window.location.href = link; return; }
                       }
-                      if (!connector) { window.open(w.install, "_blank", "noreferrer"); return; }
+                      /*
+                       * WalletConnect for a wallet with no SDK of its own.
+                       * It shows its own sheet, the wallet app opens to
+                       * approve, and the customer comes back here — rather
+                       * than this page being opened inside the wallet.
+                       */
+                      const chosen = route === "walletConnect"
+                        ? connectors.find((c) => c.id === "walletConnect") ?? connector
+                        : connector;
+                      if (!chosen) { window.open(w.install, "_blank", "noreferrer"); return; }
                       try {
                         // Awaited, so the modal stays until the wallet has
                         // actually answered — closing first is why a failure
                         // looked like nothing happening.
-                        await connectAsync({ connector, chainId: base.id });
+                        await connectAsync({ connector: chosen, chainId: base.id });
                         onClose();
                       } catch (e) {
-                        const link = walletDeepLink(w.id, window.location.href);
-                        // Coinbase can fail on a phone for its own reasons;
-                        // its app is still there to open.
-                        if (link && connectRoute(w.id) === "connect" && /mobile|popup|user|denied|provider/i.test(String(e))) {
-                          setWalletErr(`Could not reach ${w.name} here.`);
-                        } else {
-                          setWalletErr(e instanceof Error ? (e as { shortMessage?: string }).shortMessage ?? e.message : "Could not connect");
-                        }
+                        setWalletErr(e instanceof Error
+                          ? (e as { shortMessage?: string }).shortMessage ?? e.message
+                          : "Could not connect");
                       }
                     })()}
                     disabled={isPending}

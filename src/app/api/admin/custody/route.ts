@@ -434,10 +434,46 @@ async function requestIssuance(sql: Sql, role: OpsRole, body: Record<string, unk
     const refusal = await burnRefusal(security, quantity);
     if (refusal) return NextResponse.json({ ok: false, error: refusal }, { status: 409 });
   }
+  const note = body.note ? String(body.note).slice(0, 500) : null;
   const [row] = await sql<{ id: string }[]>`
     insert into capx.issuance_requests (security, kind, quantity, note, requested_by)
-    values (${security}, ${kind}, ${quantity}, ${body.note ? String(body.note).slice(0, 500) : null}, ${ACTOR[role]})
+    values (${security}, ${kind}, ${quantity}, ${note}, ${ACTOR[role]})
     returning id::text`;
+
+  /*
+   * Tell CAPX, for the same reason an attestation does.
+   *
+   * A request sits until somebody approves it and signs with the issuer
+   * wallet, and until then nothing happens: a mint leaves shares FIMCO holds
+   * untokenised and unbuyable, a burn leaves tokens outstanding against
+   * shares that have already left the vault. The second is the one that
+   * matters — supply claiming custody that no longer exists is the failure
+   * this whole arrangement is built to prevent.
+   *
+   * Skipped when CAPX raised it: you do not need telling about your own click.
+   */
+  if (role !== "admin") after(async () => {
+    const at = new Date().toLocaleString("en-GB", { timeZone: "Africa/Dar_es_Salaam" });
+    const r = await sendMail({
+      subject: `${kind === "burn" ? "Burn" : "Mint"} request — ${quantity.toLocaleString()} ${security}`,
+      text: [
+        kind === "burn"
+          ? `${ACTOR[role]} asked CAPX to burn ${quantity.toLocaleString()} ${security}. Until it is burned, the tokens still claim shares.`
+          : `${ACTOR[role]} asked CAPX to mint ${quantity.toLocaleString()} ${security}. Until it is minted, customers cannot buy them.`,
+        ``,
+        `Security   ${security}`,
+        `Quantity   ${quantity.toLocaleString()}`,
+        `Kind       ${kind}`,
+        `Note       ${note ?? "—"}`,
+        `Requested  ${at} (EAT)`,
+        ``,
+        `Approve it, then sign with the issuer wallet, on the securities desk:`,
+        `https://www.capx.broker/admin/securities`,
+      ].join("\n"),
+    });
+    if (!r.sent) console.warn(`Issuance request notice to ${opsEmail} not sent: ${r.reason}`);
+  });
+
   return NextResponse.json({ ok: true, id: row.id });
 }
 

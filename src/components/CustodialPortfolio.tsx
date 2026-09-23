@@ -129,7 +129,9 @@ export function CustodialPortfolio() {
         * external listing that has closed, or a suspended share, would take
         * the money and refuse the order every month.
         */}
-      <RecurringBuys securities={dse.filter((d) => d.status === "live").map((d) => ({ symbol: d.symbol, name: d.name }))} />
+      <RecurringBuys securities={dse
+        .filter((d) => d.status === "live")
+        .map((d) => ({ symbol: d.symbol, name: d.name, logo: d.logo, price: d.price }))} />
 
       {/*
         * Money first, then what it bought.

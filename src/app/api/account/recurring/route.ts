@@ -6,8 +6,15 @@ import { dseSecurity } from "@/lib/dseSecurities";
 
 export const dynamic = "force-dynamic";
 
-/** The smallest instalment worth placing: below this the fee eats it. */
-const MIN_TZS = 5_000;
+/*
+ * The smallest instalment.
+ *
+ * A thousand shillings is a real amount of money to a lot of people here, and
+ * a floor set where it felt tidy to us would have excluded exactly the
+ * customers a standing order is most useful to. It still has to buy a
+ * fraction of a share worth recording, which at any DSE price it does.
+ */
+const MIN_TZS = 1_000;
 /** A ceiling, so a mistyped amount cannot schedule a fortune every week. */
 const MAX_TZS = 10_000_000;
 

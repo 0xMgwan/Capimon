@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n";
 import { haptic } from "@/lib/haptics";
+import { DseLogo } from "./DseLogo";
 
 /**
  * Standing orders, from the customer's side.
@@ -39,7 +40,96 @@ const when = (p: Plan, t: (s: string) => string) =>
 const dt = (s: string) =>
   new Date(s).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
-export function RecurringBuys({ securities }: { securities: { symbol: string; name: string }[] }) {
+type Listing = { symbol: string; name: string; logo: string | null; price: number };
+
+/**
+ * Choosing the share, with the companies shown as companies.
+ *
+ * A native <select> renders as the operating system's own grey list, which on
+ * a page like this looks like a form somebody forgot to finish — and it
+ * cannot show a logo or a price, so the reader is picking from four ticker
+ * codes. This is the same choice with the marks and the prices in it.
+ */
+function SharePicker({ list, value, onPick }: {
+  list: Listing[]; value: string; onPick: (symbol: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const chosen = list.find((s) => s.symbol === value) ?? list[0];
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  // Closing on an outside click, because a panel that only closes by choosing
+  // something forces a choice on somebody who opened it to look.
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => {
+      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
+  }, [open]);
+
+  if (!chosen) return null;
+
+  return (
+    <div ref={boxRef} className="relative mt-1.5">
+      <button
+        type="button"
+        onClick={() => { haptic(); setOpen((v) => !v); }}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 rounded-xl border hairline bg-transparent px-3 py-2.5 text-left transition-colors hover:surface"
+      >
+        <DseLogo logo={chosen.logo} symbol={chosen.symbol} size={32} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[14px] font-medium leading-tight">{chosen.symbol}</span>
+          <span className="block truncate text-[11.5px] text-[var(--muted)]">{chosen.name}</span>
+        </span>
+        {chosen.price > 0 && (
+          <span className="tnum shrink-0 text-[12px] text-[var(--muted)]">
+            {Math.round(chosen.price).toLocaleString()} TZS
+          </span>
+        )}
+        <svg viewBox="0 0 24 24" className={`h-4 w-4 shrink-0 text-[var(--muted)] transition-transform ${open ? "rotate-180" : ""}`}
+          fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      {open && (
+        <div role="listbox"
+          className="absolute left-0 right-0 z-30 mt-1.5 max-h-72 overflow-auto rounded-xl border hairline bg-[var(--bg)] p-1 shadow-lg">
+          {list.map((s) => (
+            <button
+              key={s.symbol}
+              type="button"
+              role="option"
+              aria-selected={s.symbol === value}
+              onClick={() => { haptic(); onPick(s.symbol); setOpen(false); }}
+              className={`flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors ${
+                s.symbol === value ? "surface" : "hover:surface"
+              }`}
+            >
+              <DseLogo logo={s.logo} symbol={s.symbol} size={28} />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13.5px] font-medium leading-tight">{s.symbol}</span>
+                <span className="block truncate text-[11px] text-[var(--muted)]">{s.name}</span>
+              </span>
+              {s.price > 0 && (
+                <span className="tnum shrink-0 text-[11.5px] text-[var(--muted)]">
+                  {Math.round(s.price).toLocaleString()}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function RecurringBuys({ securities }: { securities: Listing[] }) {
   const { t } = useT();
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [open, setOpen] = useState(false);
@@ -48,7 +138,7 @@ export function RecurringBuys({ securities }: { securities: { symbol: string; na
 
   const [form, setForm] = useState({
     symbol: securities[0]?.symbol ?? "CRDB",
-    amount: "50000",
+    amount: "20000",
     cadence: "monthly" as "daily" | "weekly" | "monthly",
     dayOf: 1,
   });
@@ -102,18 +192,11 @@ export function RecurringBuys({ securities }: { securities: { symbol: string; na
 
       {open && (
         <div className="mt-3 rounded-2xl surface p-3.5">
-          <label className="block">
+          <div>
             <span className="eyebrow">{t("Share")}</span>
-            <select
-              value={form.symbol}
-              onChange={(e) => setForm({ ...form, symbol: e.target.value })}
-              className="mt-1.5 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
-            >
-              {securities.map((s) => (
-                <option key={s.symbol} value={s.symbol}>{s.symbol} · {s.name}</option>
-              ))}
-            </select>
-          </label>
+            <SharePicker list={securities} value={form.symbol}
+              onPick={(symbol) => setForm({ ...form, symbol })} />
+          </div>
 
           <label className="mt-3 block">
             <span className="eyebrow">{t("Amount each time")}</span>
@@ -127,7 +210,7 @@ export function RecurringBuys({ securities }: { securities: { symbol: string; na
               <span className="text-[12px] text-[var(--muted)]">TZS</span>
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {[20_000, 50_000, 100_000, 250_000].map((n) => (
+              {[1_000, 5_000, 20_000, 50_000].map((n) => (
                 <button key={n} onClick={() => { haptic(); setForm({ ...form, amount: String(n) }); }}
                   className={`rounded-full border px-3 py-1 text-[11px] transition-colors ${
                     form.amount === String(n) ? "border-[var(--fg)] bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"
@@ -183,7 +266,7 @@ export function RecurringBuys({ securities }: { securities: { symbol: string; na
 
           <button
             onClick={() => { haptic(); void send({ symbol: form.symbol, amountTzs: Number(form.amount), cadence: form.cadence, dayOf: form.dayOf }); }}
-            disabled={busy || !(Number(form.amount) >= 5000)}
+            disabled={busy || !(Number(form.amount) >= 1000)}
             className="mt-3 w-full rounded-full bg-[var(--fg)] py-2.5 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40"
           >
             {busy ? t("Saving…") : t("Start plan")}

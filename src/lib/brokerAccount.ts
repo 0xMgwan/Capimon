@@ -167,6 +167,25 @@ export async function brokerNtzsUserId(): Promise<string> {
 
 export type BrokerAccount = { id: string; tzs: number; walletAddress: string | null };
 
+/**
+ * Why the account is in whatever state it is in.
+ *
+ * Reported rather than inferred, because the states look identical from the
+ * desk: no wallet because nothing is configured, no wallet because nTZS
+ * refused, and no wallet because the read failed all render as an absence.
+ */
+export function brokerAccountStatus() {
+  return {
+    configured: brokerAccountConfigured,
+    externalId: EXTERNAL_ID,
+    /* Which identity fields are present. Never the values — a NIDA is
+       personal data and has no business in an API response. */
+    hasNida: !!NIDA,
+    hasPhone: !!PHONE,
+    pinnedUserId: !!CONFIGURED_ID,
+  };
+}
+
 /** The account's own balance, or null when there is no account to read. */
 export async function brokerNtzsBalance(): Promise<BrokerAccount | null> {
   if (!brokerAccountConfigured) return null;

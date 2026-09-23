@@ -31,13 +31,22 @@ export async function GET(req: Request) {
       // Only CAPX is shown the wallet: it is an operational detail of where
       // the money sits, not part of the statement of what is owed.
       role === "admin"
-        ? import("@/lib/brokerAccount").then((m) => m.brokerNtzsBalance()).catch(() => null)
+        ? import("@/lib/brokerAccount").then(async (m) => ({
+            balance: await m.brokerNtzsBalance().catch(() => null),
+            status: m.brokerAccountStatus(),
+          })).catch(() => null)
         : null,
     ]);
 
     return NextResponse.json({
       ok: true, role, balance, entries, daily, bySecurity, payout, split: FEE_SPLIT,
-      wallet: role === "admin" ? { address: account?.walletAddress ?? null, tzs: account?.tzs ?? 0 } : null,
+      wallet: role === "admin"
+        ? {
+            address: account?.balance?.walletAddress ?? null,
+            tzs: account?.balance?.tzs ?? 0,
+            ...(account?.status ?? { configured: false, externalId: null, hasNida: false, hasPhone: false, pinnedUserId: false }),
+          }
+        : null,
     }, { headers: { "cache-control": "no-store" } });
   } catch (e) {
     return NextResponse.json(

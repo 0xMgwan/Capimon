@@ -30,8 +30,12 @@ type Payout = {
 type Account = {
   balance: number;
   payout: Payout | null;
-  /** The nTZS account their fees are swept into, when it has a wallet. */
-  wallet?: { address: string | null; tzs: number } | null;
+  /** The nTZS account their fees are swept into, and why it is as it is. */
+  wallet?: {
+    address: string | null; tzs: number;
+    configured?: boolean; externalId?: string | null;
+    hasNida?: boolean; hasPhone?: boolean; pinnedUserId?: boolean;
+  } | null;
   entries: Entry[];
   daily: { day: string; earned: number; trades: number }[];
   bySecurity: { security: string; earned: number; trades: number }[];
@@ -239,11 +243,24 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
           * the desk says so and offers the one action that fixes it rather
           * than failing quietly at the next sweep.
           */}
-        {isAdmin && acct.wallet && !acct.wallet.address && (
+        {isAdmin && !acct.wallet?.address && (
           <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl border border-[#b45309]/40 bg-[#b45309]/[0.06] p-3">
             <span className="min-w-0 flex-1 text-[12px] leading-relaxed text-[var(--muted)]">
-              The fee account exists but nTZS has not issued its wallet, so fees cannot be swept
-              into it yet and withdrawals are paid from the settlement account.
+              {acct.wallet?.configured === false ? (
+                <>
+                  No fee account is configured, so the broker&rsquo;s share stays in the settlement
+                  account. It needs an identity of its own:{" "}
+                  {acct.wallet?.hasNida ? "" : "NTZS_BROKER_NIDA, "}
+                  {acct.wallet?.hasPhone ? "" : "NTZS_BROKER_PHONE, "}
+                  and nothing else.
+                </>
+              ) : (
+                <>
+                  The fee account{acct.wallet?.externalId ? ` (${acct.wallet.externalId})` : ""} has
+                  no nTZS wallet yet, so fees cannot be swept into it and withdrawals are paid from
+                  the settlement account.
+                </>
+              )}
             </span>
             <button onClick={() => void openAccount()} disabled={busy}
               className="shrink-0 rounded-full bg-[var(--fg)] px-4 py-2 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40">

@@ -76,7 +76,7 @@ export function Footer() {
 
         <div className="mt-14 border-t hairline pt-6">
           <p className="max-w-3xl text-[11px] leading-relaxed text-[var(--muted)]">
-            {t("CAPX lets you buy shares listed on the Dar es Salaam Stock Exchange, and US shares, with Tanzanian shillings. Shares bought through a CAPX account are held on your behalf by CAPX with a licensed DSE broker. CAPX is not an exchange or an investment adviser, and nothing here is investment advice. Share prices can fall as well as rise. US shares are not available to US persons.")}
+            {t("CAPX lets you buy shares listed on the Dar es Salaam Stock Exchange, and US shares, with Tanzanian shillings. Shares bought through a CAPX account are held on your behalf by CAPX with a licensed DSE broker. A holding tracks the price of the underlying share: it is a representation of that share on the blockchain, not registered shareholding, and it carries no dividend entitlement and no voting or other shareholder rights. CAPX is not an exchange or an investment adviser, and nothing here is investment advice. Share prices can fall as well as rise. US shares are not available to US persons.")}
           </p>
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
             <span className="tnum text-xs text-[var(--muted)]">CAPX © {new Date().getFullYear()}</span>

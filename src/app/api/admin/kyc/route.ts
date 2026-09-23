@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { dbConfigured } from "@/lib/db";
 import { listKyc, reviewKyc } from "@/lib/kyc";
 import { roleOf, ACTOR } from "@/lib/adminAuth";
+import { sendMail } from "@/lib/mail";
+import { db } from "@/lib/db";
+import { after } from "next/server";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +40,49 @@ export async function POST(req: Request) {
       reason: body.reason ? String(body.reason).slice(0, 500) : null,
       reviewer: String(body.reviewer ?? ACTOR[role]),
     });
+    /*
+     * Tell the customer, after the reviewer has their answer.
+     *
+     * A decision they are not told about is a decision they discover by
+     * trying to buy and being refused. Sent with `after` so a slow mail
+     * provider cannot hold up the review, and a failure is logged rather
+     * than raised: the decision itself is already recorded.
+     */
+    after(async () => {
+      const [u] = await db()<{ email: string; name: string | null }[]>`
+        select email, name from capx.users where id = ${result.userId}::uuid`;
+      if (!u) return;
+      const approved = result.status === "approved";
+      const r = await sendMail({
+        to: u.email,
+        subject: approved ? "Your CAPX account is verified" : "About your CAPX verification",
+        text: approved
+          ? [
+              `Hello${u.name ? ` ${u.name.split(" ")[0]}` : ""},`,
+              ``,
+              `Your identity has been verified, so your CAPX account is fully open.`,
+              `You can now buy shares and withdraw to your mobile money or bank.`,
+              ``,
+              `https://www.capx.broker/markets`,
+              ``,
+              `CAPX`,
+            ].join("\n")
+          : [
+              `Hello${u.name ? ` ${u.name.split(" ")[0]}` : ""},`,
+              ``,
+              `We could not verify your identity from what was submitted.`,
+              body.reason ? `\nReason: ${String(body.reason).slice(0, 500)}\n` : ``,
+              `You can submit again, and your money stays yours in the meantime —`,
+              `nothing has been taken from your account.`,
+              ``,
+              `https://www.capx.broker/verify`,
+              ``,
+              `CAPX`,
+            ].join("\n"),
+      });
+      if (!r.sent) console.warn(`KYC decision notice to the customer not sent: ${r.reason}`);
+    });
+
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     // A refused review is the rule working, not a fault.

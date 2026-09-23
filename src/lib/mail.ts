@@ -1,23 +1,44 @@
 import "server-only";
+import nodemailer, { type Transporter } from "nodemailer";
 
 /**
  * Outbound email, for the handful of things a person has to be told about.
  *
- * Sent through Resend's HTTP API rather than SMTP, so there is no connection
- * to keep or library to carry. Unconfigured, it does nothing and says so in
- * the log: a verification must never fail because a notification could not be
- * sent, and an operator reading "mail not configured" is better served than
- * one whose submission 500s.
+ * Plain SMTP, so the only setup is an address and a password — a Gmail account
+ * with an app password works as it is, with no domain to verify and no DNS to
+ * edit. The host defaults to Gmail's; anything else is a matter of setting
+ * SMTP_HOST and SMTP_PORT.
+ *
+ * Unconfigured, it does nothing and says so in the log. A verification must
+ * never fail because a notification could not be sent, and an operator reading
+ * "mail not configured" is better served than one whose submission 500s.
  */
-const API = "https://api.resend.com/emails";
+const user = process.env.SMTP_USER ?? "";
+const pass = process.env.SMTP_PASS ?? "";
+const host = process.env.SMTP_HOST ?? "smtp.gmail.com";
+const port = Number(process.env.SMTP_PORT ?? 465);
 
-export const mailConfigured = !!process.env.RESEND_API_KEY;
+export const mailConfigured = !!user && !!pass;
 
 /** Where operational notices go. */
-export const opsEmail = process.env.OPS_EMAIL ?? "rrefitanzania@gmail.com";
+export const opsEmail = process.env.OPS_EMAIL ?? user ?? "rrefitanzania@gmail.com";
 
-/** The sender. Its domain has to be verified with Resend, or sending fails. */
-const from = process.env.MAIL_FROM ?? "CAPX <notifications@capx.broker>";
+/** The sender. With Gmail this has to be the account itself, so it defaults to it. */
+const from = process.env.MAIL_FROM ?? (user ? `CAPX <${user}>` : "CAPX");
+
+let transport: Transporter | null = null;
+function mailer() {
+  // Created once and reused: a new connection per message is slow and Gmail
+  // rate-limits it.
+  transport ??= nodemailer.createTransport({
+    host,
+    port,
+    // 465 is implicit TLS; 587 upgrades with STARTTLS.
+    secure: port === 465,
+    auth: { user, pass },
+  });
+  return transport;
+}
 
 export async function sendMail(input: {
   to?: string;
@@ -28,24 +49,13 @@ export async function sendMail(input: {
 }): Promise<{ sent: boolean; reason?: string }> {
   if (!mailConfigured) return { sent: false, reason: "mail not configured" };
   try {
-    const res = await fetch(API, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        from,
-        to: [input.to ?? opsEmail],
-        subject: input.subject,
-        text: input.text,
-        ...(input.replyTo ? { reply_to: input.replyTo } : {}),
-      }),
+    await mailer().sendMail({
+      from,
+      to: input.to ?? opsEmail,
+      subject: input.subject,
+      text: input.text,
+      ...(input.replyTo ? { replyTo: input.replyTo } : {}),
     });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      return { sent: false, reason: `${res.status} ${body.slice(0, 200)}` };
-    }
     return { sent: true };
   } catch (e) {
     return { sent: false, reason: e instanceof Error ? e.message : "send failed" };

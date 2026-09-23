@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAccount, useConnect, useDisconnect, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
 import { base } from "wagmi/chains";
 import { encodeAbiParameters, keccak256, toBytes, parseAbi, type Abi } from "viem";
+import { connectRoute, walletDeepLink, type WalletId } from "@/lib/wallets";
 
 /**
  * Signing issuer transactions from the desk, with the key in a wallet.
@@ -118,7 +119,17 @@ export function IssuerBar({ w }: { w: ReturnType<typeof useIssuer> }) {
         <>
           {w.connectors.filter((c) => c.id === "coinbaseWalletSDK" || c.type === "injected").slice(0, 3).map((c) => (
             <button key={c.uid}
-              onClick={() => { setErr(null); w.connectAsync({ connector: c }).catch((e) => setErr(e?.shortMessage ?? e?.message ?? "Could not connect")); }}
+              onClick={() => {
+                setErr(null);
+                // No extension on a phone: open this page in the wallet's own
+                // browser, where its provider exists, rather than calling a
+                // connector that cannot find one.
+                if (connectRoute(c.id as WalletId) === "deepLink") {
+                  const link = walletDeepLink(c.id as WalletId, window.location.href);
+                  if (link) { window.location.href = link; return; }
+                }
+                w.connectAsync({ connector: c }).catch((e) => setErr(e?.shortMessage ?? e?.message ?? "Could not connect"));
+              }}
               className="rounded-full border hairline px-3 py-1.5 hover:surface">
               Connect {c.name}
             </button>

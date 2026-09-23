@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { roleOf } from "@/lib/adminAuth";
 import { sendMail, mailConfigured, opsEmail } from "@/lib/mail";
+import { brandedEmail } from "@/lib/mailTemplate";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,17 @@ export async function POST(req: Request) {
   const r = await sendMail({
     to,
     subject: "CAPX — mail test",
+    // Sent in the real template, so the test also shows what a customer sees.
+    html: brandedEmail({
+      heading: "Mail is working",
+      paragraphs: [
+        "This is a test from the CAPX operations desk.",
+        "If you are reading it, outbound mail works: KYC requests will reach the operations address, and customers will be told when they are verified.",
+        `Sent ${at} EAT.`,
+      ],
+      cta: { label: "Open CAPX", href: "https://www.capx.broker/markets" },
+      note: "Nobody else received this. It goes only to the address the desk typed.",
+    }),
     text: [
       "This is a test from the CAPX operations desk.",
       "",

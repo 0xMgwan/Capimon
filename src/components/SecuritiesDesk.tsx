@@ -46,6 +46,8 @@ type Attestation = {
   id: string; security: string; custodian: string; quantity: number; locked: number;
   doc_ref: string | null; issued_at: string; expires_at: string;
   status: string; approved_by: string | null; filed_by: string | null; expired: boolean;
+  /** Whether a pledge or statement was attached, and what it is called. */
+  hasDocument?: boolean; documentName?: string | null;
 };
 type Issuance = { id: string; security: string; kind: string; quantity: number; tx_hash: string | null; created_at: string };
 
@@ -586,6 +588,14 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
                   {a.expired && " · EXPIRED"}
                 </span>
               </span>
+              {a.hasDocument && (
+                <button
+                  onClick={() => void openAttestationDoc(token, a)}
+                  className="rounded-full border hairline px-2.5 py-1 text-[11px] hover:surface"
+                >
+                  Statement
+                </button>
+              )}
               <span className={`rounded-full px-2 py-0.5 text-[10px] uppercase ${
                 a.status === "approved" && !a.expired ? "bg-[var(--color-up)]/10 text-[var(--color-up)]"
                 : a.status === "rejected" ? "bg-[var(--color-down)]/10 text-[var(--color-down)]"
@@ -1476,6 +1486,7 @@ function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone
    */
   const listing = asBroker && !preset;
   const [hold, setHold] = useState({ quantity: "", locked: "", docRef: "", expiresAt: "" });
+  const [holdDoc, setHoldDoc] = useState<{ data: string; name: string } | null>(null);
   const hq = Number(hold.quantity) || 0;
   const hl = Number(hold.locked || hold.quantity) || 0;
   return (
@@ -1616,6 +1627,10 @@ function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone
             <input type="date" value={hold.expiresAt} onChange={(e) => setHold({ ...hold, expiresAt: e.target.value })}
               className="mt-1.5 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]" />
           </label>
+          <div className="mt-3">
+            <DocAttach doc={holdDoc?.data ?? null} name={holdDoc?.name ?? null}
+              on={(d, n) => setHoldDoc(d && n ? { data: d, name: n } : null)} />
+          </div>
           {hl > hq && hq > 0 && <p className="mt-2 text-[11px] text-[var(--color-down)]">Tokenised cannot exceed the shares held.</p>}
         </div>
       )}
@@ -1657,10 +1672,12 @@ function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone
             const filed = await onAct({
               action: "attest", security: f.symbol, custodian: PRIMARY_BROKER, quantity: hq, locked: hl, docRef: hold.docRef,
               expiresAt: new Date(`${hold.expiresAt}T23:59:59Z`).toISOString(), listing: true,
+              document: holdDoc?.data ?? null, documentName: holdDoc?.name ?? null,
             });
             if (filed === false) return;
             setF({ symbol: "", name: "", tokenAddress: "", decimals: "8", status: "draft" });
             setHold({ quantity: "", locked: "", docRef: "", expiresAt: "" });
+            setHoldDoc(null);
             setLogo(null);
           }
           onDone?.();
@@ -1686,12 +1703,82 @@ function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone
  */
 export const PRIMARY_BROKER = "FIMCO";
 
+/**
+ * Downloads the document filed with an attestation.
+ *
+ * Fetched rather than linked because the route is behind the desk's token,
+ * and a token cannot ride on an anchor.
+ */
+async function openAttestationDoc(token: string, a: Attestation) {
+  const res = await fetch(`/api/admin/custody/document?id=${a.id}`, {
+    headers: { authorization: `Bearer ${token}` }, cache: "no-store",
+  });
+  if (!res.ok) return;
+  const url = URL.createObjectURL(await res.blob());
+  const el = document.createElement("a");
+  el.href = url; el.download = a.documentName || `${a.security}-attestation`;
+  document.body.appendChild(el); el.click(); el.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+/** About 4 MB of file once base64 has added its third. */
+const MAX_DOC = 5_600_000;
+
+/**
+ * The document behind the attestation: a pledge of shares, or the holding
+ * statement the reference points at.
+ *
+ * A reference number says a document exists somewhere. This is the document,
+ * so the person approving can read the thing they are approving rather than
+ * taking the number on trust.
+ */
+function DocAttach({ doc, name, on }: {
+  doc: string | null; name: string | null;
+  on: (doc: string | null, name: string | null) => void;
+}) {
+  const [err, setErr] = useState<string | null>(null);
+  return (
+    <label className="mb-3 block">
+      <span className="eyebrow">Attach the statement</span>
+      {doc ? (
+        <span className="mt-1.5 flex items-center gap-2 rounded-xl border hairline px-3.5 py-2.5 text-[13px]">
+          <span className="min-w-0 flex-1 truncate">{name}</span>
+          <button onClick={() => { on(null, null); setErr(null); }} className="text-[11px] text-[var(--muted)] underline">
+            Remove
+          </button>
+        </span>
+      ) : (
+        <input
+          type="file"
+          accept="application/pdf,image/*"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+              const url = String(reader.result ?? "");
+              if (url.length > MAX_DOC) { setErr("That file is too large. Keep it under 4 MB."); return; }
+              setErr(null); on(url, file.name);
+            };
+            reader.readAsDataURL(file);
+          }}
+          className="mt-1.5 w-full text-[12px] file:mr-3 file:rounded-full file:border-0 file:bg-[var(--fg)] file:px-3 file:py-1.5 file:text-[12px] file:text-[var(--bg)]"
+        />
+      )}
+      <span className="mt-1 block text-[11px] text-[var(--muted)]">
+        {err ?? "PDF or photo, up to 4 MB. The pledge of shares or the holding statement itself."}
+      </span>
+    </label>
+  );
+}
+
 function FileAttestation({ onAct, busy, lockToBroker = false, securities = [] }: {
   onAct: (b: Record<string, unknown>) => Promise<boolean | void>; busy: boolean;
   /** FIMCO's own portal files as FIMCO; there is no party to choose. */
   lockToBroker?: boolean; securities?: string[];
 }) {
   const [f, setF] = useState({ security: "CRDB", custodian: PRIMARY_BROKER, quantity: "", locked: "", docRef: "", expiresAt: "" });
+  const [doc, setDoc] = useState<{ data: string; name: string } | null>(null);
   const [other, setOther] = useState(false);
   const q = Number(f.quantity) || 0;
   const l = Number(f.locked || f.quantity) || 0;
@@ -1752,6 +1839,8 @@ function FileAttestation({ onAct, busy, lockToBroker = false, securities = [] }:
           className="mt-1.5 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
         />
       </label>
+      <DocAttach doc={doc?.data ?? null} name={doc?.name ?? null}
+        on={(d, n) => setDoc(d && n ? { data: d, name: n } : null)} />
       {l > q && q > 0 && (
         <p className="mb-2 text-[11px] text-[var(--color-down)]">Locked cannot exceed the shares held.</p>
       )}
@@ -1759,7 +1848,8 @@ function FileAttestation({ onAct, busy, lockToBroker = false, securities = [] }:
         onClick={() => void onAct({
           action: "attest", ...f, quantity: q, locked: l,
           expiresAt: f.expiresAt ? new Date(`${f.expiresAt}T23:59:59Z`).toISOString() : "",
-        })}
+          document: doc?.data ?? null, documentName: doc?.name ?? null,
+        }).then((okay) => { if (okay !== false) setDoc(null); })}
         disabled={busy || !f.security || !f.custodian.trim() || !f.docRef.trim() || !(q > 0) || l > q || !f.expiresAt}
         className="mt-1 w-full rounded-full bg-[var(--fg)] py-2.5 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40"
       >

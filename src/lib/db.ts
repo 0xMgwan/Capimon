@@ -373,6 +373,12 @@ export async function migrate() {
         custody_attestations: [
           /* Who filed it, as distinct from who it names as custodian. */
           "filed_by text",
+          /* The evidence itself — a pledge of shares or a holding statement —
+             as a data URL, the way KYC documents are kept. A reference number
+             says a document exists; this is the document. Never selected by
+             the listing queries: it is hundreds of kilobytes and is served on
+             its own route. */
+          "document text", "document_name text",
         ],
         notifications: [
           /* Which holding a trade notification concerns, so the row can show

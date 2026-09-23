@@ -10,6 +10,9 @@ export const dynamic = "force-dynamic";
 /** What FIMCO may do. Everything else on this route is CAPX's. */
 const FIMCO_ACTIONS = new Set(["attest", "request-issuance", "register-security"]);
 
+/** About 4 MB once base64 has added its third. A scanned statement fits. */
+const MAX_DOC_BYTES = 5_600_000;
+
 /** Attestations and issuance history for the custody desk. */
 export async function GET(req: Request) {
   if (!dbConfigured) return NextResponse.json({ ok: false, code: "not_configured" }, { status: 503 });
@@ -28,6 +31,9 @@ export async function GET(req: Request) {
             from capx.securities order by symbol`,
       sql`select id::text, security, custodian, quantity::float8 as quantity, locked::float8 as locked,
                  doc_ref, issued_at, expires_at, status, approved_by, approved_at, filed_by,
+                 -- The attachment itself is served on its own route; here it is
+                 -- only whether there is one and what it is called.
+                 (document is not null) as "hasDocument", document_name as "documentName",
                  (expires_at <= now()) as expired
             from capx.custody_attestations order by created_at desc limit 50`,
       sql`select id::text, security, kind, quantity::float8 as quantity, tx_hash, actor, created_at
@@ -224,10 +230,37 @@ export async function POST(req: Request) {
       if (!custodian || !docRef) {
         return NextResponse.json({ ok: false, error: "An attestation needs the attesting party and their statement reference." }, { status: 400 });
       }
+      /*
+       * The document itself, when the filer attaches one.
+       *
+       * A reference number says a statement exists somewhere; the pledge of
+       * shares or the holding statement is the thing a reviewer actually has
+       * to read before asserting the shares are in the vault. Kept as a data
+       * URL on the row, the way KYC documents already are — adding object
+       * storage for a handful of PDFs a month would be a dependency for one
+       * field.
+       */
+      const document = String(body.document ?? "").trim() || null;
+      const documentName = String(body.documentName ?? "").trim().slice(0, 120) || null;
+      if (document) {
+        if (!/^data:(application\/pdf|image\/(png|jpe?g|webp|heic));base64,/i.test(document)) {
+          return NextResponse.json(
+            { ok: false, error: "Attach a PDF or an image." }, { status: 400 });
+        }
+        // Refused rather than truncated into a file nobody can open. The cap
+        // is here as well as in the form because a form limit is a courtesy.
+        if (document.length > MAX_DOC_BYTES) {
+          return NextResponse.json(
+            { ok: false, error: "That file is too large. Keep it under 4 MB." }, { status: 413 });
+        }
+      }
+
       const rows = await sql<{ id: string }[]>`
-        insert into capx.custody_attestations (security, custodian, quantity, locked, doc_ref, expires_at, status, filed_by)
+        insert into capx.custody_attestations (security, custodian, quantity, locked, doc_ref, expires_at, status, filed_by,
+                                               document, document_name)
         values (${security}, ${custodian}, ${quantity}, ${locked},
-                ${docRef}, ${expiresAt}, 'pending', ${ACTOR[role]})
+                ${docRef}, ${expiresAt}, 'pending', ${ACTOR[role]},
+                ${document}, ${documentName})
         returning id::text`;
       return NextResponse.json({ ok: true, id: rows[0].id });
     }

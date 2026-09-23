@@ -3,6 +3,7 @@ import { dbConfigured } from "@/lib/db";
 import { listKyc, reviewKyc } from "@/lib/kyc";
 import { roleOf, ACTOR } from "@/lib/adminAuth";
 import { sendMail } from "@/lib/mail";
+import { brandedEmail } from "@/lib/mailTemplate";
 import { db } from "@/lib/db";
 import { after } from "next/server";
 
@@ -53,32 +54,36 @@ export async function POST(req: Request) {
         select email, name from capx.users where id = ${result.userId}::uuid`;
       if (!u) return;
       const approved = result.status === "approved";
+      const first = u.name ? ` ${u.name.split(" ")[0]}` : "";
+      const reason = body.reason ? String(body.reason).slice(0, 500) : null;
+
+      const paragraphs = approved
+        ? [
+            `Hello${first},`,
+            "Your identity has been verified, so your CAPX account is fully open. You can buy shares and withdraw to your mobile money or bank.",
+          ]
+        : [
+            `Hello${first},`,
+            "We could not verify your identity from what was submitted.",
+            ...(reason ? [`Reason: ${reason}`] : []),
+            "You can submit again. Your money stays yours in the meantime — nothing has been taken from your account.",
+          ];
+
       const r = await sendMail({
         to: u.email,
         subject: approved ? "Your CAPX account is verified" : "About your CAPX verification",
-        text: approved
-          ? [
-              `Hello${u.name ? ` ${u.name.split(" ")[0]}` : ""},`,
-              ``,
-              `Your identity has been verified, so your CAPX account is fully open.`,
-              `You can now buy shares and withdraw to your mobile money or bank.`,
-              ``,
-              `https://www.capx.broker/markets`,
-              ``,
-              `CAPX`,
-            ].join("\n")
-          : [
-              `Hello${u.name ? ` ${u.name.split(" ")[0]}` : ""},`,
-              ``,
-              `We could not verify your identity from what was submitted.`,
-              body.reason ? `\nReason: ${String(body.reason).slice(0, 500)}\n` : ``,
-              `You can submit again, and your money stays yours in the meantime —`,
-              `nothing has been taken from your account.`,
-              ``,
-              `https://www.capx.broker/verify`,
-              ``,
-              `CAPX`,
-            ].join("\n"),
+        html: brandedEmail({
+          heading: approved ? "You're verified" : "We need another look at your documents",
+          paragraphs,
+          cta: approved
+            ? { label: "Start investing", href: "https://www.capx.broker/markets" }
+            : { label: "Submit again", href: "https://www.capx.broker/verify" },
+          note: approved
+            ? "If this wasn't you, reply to this email straight away."
+            : "Reply to this email if you think this is a mistake.",
+        }),
+        // The same words, for a client that shows no HTML at all.
+        text: [...paragraphs, "", approved ? "https://www.capx.broker/markets" : "https://www.capx.broker/verify", "", "CAPX"].join("\n"),
       });
       if (!r.sent) console.warn(`KYC decision notice to the customer not sent: ${r.reason}`);
     });

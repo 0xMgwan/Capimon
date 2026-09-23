@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { useConnect } from "wagmi";
 import { base } from "wagmi/chains";
-import { WALLETS } from "@/lib/wallets";
+import { WALLETS, connectRoute, walletDeepLink } from "@/lib/wallets";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { CoinbaseIcon, MetaMaskIcon, PhantomIcon } from "./icons/Wallets";
 import { Logo } from "./Logo";
@@ -28,7 +28,9 @@ const ICONS: Record<string, (p: { className?: string }) => React.ReactElement> =
  */
 export function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useT();
-  const { connectors, connect, isPending } = useConnect();
+  const { connectors, connectAsync, isPending } = useConnect();
+  /** What went wrong with the last attempt, said out loud rather than swallowed. */
+  const [walletErr, setWalletErr] = useState<string | null>(null);
   const { enabled: custodialEnabled, refresh } = useCapimonAccount();
   const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
 
@@ -104,10 +106,38 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
                 return (
                   <button
                     key={w.id}
-                    onClick={() => {
-                      if (connector) { connect({ connector, chainId: base.id }); onClose(); }
-                      else window.open(w.install, "_blank", "noreferrer");
-                    }}
+                    onClick={() => void (async () => {
+                      setWalletErr(null);
+                      /*
+                       * On a phone there is no extension to talk to, so the
+                       * wallet's own browser is opened at this page instead.
+                       * Tapping used to call a connector that could not find
+                       * its provider and fail with nothing shown.
+                       */
+                      const route = connectRoute(w.id);
+                      if (route === "install") { window.open(w.install, "_blank", "noreferrer"); return; }
+                      if (route === "deepLink") {
+                        const link = walletDeepLink(w.id, window.location.href);
+                        if (link) { window.location.href = link; return; }
+                      }
+                      if (!connector) { window.open(w.install, "_blank", "noreferrer"); return; }
+                      try {
+                        // Awaited, so the modal stays until the wallet has
+                        // actually answered — closing first is why a failure
+                        // looked like nothing happening.
+                        await connectAsync({ connector, chainId: base.id });
+                        onClose();
+                      } catch (e) {
+                        const link = walletDeepLink(w.id, window.location.href);
+                        // Coinbase can fail on a phone for its own reasons;
+                        // its app is still there to open.
+                        if (link && connectRoute(w.id) === "connect" && /mobile|popup|user|denied|provider/i.test(String(e))) {
+                          setWalletErr(`Could not reach ${w.name} here.`);
+                        } else {
+                          setWalletErr(e instanceof Error ? (e as { shortMessage?: string }).shortMessage ?? e.message : "Could not connect");
+                        }
+                      }
+                    })()}
                     disabled={isPending}
                     title={w.name}
                     className="flex flex-col items-center gap-2 rounded-2xl border hairline px-2 py-4 transition-colors hover:surface active:scale-95 disabled:opacity-60"
@@ -119,6 +149,9 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
               })}
             </div>
 
+            {walletErr && (
+              <p className="mt-2 text-[11px] text-[var(--color-down)]">{walletErr}</p>
+            )}
             <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
               A wallet keeps you in <span className="text-[var(--fg)]">self-custody</span>. CAPX
               holds nothing and you sign every transaction.

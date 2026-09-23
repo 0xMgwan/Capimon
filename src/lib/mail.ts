@@ -44,6 +44,13 @@ export async function sendMail(input: {
   to?: string;
   subject: string;
   text: string;
+  /**
+   * The designed version, where there is one.
+   *
+   * Sent alongside the text rather than instead of it: the client picks, and
+   * the plain version still has to read properly on its own.
+   */
+  html?: string;
   /** Answers go to the customer rather than to the sending address. */
   replyTo?: string;
 }): Promise<{ sent: boolean; reason?: string }> {
@@ -54,6 +61,7 @@ export async function sendMail(input: {
       to: input.to ?? opsEmail,
       subject: input.subject,
       text: input.text,
+      ...(input.html ? { html: input.html } : {}),
       ...(input.replyTo ? { replyTo: input.replyTo } : {}),
     });
     return { sent: true };

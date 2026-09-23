@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db, migrate } from "@/lib/db";
 import { hashPassword, passwordProblem, createSession } from "@/lib/auth";
 import { requireDb, bad, boom } from "@/lib/apiHelpers";
+import { cleanUsername, usernameProblem, suggestUsername } from "@/lib/usernameRule";
 
 export const dynamic = "force-dynamic";
 
@@ -38,9 +39,12 @@ export async function POST(req: Request) {
     if (docType === "nida" && nida && nida.length !== 20) {
       return bad("A NIDA number is 20 digits.");
     }
-    const username = body.username ? String(body.username).trim().replace(/^@/, "") : null;
-    if (username && !/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
-      return bad("A username is 3–20 letters, numbers or underscores.", "bad_username");
+    // Tidied rather than refused: a space or a capital is not a reason to
+    // stop someone opening an account, and the handle is optional anyway.
+    const username = body.username ? cleanUsername(body.username) || null : null;
+    if (username) {
+      const problem = usernameProblem(username);
+      if (problem) return bad(problem, "bad_username");
     }
 
     if (!email.includes("@") || email.length < 5) return bad("Enter a valid email address.");
@@ -65,10 +69,23 @@ export async function POST(req: Request) {
     const existing = await sql<{ id: string }[]>`select id from capx.users where email = ${email} limit 1`;
     if (existing.length) return bad("An account already exists for that email.", "email_taken", 409);
 
-    if (username) {
-      const taken = await sql<{ id: string }[]>`
-        select id from capx.users where lower(username) = ${username.toLowerCase()} limit 1`;
-      if (taken.length) return bad("That username is taken.", "username_taken", 409);
+    const isTaken = async (candidate: string) =>
+      (await sql<{ id: string }[]>`
+        select id from capx.users where lower(username) = ${candidate} limit 1`).length > 0;
+
+    if (username && await isTaken(username)) {
+      /*
+       * A taken handle used to be a dead end. It now comes back with one that
+       * is free, built from what they typed, so the form can offer it instead
+       * of asking them to guess again.
+       */
+      const suggestion = await suggestUsername(username, isTaken);
+      return NextResponse.json(
+        { ok: false, code: "username_taken", suggestion,
+          error: suggestion
+            ? `That username is taken. ${suggestion} is free.`
+            : "That username is taken." },
+        { status: 409 });
     }
 
     const rows = await sql<{ id: string }[]>`

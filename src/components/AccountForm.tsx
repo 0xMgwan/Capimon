@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { useState } from "react";
 import { passwordProblem } from "@/lib/passwordRule";
+import { cleanUsername } from "@/lib/usernameRule";
 import { useT } from "@/lib/i18n";
 import { IdCapture, type Captured } from "./IdCapture";
 
@@ -66,6 +67,14 @@ export function AccountForm({
   const [ids, setIds] = useState<Captured>({ doc: null, selfie: null, docKind: "image" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /*
+   * A free handle to offer when the one they chose is taken.
+   *
+   * Being told "that username is taken" and nothing else is the point where
+   * people give up on the field, so the server returns one that is not and
+   * the form offers it as a single tap.
+   */
+  const [suggestion, setSuggestion] = useState<string | null>(null);
   const { t } = useT();
 
   const submit = async () => {
@@ -77,7 +86,10 @@ export function AccountForm({
         body: JSON.stringify(mode === "signup" ? { ...form, docType, acceptedTerms: agreed } : form),
       });
       const j = await r.json();
-      if (!j.ok) throw new Error(j.error ?? t("Could not continue"));
+      if (!j.ok) {
+        if (j.code === "username_taken" && j.suggestion) setSuggestion(j.suggestion);
+        throw new Error(j.error ?? t("Could not continue"));
+      }
 
       /*
        * Filed straight after, on the session the registration just opened.
@@ -182,8 +194,27 @@ export function AccountForm({
           <>
             {field("username", t("Username"), {
               autoComplete: "username", placeholder: t("optional"),
-              hint: t("3–20 letters, numbers or _"),
+              hint: t("Optional — 3 characters or more"),
             })}
+            {/*
+              What the handle will actually be saved as.
+              Capitals, spaces and an "@" are tidied up rather than refused, so
+              this says what happened instead of leaving someone to find out
+              from their profile later.
+            */}
+            {form.username && cleanUsername(form.username) !== form.username && (
+              <p className="-mt-1 text-[11px] text-[var(--muted)]">
+                {t("Saved as")} @{cleanUsername(form.username) || "—"}
+              </p>
+            )}
+            {suggestion && (
+              <button
+                onClick={() => { setForm((f) => ({ ...f, username: suggestion })); setSuggestion(null); setError(null); }}
+                className="-mt-1 self-start rounded-full border hairline px-3 py-1 text-[11px] font-medium hover:surface"
+              >
+                {t("Use")} @{suggestion}
+              </button>
+            )}
             {field("name", t("Full name"), { autoComplete: "name", placeholder: t("As on your NIDA") })}
             {field("phone", t("Mobile money number"), { inputMode: "numeric", placeholder: "255712345678" })}
             <div>

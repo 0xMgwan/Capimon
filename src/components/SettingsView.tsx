@@ -152,7 +152,7 @@ export function SettingsView() {
       {/* Editable details */}
       <section className="mt-3 rounded-2xl border hairline p-3.5 sm:p-5">
         <div className="grid grid-cols-2 gap-2.5">
-        <Field label="Username" hint="3–20 letters, numbers or _">
+        <Field label="Username" hint={t("Optional — 3 characters or more")}>
           <input
             value={val(username, u.username)}
             onChange={(e) => setUsername(e.target.value)}

@@ -2,11 +2,9 @@ import { NextResponse } from "next/server";
 import { db, migrate } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
 import { requireDb, bad, boom } from "@/lib/apiHelpers";
+import { cleanUsername, usernameProblem, suggestUsername } from "@/lib/usernameRule";
 
 export const dynamic = "force-dynamic";
-
-/** Letters, digits and underscore — what reads as a handle and survives a URL. */
-const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
 
 /**
  * An avatar is stored as a resized data URL on the row.
@@ -36,15 +34,26 @@ export async function PATCH(req: Request) {
     const patch: Record<string, string | null> = {};
 
     if (body.username !== undefined) {
-      const username = String(body.username ?? "").trim();
-      if (username && !USERNAME_RE.test(username)) {
-        return bad("A username is 3–20 characters, using letters, numbers or underscore.");
-      }
+      // Cleaned rather than refused, the same way the sign-up form treats it.
+      const username = cleanUsername(body.username);
       if (username) {
-        const taken = await sql<{ id: string }[]>`
-          select id::text from capx.users
-           where lower(username) = ${username.toLowerCase()} and id <> ${user.id} limit 1`;
-        if (taken.length) return bad("That username is already taken.", "username_taken");
+        const problem = usernameProblem(username);
+        if (problem) return bad(problem);
+
+        const isTaken = async (candidate: string) =>
+          (await sql<{ id: string }[]>`
+            select id::text from capx.users
+             where lower(username) = ${candidate} and id <> ${user.id} limit 1`).length > 0;
+
+        if (await isTaken(username)) {
+          const suggestion = await suggestUsername(username, isTaken);
+          return NextResponse.json(
+            { ok: false, code: "username_taken", suggestion,
+              error: suggestion
+                ? `That username is taken. ${suggestion} is free.`
+                : "That username is already taken." },
+            { status: 400 });
+        }
       }
       patch.username = username || null;
     }

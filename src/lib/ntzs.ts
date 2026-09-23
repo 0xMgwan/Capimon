@@ -398,9 +398,23 @@ function banksFromBillers(r: unknown): { code: string; name: string }[] {
 
     // The group it sits in counts as much as its own name: a category called
     // "Banks" makes every entry in it a bank, whatever each one is called.
+    /*
+     * A bank, by any of the marks this catalogue actually carries.
+     *
+     * Its entries have no name and no category — a code and a description of
+     * what reference the payer must type. So a biller whose reference is a
+     * bank account is a bank, whatever it is called, and that is a truer test
+     * than a word in a label: paying a bank means naming an account number.
+     */
+    const kind = String(o.referenceKind ?? "").toLowerCase();
+    const label = String(o.referenceLabel ?? "").toLowerCase();
     const haystack = [group, o.category, o.type, o.group, o.sector, name]
       .filter(Boolean).map((v) => String(v).toLowerCase()).join(" ");
-    if (!/\b(bank|benki)/.test(haystack)) continue;
+
+    const isBank = /\b(bank|benki)/.test(haystack)
+      || /bank|account/.test(kind)
+      || /account number|namba ya akaunti/.test(label);
+    if (!isBank) continue;
 
     seen.add(code.toUpperCase());
     banks.push({ code, name });
@@ -433,11 +447,26 @@ export async function withdrawalBanksDetailed(): Promise<BankLookup> {
      */
     const flat = flattenBillers(billers);
     const o = (typeof billers === "object" && billers ? billers : {}) as Record<string, unknown>;
-    sample = flat[0]?.entry
-      ?? (o.note
+
+    /*
+     * Values, not field names.
+     *
+     * We now know an entry carries `code`, `referenceLabel` and
+     * `referenceKind` and no name or category — so the question is no longer
+     * what the fields are called but what is in them. The groups are listed
+     * too: whether there is a banking category at all is the thing that
+     * decides whether this catalogue is the right place to be looking.
+     */
+    sample = flat.length
+      ? {
+          groups: [...new Set(flat.map((f) => f.group).filter(Boolean))].join(", ") || "none",
+          examples: flat.slice(0, 6).map((f) =>
+            `${f.entry.code ?? "?"}[${f.entry.referenceKind ?? "?"}:${f.entry.referenceLabel ?? "?"}]`).join(" "),
+        }
+      : o.note
         // The catalogue says why it is empty; it is the most useful thing here.
         ? { "catalogue says": String(o.note).slice(0, 200) }
-        : { "response keys": Object.keys(o).join(", ") || "none" });
+        : { "response keys": Object.keys(o).join(", ") || "none" };
   } catch (e) {
     const raw = e instanceof Error ? e.message : "failed";
     tried.push({ path: "/api/v1/spend/billers", outcome: raw.slice(0, 120) });

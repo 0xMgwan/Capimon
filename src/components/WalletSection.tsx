@@ -23,6 +23,8 @@ type Deposit = {
   created_at: string; settled_at: string | null;
   /** Present while a bank transfer is waiting for the money. */
   bank?: BankDetails | null;
+  /** "mobile_money" or "bank_transfer" — how they chose to pay. */
+  payment_method?: string | null;
 };
 
 const TZS = (n: number) => `${Math.round(n).toLocaleString()} TZS`;
@@ -219,116 +221,135 @@ export function WalletSection({ holdings }: {
   return (
     <section className="mt-3">
 
-      {deposits.some((d) => IN_FLIGHT.has(d.status)) && (
-        <div className="mt-4 flex items-center gap-3 rounded-2xl border border-[#b45309]/40 bg-[#b45309]/[0.06] px-4 py-3">
-          <span className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-[#b45309] border-t-transparent" />
-          <p className="text-xs leading-relaxed text-[var(--muted)]">
-            A deposit is on its way. Approve the prompt on your phone if you have not already,
-            your balance updates here automatically once it clears, and you can safely leave this page.
-          </p>
-        </div>
-      )}
+      {(() => {
+        const inFlight = deposits.filter((d) => IN_FLIGHT.has(d.status));
+        if (!inFlight.length) return null;
+        /* Telling somebody waiting on a bank transfer to approve a prompt on
+           their phone is an instruction they cannot follow. */
+        const allBank = inFlight.every((d) => d.payment_method === "bank_transfer");
+        return (
+          <div className="mt-4 flex items-center gap-3 rounded-2xl border border-[#b45309]/40 bg-[#b45309]/[0.06] px-4 py-3">
+            <span className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-[#b45309] border-t-transparent" />
+            <p className="text-xs leading-relaxed text-[var(--muted)]">
+              {allBank
+                ? "A transfer is expected. Your balance updates here automatically once it reaches our settlement account, and you can safely leave this page."
+                : "A deposit is on its way. Approve the prompt on your phone if you have not already, your balance updates here automatically once it clears, and you can safely leave this page."}
+            </p>
+          </div>
+        );
+      })()}
 
       <div className="mt-3 grid gap-3">
-        <div id="wallet" className="scroll-mt-24 rounded-2xl border hairline p-3 sm:rounded-3xl sm:p-5 lg:flex lg:items-center lg:justify-between lg:gap-8">
-          {/*
-            * The big number is gone.
-            *
-            * "Available to invest" printed the same figure as the Cash cell
-            * directly above it, at three times the size — a third of a phone
-            * screen spent restating something the reader had just been told,
-            * which pushed the holdings and the activity below the fold. What is
-            * left is the part the totals do not say: which currencies the
-            * balance is actually in, since each is spent on its own.
-            */}
-          <div className="min-w-0 lg:flex-1">
-            {(() => {
-              const parts = [
-                account.tzs > 0 ? TZS(account.tzs) : null,
-                account.cash > 0 ? usd(account.cash) : null,
-              ].filter(Boolean) as string[];
-              if (!parts.length) return null;
-              return (
-                <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11.5px] text-[var(--muted)] lg:mb-0">
-                  <NtzsIcon className="h-4 w-4" />
-                  <span className="tnum text-[var(--fg)]">{parts.join(" + ")}</span>
-                  {parts.length > 1 && <span>{t("each spent in its own currency")}</span>}
-                  {account.equity > 0 && <span>· {usd(account.equity)} {t("in shares")}</span>}
-                </div>
-              );
-            })()}
-          </div>
+        {/*
+          * The row is a row; the card is not.
+          *
+          * The card itself used to be the flex container, so everything inside
+          * it became a column — including the expanding deposit panel, which
+          * on a wide screen sat beside the buttons and squeezed the balance
+          * line into a four-word-wide ribbon. Only the balance and the action
+          * bar belong side by side. Anything that opens goes underneath, at a
+          * width a form can actually be read at.
+          */}
+        <div id="wallet" className="scroll-mt-24 rounded-2xl border hairline p-3 sm:rounded-3xl sm:p-5">
+          <div className="lg:flex lg:items-center lg:justify-between lg:gap-8">
+            {/*
+              * The big number is gone.
+              *
+              * "Available to invest" printed the same figure as the Cash cell
+              * directly above it, at three times the size — a third of a phone
+              * screen spent restating something the reader had just been told,
+              * which pushed the holdings and the activity below the fold. What is
+              * left is the part the totals do not say: which currencies the
+              * balance is actually in, since each is spent on its own.
+              */}
+            <div className="min-w-0 lg:flex-1">
+              {(() => {
+                const parts = [
+                  account.tzs > 0 ? TZS(account.tzs) : null,
+                  account.cash > 0 ? usd(account.cash) : null,
+                ].filter(Boolean) as string[];
+                if (!parts.length) return null;
+                return (
+                  <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11.5px] text-[var(--muted)] lg:mb-0">
+                    <NtzsIcon className="h-4 w-4" />
+                    <span className="tnum text-[var(--fg)]">{parts.join(" + ")}</span>
+                    {parts.length > 1 && <span>{t("each spent in its own currency")}</span>}
+                    {account.equity > 0 && <span>· {usd(account.equity)} {t("in shares")}</span>}
+                  </div>
+                );
+              })()}
+            </div>
 
-          {/*
-            * One row of four, as a banking app's action bar.
-            *
-            * Add money used to take a full-width row of its own above three
-            * more, which spent two rows of a phone screen on buttons. The
-            * primary action keeps its fill; the row is what saves the space.
-            */}
-          <div className="grid grid-cols-4 gap-1.5 lg:mt-0 lg:w-[420px] lg:shrink-0">
-            <button
-              onClick={() => setPanel((p) => (p === "deposit" ? "none" : "deposit"))}
-              className="w-full whitespace-nowrap rounded-full bg-[var(--fg)] py-2.5 text-[13px] font-medium text-[var(--bg)] transition-transform active:scale-95"
-            >
-              {t(panel === "deposit" ? "Cancel" : "Add")}
-            </button>
-              <AssetPicker
-                markets={buyable}
-                venues={venues}
-                onSelect={(ticker) => router.push(`/markets/${ticker.toLowerCase()}`)}
-                trigger={(open) => (
-                  <button
-                    onClick={open}
-                    disabled={buyable.length === 0}
-                    className="w-full whitespace-nowrap rounded-full border hairline py-2.5 text-center text-[13px] font-medium transition-colors hover:surface disabled:opacity-40"
-                  >
-                    {t("Buy")}
-                  </button>
-                )}
-              />
-              {sellable.length > 0 ? (
+            {/*
+              * One row of four, as a banking app's action bar.
+              *
+              * Add money used to take a full-width row of its own above three
+              * more, which spent two rows of a phone screen on buttons. The
+              * primary action keeps its fill; the row is what saves the space.
+              */}
+            <div className="grid grid-cols-4 gap-1.5 lg:mt-0 lg:w-[420px] lg:shrink-0">
+              <button
+                onClick={() => setPanel((p) => (p === "deposit" ? "none" : "deposit"))}
+                className="w-full whitespace-nowrap rounded-full bg-[var(--fg)] py-2.5 text-[13px] font-medium text-[var(--bg)] transition-transform active:scale-95"
+              >
+                {t(panel === "deposit" ? "Cancel" : "Add")}
+              </button>
                 <AssetPicker
-                  markets={sellable}
+                  markets={buyable}
                   venues={venues}
                   onSelect={(ticker) => router.push(`/markets/${ticker.toLowerCase()}`)}
                   trigger={(open) => (
                     <button
                       onClick={open}
-                      className="w-full whitespace-nowrap rounded-full border hairline py-2.5 text-center text-[13px] font-medium transition-colors hover:surface"
+                      disabled={buyable.length === 0}
+                      className="w-full whitespace-nowrap rounded-full border hairline py-2.5 text-center text-[13px] font-medium transition-colors hover:surface disabled:opacity-40"
                     >
-                      {t("Sell")}
+                      {t("Buy")}
                     </button>
                   )}
                 />
-              ) : (
+                {sellable.length > 0 ? (
+                  <AssetPicker
+                    markets={sellable}
+                    venues={venues}
+                    onSelect={(ticker) => router.push(`/markets/${ticker.toLowerCase()}`)}
+                    trigger={(open) => (
+                      <button
+                        onClick={open}
+                        className="w-full whitespace-nowrap rounded-full border hairline py-2.5 text-center text-[13px] font-medium transition-colors hover:surface"
+                      >
+                        {t("Sell")}
+                      </button>
+                    )}
+                  />
+                ) : (
+                  <button
+                    disabled
+                    title={t("You have no shares to sell yet")}
+                    className="w-full whitespace-nowrap rounded-full border hairline py-2.5 text-[13px] font-medium opacity-40"
+                  >
+                    {t("Sell")}
+                  </button>
+                )}
                 <button
-                  disabled
-                  title={t("You have no shares to sell yet")}
-                  className="w-full whitespace-nowrap rounded-full border hairline py-2.5 text-[13px] font-medium opacity-40"
+                  onClick={() => { setPanel((p) => (p === "withdraw" ? "none" : "withdraw")); setQuote(null); }}
+                  disabled={belowMinWithdraw}
+                  title={belowMinWithdraw
+                    ? `Withdrawals start at ${MIN_WITHDRAW.toLocaleString()} TZS`
+                    : undefined}
+                  className="w-full whitespace-nowrap rounded-full border hairline py-2.5 text-[13px] font-medium transition-colors hover:surface disabled:opacity-40"
                 >
-                  {t("Sell")}
+                  {t(panel === "withdraw" ? "Cancel" : "Withdraw")}
                 </button>
-              )}
-              <button
-                onClick={() => { setPanel((p) => (p === "withdraw" ? "none" : "withdraw")); setQuote(null); }}
-                disabled={belowMinWithdraw}
-                title={belowMinWithdraw
-                  ? `Withdrawals start at ${MIN_WITHDRAW.toLocaleString()} TZS`
-                  : undefined}
-                className="w-full whitespace-nowrap rounded-full border hairline py-2.5 text-[13px] font-medium transition-colors hover:surface disabled:opacity-40"
-              >
-                {t(panel === "withdraw" ? "Cancel" : "Withdraw")}
-              </button>
+            </div>
           </div>
-          <div>
-            {/* A disabled button needs a reason, and the reason is one line. */}
-            {belowMinWithdraw && (
-              <p className="mt-1.5 text-[11px] text-[var(--muted)]">
-                {t("Withdrawals start at")} {MIN_WITHDRAW.toLocaleString()} TZS.
-              </p>
-            )}
-          </div>
+
+          {/* A disabled button needs a reason, and the reason is one line. */}
+          {belowMinWithdraw && (
+            <p className="mt-1.5 text-[11px] text-[var(--muted)]">
+              {t("Withdrawals start at")} {MIN_WITHDRAW.toLocaleString()} TZS.
+            </p>
+          )}
 
           <AnimatePresence initial={false}>
             {panel === "deposit" && (
@@ -337,7 +358,7 @@ export function WalletSection({ holdings }: {
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
                 transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                className="overflow-hidden"
+                className="overflow-hidden lg:max-w-xl"
               >
                 <div className="mt-4 border-t hairline pt-4">
                   <div className="eyebrow">{t("How you are paying")}</div>
@@ -430,7 +451,7 @@ export function WalletSection({ holdings }: {
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
                 transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                className="overflow-hidden"
+                className="overflow-hidden lg:max-w-xl"
               >
                 <div className="mt-4 border-t hairline pt-4">
                   <div className="flex rounded-full surface p-1">

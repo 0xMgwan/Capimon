@@ -37,7 +37,15 @@ export function CustodialPortfolio() {
   const sign = (n: number) => `${n >= 0 ? "+" : "−"}${money(Math.abs(n))}`;
 
   return (
-    <div className="mx-auto max-w-[1400px] px-4 pb-12 pt-3 sm:px-8 sm:pt-9">
+    /*
+      * Narrower than the marketing pages on purpose.
+      *
+      * 1400px is right for a wall of markets; for a book with a balance, four
+      * figures and a handful of holdings it stretched every row across a
+      * monitor and left the reader's eye travelling between a label on one
+      * side and its number on the other.
+      */
+    <div className="mx-auto max-w-[1080px] px-4 pb-12 pt-3 sm:px-8 sm:pt-9">
       {/*
         * The balance is the headline.
         *

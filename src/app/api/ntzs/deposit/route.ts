@@ -267,9 +267,21 @@ export async function GET() {
   const deposits = await db()`
     select id::text, ntzs_deposit_id, amount_tzs, status, usdc_credited::text, created_at, settled_at,
            ntzs_status, error,
-           -- Open bank transfers carry their payment details, so a customer
-           -- who closed the page can see where to send the money again.
-           case when metadata ? 'bank' and status in ('pending','uncertain')
+           -- Which way they chose to pay, so the page can word itself for it.
+           metadata->>'paymentMethod' as payment_method,
+           /*
+            * Open bank transfers carry their payment details, so a customer
+            * who closed the page can see where to send the money again.
+            *
+            * 'expired' counts here. A row stops being shown as in flight after
+            * five minutes, but the reference it points at is good for 72 hours
+            * — dropping the details at five would take away the account number
+            * of a transfer somebody is still perfectly able to make. What ends
+            * this is the reference's own expiry, which is what it says on the
+            * panel.
+            */
+           case when metadata ? 'bank' and status in ('pending','uncertain','expired')
+                     and (metadata->'bank'->>'expiresAt')::timestamptz > now()
                 then metadata->'bank' end as bank
       from capx.deposits where user_id = ${user.id}
      order by created_at desc limit 25`;

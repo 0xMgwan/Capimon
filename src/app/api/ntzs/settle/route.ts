@@ -35,10 +35,24 @@ const TERMINAL_BAD = /(fail|cancel|expir|reject|declin|revers|abandon|timed?_?ou
  * the customer was told a payment was on its way that they had already
  * cancelled. Ageing it out is presentation only — the row keeps being checked
  * below, so a collection that somehow lands later is still credited.
+ *
+ * Five minutes, because that is longer than a prompt survives on the handset.
+ * The cost of being early is a banner disappearing from a payment that then
+ * arrives and is credited anyway; the cost of being late is telling somebody
+ * their money is coming when it is not.
  */
-const STALE_AFTER_MS = 30 * 60_000;
-/** A bank reference is open for 72 hours, not the life of a phone prompt. */
-const BANK_STALE_AFTER_MS = 72 * 3600_000;
+const STALE_AFTER_MS = 5 * 60_000;
+/*
+ * A bank transfer ages out of the page just as quickly, and for the same
+ * reason: a banner still saying "on its way" an hour after somebody decided
+ * not to send it is the app being wrong out loud. The reference itself stays
+ * open for its full 72 hours — this is presentation, and an expired row is
+ * still watched and still credited if the money arrives on day three. The
+ * instructions panel is the customer's own screen state and is not touched
+ * by this, so a transfer being typed into a banking app at minute ten does
+ * not have its account number disappear mid-copy.
+ */
+const BANK_STALE_AFTER_MS = 5 * 60_000;
 
 /**
  * Settles pending deposits: confirm the collection landed and credit the

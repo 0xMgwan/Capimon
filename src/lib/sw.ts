@@ -454,6 +454,25 @@ export const SW: Record<string, string> = {
     "CAPX inakuwezesha kununua hisa zilizoorodheshwa kwenye Soko la Hisa la Dar es Salaam, na hisa za Marekani, kwa shilingi za Tanzania. Hisa zinazonunuliwa kupitia akaunti ya CAPX zinashikiliwa kwa niaba yako na CAPX pamoja na dalali wa DSE mwenye leseni. Umiliki wako unafuata bei ya hisa husika: ni uwakilishi wa hisa hiyo kwenye blockchain, si umiliki uliosajiliwa, na hauambatani na haki ya gawio wala haki ya kupiga kura au haki nyingine za mwanahisa. CAPX si soko la hisa wala mshauri wa uwekezaji, na hakuna chochote hapa ni ushauri wa uwekezaji. Bei za hisa zinaweza kushuka au kupanda. Hisa za Marekani hazipatikani kwa raia wa Marekani.",
   // The brand tagline, kept as it is said rather than translated literally.
   // Standing orders.
+  // Push notifications.
+  "Notifications": "Arifa",
+  "Deposits, fills, and your portfolio morning and evening.":
+    "Amana, manunuzi, na taarifa ya mali yako asubuhi na jioni.",
+  "Add CAPX to your Home Screen first, then turn these on from there.":
+    "Kwanza ongeza CAPX kwenye skrini yako ya kwanza, kisha uwashe arifa hapo.",
+  "Your browser is blocking notifications for CAPX. Allow them in its settings to turn these on.":
+    "Kivinjari chako kimezuia arifa za CAPX. Ziruhusu kwenye mipangilio yake ili kuwasha.",
+  "Turn on": "Washa",
+  "Turning on…": "Inawasha…",
+  "Turn off": "Zima",
+  "Send a test": "Tuma jaribio",
+  "Notifications are on for this device.": "Arifa zimewashwa kwa kifaa hiki.",
+  "Notifications are off for this device.": "Arifa zimezimwa kwa kifaa hiki.",
+  "Could not turn on notifications": "Imeshindikana kuwasha arifa",
+  "Could not turn off notifications": "Imeshindikana kuzima arifa",
+  "Could not send a test": "Imeshindikana kutuma jaribio",
+  "Sent. It should appear in a moment.": "Imetumwa. Itaonekana hivi punde.",
+  "Nothing was sent to this account.": "Hakuna kilichotumwa kwa akaunti hii.",
   "Automatic investing": "Uwekezaji wa kiotomatiki",
   "Invest on payday, every payday.": "Wekeza siku ya mshahara, kila mshahara.",
   "Set an amount and a day, and CAPX buys for you — weekly or monthly, in any listed share. It spends only what is already in your account, and you can pause it whenever you like.":

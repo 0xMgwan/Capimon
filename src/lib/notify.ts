@@ -23,14 +23,36 @@ export async function notify(input: {
   ref?: string;
   /** The holding this concerns, when it concerns one. */
   asset?: string | null;
+  /** Where tapping the push notification should land. */
+  url?: string;
 }) {
   try {
     await migrate();
-    await db()`
+    const rows = await db()`
       insert into capx.notifications (user_id, kind, title, body, ref, asset)
       values (${input.userId}, ${input.kind}, ${input.title}, ${input.body ?? null},
               ${input.ref ?? null}, ${input.asset ?? null})
-      on conflict (ref) where ref is not null do nothing`;
+      on conflict (ref) where ref is not null do nothing
+      returning id`;
+
+    /*
+     * The same news, delivered rather than waited for.
+     *
+     * Only when a row was actually written: the ref conflict above is what
+     * stops a cron running twice from telling somebody twice, and pushing
+     * outside that guard would undo it. Awaited but never allowed to throw —
+     * the catch below covers it, and a push service having a bad day must not
+     * roll back a settled deposit.
+     */
+    if (rows.length) {
+      const { pushToUser } = await import("./push");
+      await pushToUser(input.userId, {
+        title: input.title,
+        body: input.body,
+        url: input.url ?? (input.kind === "trade" ? "/portfolio" : "/portfolio"),
+        tag: input.ref,
+      });
+    }
   } catch {
     /*
      * Never let telling someone about a thing break the thing. A failed

@@ -291,6 +291,27 @@ export async function migrate() {
         )`;
 
       await sql`
+        /*
+         * Where to push a notification for a customer.
+         *
+         * One row per browser, not per person: somebody with a phone and a
+         * laptop has two, and a subscription belongs to the installation
+         * rather than the account. The endpoint is the identity — the browser
+         * reissues it when it expires, and the old one simply stops working,
+         * which is why a 404 or 410 from the push service deletes the row.
+         */
+        create table if not exists capx.push_subscriptions (
+          endpoint   text primary key,
+          user_id    uuid not null references capx.users(id) on delete cascade,
+          p256dh     text not null,
+          auth       text not null,
+          user_agent text,
+          created_at timestamptz not null default now(),
+          last_sent_at timestamptz,
+          failures   int not null default 0
+        )`;
+
+      await sql`
         create table if not exists capx.ops_contacts (
           /* Which party these addresses belong to: "fimco" today. */
           party      text primary key,
@@ -440,6 +461,7 @@ export async function migrate() {
       await sql`create unique index if not exists ledger_ref_idx on capx.ledger_entries(ref) where ref is not null`;
       await sql`create index if not exists notif_user_idx on capx.notifications(user_id, id desc)`;
       await sql`create unique index if not exists notif_ref_idx on capx.notifications(ref) where ref is not null`;
+      await sql`create index if not exists push_user_idx on capx.push_subscriptions(user_id)`;
       await sql`create index if not exists recurring_due_idx
                   on capx.recurring_buys(next_run) where status = 'active'`;
       await sql`create index if not exists recurring_user_idx on capx.recurring_buys(user_id, created_at desc)`;

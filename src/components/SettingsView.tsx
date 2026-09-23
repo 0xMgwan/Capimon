@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { KycPrompt } from "./KycPrompt";
+import { PushToggle } from "./PushToggle";
 import { useRef, useState, useEffect } from "react";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { Avatar } from "./Avatar";
@@ -250,6 +251,10 @@ export function SettingsView() {
           </p>
         )}
       </section>
+
+      {/* Notifications sit with the account rather than the money: they are a
+          setting for this device, and this is where somebody looks for one. */}
+      <div className="mt-3"><PushToggle /></div>
 
       {/* Fixed details. Shown because people need to check them, not edit them. */}
       <section className="mt-3 rounded-2xl border hairline px-3.5 py-1.5 sm:px-5">

@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { db, migrate, dbConfigured } from "@/lib/db";
 import { backing, canIssue, recordIssuance, reconcileIssuance, recordBurnFromChain } from "@/lib/custody";
 import { roleOf, ACTOR, type OpsRole } from "@/lib/adminAuth";
 import { SECURITIES_CONTRACTS } from "@/lib/assets";
 import { treasuryAddress } from "@/lib/treasury";
+import { sendMail, opsEmail } from "@/lib/mail";
 
 export const dynamic = "force-dynamic";
 
@@ -262,6 +263,44 @@ export async function POST(req: Request) {
                 ${docRef}, ${expiresAt}, 'pending', ${ACTOR[role]},
                 ${document}, ${documentName})
         returning id::text`;
+
+      /*
+       * Tell CAPX, after the filing is saved.
+       *
+       * An attestation is a queue nobody watches: it appears on the desk and
+       * waits, and while it waits the shares FIMCO already holds cannot be
+       * tokenised, so customers cannot buy them. Sent with `after` for the
+       * same reason as every other notice here — a mail provider having a bad
+       * afternoon must not fail a filing that is already recorded.
+       *
+       * The document is named but not attached. It is evidence behind the
+       * desk's login, and an inbox is not where it belongs.
+       */
+      // Only when somebody else filed it. CAPX filing its own attestation is
+      // already at the desk, and a notice about your own click is noise.
+      if (role !== "admin") after(async () => {
+        const at = new Date().toLocaleString("en-GB", { timeZone: "Africa/Dar_es_Salaam" });
+        const r = await sendMail({
+          subject: `Attestation to review — ${security} from ${custodian}`,
+          text: [
+            `${ACTOR[role]} filed a custody attestation. It cannot be tokenised until CAPX approves it.`,
+            ``,
+            `Security   ${security}`,
+            `Held       ${quantity.toLocaleString()}`,
+            `Locked     ${locked.toLocaleString()}`,
+            `Custodian  ${custodian}`,
+            `Reference  ${docRef}`,
+            `Statement  ${documentName ?? "not attached"}`,
+            `Expires    ${new Date(expiresAt).toLocaleDateString("en-GB")}`,
+            `Filed      ${at} (EAT)`,
+            ``,
+            `Read the statement and approve it on the securities desk:`,
+            `https://www.capx.broker/admin/securities`,
+          ].join("\n"),
+        });
+        if (!r.sent) console.warn(`Attestation notice to ${opsEmail} not sent: ${r.reason}`);
+      });
+
       return NextResponse.json({ ok: true, id: rows[0].id });
     }
 

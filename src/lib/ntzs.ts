@@ -399,22 +399,17 @@ function banksFromBillers(r: unknown): { code: string; name: string }[] {
     // The group it sits in counts as much as its own name: a category called
     // "Banks" makes every entry in it a bank, whatever each one is called.
     /*
-     * A bank, by any of the marks this catalogue actually carries.
+     * Only an explicit mark counts.
      *
-     * Its entries have no name and no category — a code and a description of
-     * what reference the payer must type. So a biller whose reference is a
-     * bank account is a bank, whatever it is called, and that is a truer test
-     * than a word in a label: paying a bank means naming an account number.
+     * Matching on "the reference is an account number" put ECOWATER, GOFIBER
+     * and ZESHA in a bank picker: almost every biller asks for an account
+     * number, so that test says nothing. A water company offered as a bank is
+     * worse than a short list — one is incomplete, the other is wrong, and a
+     * payout sent to a biller code is not a payout to a bank.
      */
-    const kind = String(o.referenceKind ?? "").toLowerCase();
-    const label = String(o.referenceLabel ?? "").toLowerCase();
     const haystack = [group, o.category, o.type, o.group, o.sector, name]
       .filter(Boolean).map((v) => String(v).toLowerCase()).join(" ");
-
-    const isBank = /\b(bank|benki)/.test(haystack)
-      || /bank|account/.test(kind)
-      || /account number|namba ya akaunti/.test(label);
-    if (!isBank) continue;
+    if (!/\b(bank|benki)/.test(haystack)) continue;
 
     seen.add(code.toUpperCase());
     banks.push({ code, name });

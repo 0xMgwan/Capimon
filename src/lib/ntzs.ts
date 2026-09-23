@@ -353,21 +353,52 @@ function readBankList(r: unknown): { code: string; name: string }[] {
  * false positive is a code that fails at the quote, before money moves; a
  * false negative is a customer who cannot withdraw.
  */
-function banksFromBillers(r: unknown): { code: string; name: string }[] {
-  const list = Array.isArray(r) ? r
-    : Array.isArray((r as { billers?: unknown[] })?.billers) ? (r as { billers: unknown[] }).billers
-    : Array.isArray((r as { data?: unknown[] })?.data) ? (r as { data: unknown[] }).data : [];
+/** Every entry in the catalogue, whatever it is nested inside. */
+function flattenBillers(r: unknown): { entry: Record<string, unknown>; group: string }[] {
+  const out: { entry: Record<string, unknown>; group: string }[] = [];
 
+  const takeList = (list: unknown, group: string) => {
+    if (!Array.isArray(list)) return;
+    for (const item of list) {
+      if (typeof item !== "object" || !item) continue;
+      const o = item as Record<string, unknown>;
+      /*
+       * A category is an entry with its own entries. The catalogue is served
+       * grouped — `{ enabled, categories, note }` — so the billers are a
+       * level down from where a flat read looks, and the group's own name is
+       * the strongest clue about what is in it.
+       */
+      const nested = o.billers ?? o.items ?? o.entries ?? o.list ?? o.options;
+      if (Array.isArray(nested)) {
+        takeList(nested, String(o.name ?? o.label ?? o.category ?? o.code ?? group));
+        continue;
+      }
+      out.push({ entry: o, group });
+    }
+  };
+
+  if (Array.isArray(r)) takeList(r, "");
+  else if (typeof r === "object" && r) {
+    const o = r as Record<string, unknown>;
+    for (const key of ["categories", "billers", "data", "results", "items"]) {
+      takeList(o[key], key === "categories" ? "" : key);
+    }
+  }
+  return out;
+}
+
+function banksFromBillers(r: unknown): { code: string; name: string }[] {
   const seen = new Set<string>();
   const banks: { code: string; name: string }[] = [];
-  for (const b of list) {
-    if (typeof b !== "object" || !b) continue;
-    const o = b as Record<string, unknown>;
-    const code = String(o.code ?? o.billerCode ?? o.fiCode ?? o.id ?? "").trim();
+
+  for (const { entry: o, group } of flattenBillers(r)) {
+    const code = String(o.code ?? o.billerCode ?? o.fiCode ?? o.fi_code ?? o.id ?? "").trim();
     const name = String(o.name ?? o.billerName ?? o.label ?? code).trim();
     if (!code || seen.has(code.toUpperCase())) continue;
 
-    const haystack = [o.category, o.type, o.group, o.sector, name]
+    // The group it sits in counts as much as its own name: a category called
+    // "Banks" makes every entry in it a bank, whatever each one is called.
+    const haystack = [group, o.category, o.type, o.group, o.sector, name]
       .filter(Boolean).map((v) => String(v).toLowerCase()).join(" ");
     if (!/\b(bank|benki)/.test(haystack)) continue;
 
@@ -389,10 +420,7 @@ export async function withdrawalBanksDetailed(): Promise<BankLookup> {
   try {
     const billers = await call<unknown>("/api/v1/spend/billers");
     const banks = banksFromBillers(billers);
-    const total = Array.isArray(billers) ? billers.length
-      : Array.isArray((billers as { billers?: unknown[] })?.billers) ? (billers as { billers: unknown[] }).billers.length
-      : Array.isArray((billers as { data?: unknown[] })?.data) ? (billers as { data: unknown[] }).data.length
-      : 0;
+    const total = flattenBillers(billers).length;
     tried.push({ path: "/api/v1/spend/billers", outcome: `${banks.length} banks of ${total} billers` });
     if (banks.length) return { banks, tried };
     /*
@@ -403,12 +431,13 @@ export async function withdrawalBanksDetailed(): Promise<BankLookup> {
      * catalogue we cannot read, and a catalogue that is genuinely empty
      * because the Spend capability was never granted.
      */
-    const first = (Array.isArray(billers) ? billers[0]
-      : (billers as { billers?: unknown[] })?.billers?.[0]
-      ?? (billers as { data?: unknown[] })?.data?.[0]) as Record<string, unknown> | undefined;
-    sample = first ?? (typeof billers === "object" && billers
-      ? { "response keys": Object.keys(billers).join(", ") || "none" }
-      : { "response type": typeof billers });
+    const flat = flattenBillers(billers);
+    const o = (typeof billers === "object" && billers ? billers : {}) as Record<string, unknown>;
+    sample = flat[0]?.entry
+      ?? (o.note
+        // The catalogue says why it is empty; it is the most useful thing here.
+        ? { "catalogue says": String(o.note).slice(0, 200) }
+        : { "response keys": Object.keys(o).join(", ") || "none" });
   } catch (e) {
     const raw = e instanceof Error ? e.message : "failed";
     tried.push({ path: "/api/v1/spend/billers", outcome: raw.slice(0, 120) });

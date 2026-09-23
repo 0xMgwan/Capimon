@@ -5,6 +5,20 @@ import {
   useIssuer, IssuerBar, predictToken, createTokenTx, tokenAbi, registryAbi, MINT_ROLE, BURN_ROLE,
 } from "./IssuerWallet";
 import type { Abi } from "viem";
+import { DeskNav, type DeskSection } from "./DeskNav";
+import { FimcoOverview } from "./FimcoOverview";
+
+/** The rooms of the broker's portal, in the order they are worked through. */
+const FIMCO_SECTIONS: DeskSection[] = [
+  { id: "overview", label: "Overview", hint: "What the arrangement earns" },
+  { id: "custody", label: "Securities", hint: "Backing, holdings and headroom" },
+  { id: "filing", label: "File a filing", hint: "List a security, attest custody" },
+  { id: "attestations", label: "Attestations", hint: "Filed, approved, refused" },
+  { id: "issuance", label: "Issuance", hint: "Every mint and burn" },
+  { id: "customers", label: "Customers", hint: "Users, orders, KYC, holdings" },
+  { id: "earnings", label: "Your account", hint: "Fees owed and paid" },
+  { id: "settings", label: "Notices", hint: "Where we email you" },
+];
 
 type Backing = {
   security: string; custodian: string | null;
@@ -239,13 +253,29 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
     );
   }
 
+  const isFimcoPortal = portal === "fimco";
+
   return (
-    <div className="mx-auto max-w-[1200px] px-5 pb-24 pt-6 sm:px-8 sm:pt-12">
+    <div className="mx-auto max-w-[1320px] px-5 pb-24 pt-6 sm:px-8 sm:pt-12">
       <div className="eyebrow">
-        {portal === "fimco" ? "FIMCO · custody broker" : "Operations"}
-        {data.role === "admin" && portal === "fimco" && " · viewing as CAPX"}
+        {isFimcoPortal ? "FIMCO · custody broker" : "Operations"}
+        {data.role === "admin" && isFimcoPortal && " · viewing as CAPX"}
       </div>
-      <h1 className="display mt-2 text-[clamp(1.8rem,5vw,2.8rem)]">{portal === "fimco" ? "Custody portal." : "Securities desk."}</h1>
+      <h1 className="display mt-2 text-[clamp(1.8rem,5vw,2.8rem)]">{isFimcoPortal ? "Custody portal." : "Securities desk."}</h1>
+
+      {/*
+        * The broker's portal is a place with rooms; the CAPX desk stays one
+        * scroll. FIMCO open this to do one thing at a time, and CAPX open
+        * theirs to see everything at once — the same content, read
+        * differently, so the navigation differs and the sections do not.
+        */}
+      <div className={isFimcoPortal ? "mt-6 lg:flex lg:items-start lg:gap-10" : ""}>
+        {isFimcoPortal && (
+          <DeskNav sections={FIMCO_SECTIONS} title="Custody portal"
+            subtitle="Everything CAPX holds with FIMCO, and what it earns." />
+        )}
+        <div className="min-w-0 flex-1">
+      {isFimcoPortal && <FimcoOverview token={token} isAdmin={isAdmin} />}
       <Pipeline />
       <ExportPanel token={token} />
       {isAdmin && <IssuerBar w={w} />}
@@ -269,7 +299,7 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
       )}
 
       {/* Backing first: it is the number every other panel exists to justify. */}
-      <section className="mt-8 grid gap-4">
+      <section id="custody" className="mt-8 grid gap-4 scroll-mt-24">
         {data.securities.length === 0 && (
           <p className="rounded-3xl border hairline p-6 text-sm text-[var(--muted)]">
             No securities registered yet. Register one below to begin.
@@ -557,7 +587,7 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
 
       <RequestsSection data={data} isAdmin={isAdmin} onAct={act} busy={busy} w={w} sign={sign} />
 
-      <div className="mt-8 grid gap-4 lg:grid-cols-2">
+      <div id="filing" className="mt-8 grid gap-4 scroll-mt-24 lg:grid-cols-2">
         <div id="register-form">
           <RegisterSecurity key={editing?.symbol ?? "new"} onAct={act} busy={busy} w={w} sign={sign}
             asBroker={!isAdmin} preset={editing} onDone={() => setEditing(null)} />
@@ -566,13 +596,13 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
           securities={data.securities.map((x) => x.symbol)} />
       </div>
 
-      <NoticeContacts token={token} isAdmin={isAdmin} />
+      <div id="settings" className="scroll-mt-24"><NoticeContacts token={token} isAdmin={isAdmin} /></div>
 
-      {portal === "fimco" && <CustomersSection token={token} />}
+      {portal === "fimco" && <div id="customers" className="scroll-mt-24"><CustomersSection token={token} /></div>}
 
       {isAdmin && <OracleAdmin token={token} busy={busy} setBusy={setBusy} setErr={setErr} setNote={setNote} />}
 
-      <section className="mt-8">
+      <section id="attestations" className="mt-8 scroll-mt-24">
         <div className="eyebrow mb-2">Attestations</div>
         <div className="overflow-hidden rounded-2xl border hairline">
           {data.attestations.length === 0 ? (
@@ -663,7 +693,7 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
         </div>
       </section>
 
-      <section className="mt-8">
+      <section id="issuance" className="mt-8 scroll-mt-24">
         <div className="eyebrow mb-2">Issuance log</div>
         <div className="overflow-hidden rounded-2xl border hairline">
           {data.issuance.length === 0 ? (
@@ -680,6 +710,8 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
           ))}
         </div>
       </section>
+        </div>
+      </div>
     </div>
   );
 }

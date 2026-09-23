@@ -30,14 +30,26 @@ import { upsertUser, getUser, attestKyc, retroKyc } from "./ntzs";
  * is idempotent on externalId, so a different one is exactly what makes this
  * a second account rather than a second name for the first.
  */
-const EXTERNAL_ID = process.env.NTZS_BROKER_EXTERNAL_ID ?? "capx-broker-fees";
-const EMAIL = process.env.NTZS_BROKER_EMAIL ?? process.env.NTZS_OMNIBUS_EMAIL ?? "treasury@capx.finance";
-const NAME = process.env.NTZS_BROKER_NAME
-  ?? `${process.env.NTZS_OMNIBUS_NAME ?? "CAPX Treasury"} · broker fees`;
-const NIDA = process.env.NTZS_BROKER_NIDA ?? process.env.NTZS_OMNIBUS_NIDA ?? "";
-const PHONE = process.env.NTZS_BROKER_PHONE ?? process.env.NTZS_OMNIBUS_PHONE ?? "";
-const CONFIGURED_ID = process.env.NTZS_BROKER_USER_ID ?? "";
-const VERIFIED_BY = process.env.NTZS_KYC_VERIFIED_BY ?? EMAIL;
+/*
+ * An environment variable that exists but is empty is not a value.
+ *
+ * `??` disagrees: a variable saved with a blank box in a hosting dashboard
+ * comes through as "", which stops the fallback chain dead and leaves the
+ * account looking unconfigured for a reason nobody can see. Treating empty as
+ * absent is what an operator means by it.
+ */
+const env = (name: string): string | undefined => {
+  const v = process.env[name];
+  return v && v.trim() ? v.trim() : undefined;
+};
+
+const EXTERNAL_ID = env("NTZS_BROKER_EXTERNAL_ID") ?? "capx-broker-fees";
+const EMAIL = env("NTZS_BROKER_EMAIL") ?? env("NTZS_OMNIBUS_EMAIL") ?? "treasury@capx.finance";
+const NAME = env("NTZS_BROKER_NAME") ?? `${env("NTZS_OMNIBUS_NAME") ?? "CAPX Treasury"} · broker fees`;
+const NIDA = env("NTZS_BROKER_NIDA") ?? env("NTZS_OMNIBUS_NIDA") ?? "";
+const PHONE = env("NTZS_BROKER_PHONE") ?? env("NTZS_OMNIBUS_PHONE") ?? "";
+const CONFIGURED_ID = env("NTZS_BROKER_USER_ID") ?? "";
+const VERIFIED_BY = env("NTZS_KYC_VERIFIED_BY") ?? EMAIL;
 
 /** Whether there is enough to open the account at all. */
 export const brokerAccountConfigured = !!(CONFIGURED_ID || (EMAIL && (NIDA || PHONE)));

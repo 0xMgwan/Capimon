@@ -391,12 +391,24 @@ export async function withdrawalBanksDetailed(): Promise<BankLookup> {
     const banks = banksFromBillers(billers);
     const total = Array.isArray(billers) ? billers.length
       : Array.isArray((billers as { billers?: unknown[] })?.billers) ? (billers as { billers: unknown[] }).billers.length
+      : Array.isArray((billers as { data?: unknown[] })?.data) ? (billers as { data: unknown[] }).data.length
       : 0;
     tried.push({ path: "/api/v1/spend/billers", outcome: `${banks.length} banks of ${total} billers` });
     if (banks.length) return { banks, tried };
+    /*
+     * Nothing matched — so report what there was to match against.
+     *
+     * An entry when there are entries; otherwise the response's own shape,
+     * because "0 of 0" leaves two very different explanations open: a
+     * catalogue we cannot read, and a catalogue that is genuinely empty
+     * because the Spend capability was never granted.
+     */
     const first = (Array.isArray(billers) ? billers[0]
-      : (billers as { billers?: unknown[] })?.billers?.[0]) as Record<string, unknown> | undefined;
-    if (first) sample = first;
+      : (billers as { billers?: unknown[] })?.billers?.[0]
+      ?? (billers as { data?: unknown[] })?.data?.[0]) as Record<string, unknown> | undefined;
+    sample = first ?? (typeof billers === "object" && billers
+      ? { "response keys": Object.keys(billers).join(", ") || "none" }
+      : { "response type": typeof billers });
   } catch (e) {
     const raw = e instanceof Error ? e.message : "failed";
     tried.push({ path: "/api/v1/spend/billers", outcome: raw.slice(0, 120) });

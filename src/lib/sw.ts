@@ -455,6 +455,7 @@ export const SW: Record<string, string> = {
   // The brand tagline, kept as it is said rather than translated literally.
   // Standing orders.
   // Push notifications.
+  "I am not sending this one": "Sitatuma hii",
   "Notifications": "Arifa",
   "Deposits, fills, and your portfolio morning and evening.":
     "Amana, manunuzi, na taarifa ya mali yako asubuhi na jioni.",

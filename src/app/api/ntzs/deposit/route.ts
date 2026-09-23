@@ -28,6 +28,33 @@ export async function POST(req: Request) {
     if (!user) return NextResponse.json({ ok: false, code: "unauthenticated" }, { status: 401 });
 
     const body = await req.json();
+
+    /*
+     * Putting away the bank instructions.
+     *
+     * The panel has to survive a reload — somebody copying an account number
+     * into a banking app will leave the page and come back — so it is drawn
+     * from the deposit row rather than from component state, and it stays for
+     * the reference's full 72 hours. The consequence was that saying "I have
+     * sent it", or simply deciding not to, cleared it until the next refresh
+     * and no further.
+     *
+     * Dismissing is a display choice, not a financial one: the row keeps its
+     * status and settlement keeps watching it, so a transfer that arrives on
+     * day three is still credited to somebody who put the panel away on day
+     * one.
+     */
+    if (body.action === "dismiss") {
+      const reference = String(body.reference ?? "").trim();
+      if (!reference) return bad("Which transfer?");
+      await migrate();
+      await db()`
+        update capx.deposits
+           set metadata = metadata || '{"dismissed": true}'::jsonb
+         where user_id = ${user.id} and metadata->'bank'->>'reference' = ${reference}`;
+      return NextResponse.json({ ok: true });
+    }
+
     const phoneNumber = String(body.phoneNumber ?? user.phone ?? "").replace(/[^\d]/g, "");
     const amountTzs = Math.round(Number(body.amountTzs));
     const method: PaymentMethod = body.paymentMethod === "bank_transfer" ? "bank_transfer" : "mobile_money";
@@ -281,6 +308,7 @@ export async function GET() {
             * panel.
             */
            case when metadata ? 'bank' and status in ('pending','uncertain','expired')
+                     and not (metadata ? 'dismissed')
                      and (metadata->'bank'->>'expiresAt')::timestamptz > now()
                 then metadata->'bank' end as bank
       from capx.deposits where user_id = ${user.id}

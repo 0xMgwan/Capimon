@@ -441,7 +441,19 @@ export function WalletSection({ holdings }: {
           </AnimatePresence>
 
           {openBank && panel !== "withdraw" && (
-            <BankTransferCard bank={openBank} onDone={() => { setHiddenRef(openBank.reference); setBankDetails(null); }} />
+            <BankTransferCard bank={openBank}
+              onDone={(sent) => {
+                setHiddenRef(openBank.reference); setBankDetails(null);
+                // Remembered on the row, so it does not reappear on the next
+                // load. Either answer puts the panel away; only the words
+                // differ.
+                void fetch("/api/ntzs/deposit", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ action: "dismiss", reference: openBank.reference }),
+                }).catch(() => { /* hidden for this visit either way */ });
+                void sent;
+              }} />
           )}
 
           <AnimatePresence initial={false}>
@@ -700,7 +712,7 @@ export function WalletSection({ holdings }: {
  * wrong place. The reference and the exact amount are what match the transfer
  * back to this customer, so both are the loudest things on the card.
  */
-function BankTransferCard({ bank, onDone }: { bank: BankDetails; onDone: () => void }) {
+function BankTransferCard({ bank, onDone }: { bank: BankDetails; onDone: (sent: boolean) => void }) {
   const { t } = useT();
   const [copied, setCopied] = useState<string | null>(null);
   const copy = (label: string, value: string) => {
@@ -765,10 +777,23 @@ function BankTransferCard({ bank, onDone }: { bank: BankDetails; onDone: () => v
       {/* The finishing step of the flow, so it looks like one: a real button,
           not a muted link the eye skips past under a paragraph of guidance. */}
       <button
-        onClick={onDone}
+        onClick={() => onDone(true)}
         className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border-2 border-[var(--fg)] py-3 text-sm font-semibold transition-colors hover:bg-[var(--fg)] hover:text-[var(--bg)] active:scale-[0.98]"
       >
         {t("I have sent it")} <span aria-hidden>→</span>
+      </button>
+      {/*
+        * And the other answer.
+        *
+        * Somebody who decides not to send the transfer had no way to say so,
+        * so the instructions followed them around for three days. Money that
+        * arrives later is still credited — this only puts the panel away.
+        */}
+      <button
+        onClick={() => onDone(false)}
+        className="mt-2 w-full py-1 text-[12px] text-[var(--muted)] underline transition-colors hover:text-[var(--fg)]"
+      >
+        {t("I am not sending this one")}
       </button>
     </div>
   );

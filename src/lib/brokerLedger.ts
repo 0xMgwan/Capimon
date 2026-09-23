@@ -76,18 +76,31 @@ export async function brokerEntries(party = BROKER_PARTY, limit = 50): Promise<B
   }));
 }
 
-/** Earnings per day, for the chart on the broker's desk. */
+/**
+ * Earnings per day, for the chart on the broker's desk.
+ *
+ * Every day in the window, including the ones with nothing in them. Returning
+ * only the days that had trades meant the first day drew a single bar across
+ * the whole card, which is a blue rectangle rather than a chart — and the
+ * calendar is something the database knows and the browser would have to
+ * invent.
+ */
 export async function brokerDaily(party = BROKER_PARTY, days = 30): Promise<{ day: string; earned: number; trades: number }[]> {
   if (!dbConfigured) return [];
   await migrate();
   const rows = await db()<{ day: string; earned: string; trades: number }[]>`
-    select to_char(date_trunc('day', created_at), 'YYYY-MM-DD') as day,
-           coalesce(sum(amount_tzs), 0)::text as earned,
-           count(*)::int as trades
-      from capx.broker_ledger
-     where party = ${party} and kind = 'fee'
-       and created_at > now() - ${`${days} days`}::interval
-     group by 1 order by 1`;
+    select to_char(d.day, 'YYYY-MM-DD') as day,
+           coalesce(sum(b.amount_tzs), 0)::text as earned,
+           count(b.id)::int as trades
+      from generate_series(
+             date_trunc('day', now()) - ${`${days - 1} days`}::interval,
+             date_trunc('day', now()),
+             '1 day'::interval
+           ) as d(day)
+      left join capx.broker_ledger b
+        on b.party = ${party} and b.kind = 'fee'
+       and date_trunc('day', b.created_at) = d.day
+     group by d.day order by d.day`;
   return rows.map((r) => ({ day: r.day, earned: Number(r.earned), trades: r.trades }));
 }
 

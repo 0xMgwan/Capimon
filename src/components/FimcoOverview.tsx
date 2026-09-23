@@ -136,11 +136,18 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
     );
   }
 
+  /* Every day in the window, quiet ones included — the server fills the
+     calendar, because it is the one that knows what day it is. */
+  const series = acct.daily;
+
   const earned30 = acct.daily.reduce((s, d) => s + d.earned, 0);
   const trades30 = acct.daily.reduce((s, d) => s + d.trades, 0);
   const paid = acct.entries.filter((e) => e.kind === "payout").reduce((s, e) => s + Math.abs(e.amountTzs), 0);
-  const peak = Math.max(1, ...acct.daily.map((d) => d.earned));
+  const peak = Math.max(1, ...series.map((d) => d.earned));
   const topSecurity = acct.bySecurity[0];
+  /* Each security's bar is its share of everything earned, so two equal
+     earners read as half each rather than as full bars apiece. */
+  const totalBySecurity = acct.bySecurity.reduce((sum, x) => sum + x.earned, 0);
 
   return (
     <section id="overview" className="mt-6 scroll-mt-24">
@@ -167,30 +174,34 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
             <div className="tnum text-2xl font-medium">{TZS(earned30)}</div>
           </div>
 
-          {acct.daily.length === 0 ? (
+          {earned30 === 0 ? (
             <p className="mt-8 text-center text-sm text-[var(--muted)]">
               Nothing yet. A bar appears here for every day a customer trades.
             </p>
           ) : (
             <>
               <div className="mt-5 flex h-36 items-end gap-[3px]">
-                {acct.daily.map((d) => (
+                {series.map((d) => (
                   /* h-full so the bar's percentage has a height to resolve
                      against: in an items-end row the column is otherwise only
                      as tall as its content, which is the bar itself. */
                   <div key={d.day} className="group flex h-full flex-1 items-end"
                     title={`${dayLabel(d.day)} · ${TZS(d.earned)} · ${d.trades} ${d.trades === 1 ? "trade" : "trades"}`}>
+                    {/* A day with nothing is a faint floor, not a bar: an
+                        empty day and a tiny one should not look alike. */}
                     <div
-                      className="w-full rounded-t-[3px] bg-[var(--color-accent)] transition-opacity group-hover:opacity-70"
-                      style={{ height: `${Math.max(3, (d.earned / peak) * 100)}%` }}
+                      className={`w-full rounded-t-[3px] transition-opacity group-hover:opacity-70 ${
+                        d.earned > 0 ? "bg-[var(--color-accent)]" : "bg-[var(--border)]"
+                      }`}
+                      style={{ height: d.earned > 0 ? `${Math.max(6, (d.earned / peak) * 100)}%` : "2px" }}
                     />
                   </div>
                 ))}
               </div>
               <div className="mt-2 flex justify-between text-[11px] text-[var(--muted)]">
-                <span>{dayLabel(acct.daily[0].day)}</span>
+                <span>{dayLabel(series[0].day)}</span>
                 <span className="tnum">peak {short(peak)}</span>
-                <span>{dayLabel(acct.daily[acct.daily.length - 1].day)}</span>
+                <span>{dayLabel(series[series.length - 1].day)}</span>
               </div>
             </>
           )}
@@ -205,7 +216,7 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
           ) : (
             <div className="mt-4 grid gap-3">
               {acct.bySecurity.slice(0, 6).map((s) => {
-                const share = topSecurity ? (s.earned / topSecurity.earned) * 100 : 0;
+                const share = totalBySecurity > 0 ? (s.earned / totalBySecurity) * 100 : 0;
                 return (
                   <div key={s.security}>
                     <div className="flex items-center gap-2.5">
@@ -215,10 +226,10 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
                     </div>
                     <div className="mt-1.5 h-1.5 overflow-hidden rounded-full surface">
                       <div className="h-full rounded-full bg-[var(--fg)]"
-                        style={{ width: `${Math.max(4, share)}%` }} />
+                        style={{ width: `${Math.min(100, Math.max(4, share))}%` }} />
                     </div>
                     <div className="mt-1 text-[11px] text-[var(--muted)]">
-                      {s.trades} {s.trades === 1 ? "trade" : "trades"}
+                      {s.trades} {s.trades === 1 ? "trade" : "trades"} · {share.toFixed(0)}%
                     </div>
                   </div>
                 );

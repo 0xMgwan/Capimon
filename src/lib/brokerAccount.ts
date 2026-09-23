@@ -92,7 +92,15 @@ async function provisionVerbose(): Promise<Provisioning> {
    * identity to an account still sitting at "none", then attest it. Both are
    * idempotent, so running this again on a half-open account is safe.
    */
-  if (!wallet && NIDA && PHONE && (latest?.kycStatus ?? user.kycStatus ?? "none") === "none") {
+  /*
+   * Attempted whenever there is no wallet, not only from "none".
+   *
+   * An account that has already been refused sits at some other status, and
+   * gating on "none" meant the one route that actually issues wallets was
+   * skipped exactly when it was needed. The call is idempotent and its
+   * refusal is recorded, so trying costs a line of output.
+   */
+  if (!wallet && NIDA && PHONE) {
     try {
       const done = await retroKyc(user.id, { nidaNumber: NIDA, phone: PHONE });
       wallet = done.walletAddress ?? wallet;

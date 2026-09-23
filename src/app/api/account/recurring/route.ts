@@ -55,10 +55,12 @@ export async function POST(req: Request) {
       return bad(`The largest recurring amount is ${MAX_TZS.toLocaleString()} TZS.`);
     }
 
-    const cadence: Cadence = body.cadence === "monthly" ? "monthly" : "weekly";
+    const cadence: Cadence =
+      body.cadence === "monthly" ? "monthly" : body.cadence === "daily" ? "daily" : "weekly";
     // 28 is the ceiling for a monthly day so that February still has one.
-    const dayOf = cadence === "weekly"
-      ? Math.min(Math.max(Number(body.dayOf) || 1, 0), 6)
+    // Daily has no day to choose, so it stores a harmless one.
+    const dayOf = cadence === "daily" ? 0
+      : cadence === "weekly" ? Math.min(Math.max(Number(body.dayOf) || 1, 0), 6)
       : Math.min(Math.max(Number(body.dayOf) || 1, 1), 28);
 
     // A handful is a plan; a hundred is a mistake or an attack.

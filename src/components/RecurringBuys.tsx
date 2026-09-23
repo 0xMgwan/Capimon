@@ -17,7 +17,7 @@ import { haptic } from "@/lib/haptics";
  * than half-filling an order nobody asked for.
  */
 type Plan = {
-  id: string; symbol: string; amountTzs: number; cadence: "weekly" | "monthly";
+  id: string; symbol: string; amountTzs: number; cadence: "daily" | "weekly" | "monthly";
   dayOf: number; nextRun: string; status: string; lastError: string | null;
   runs: number; misses: number;
 };
@@ -30,9 +30,11 @@ const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", 
  * plan would read in English on a Swahili page.
  */
 const when = (p: Plan, t: (s: string) => string) =>
-  p.cadence === "weekly"
-    ? `${t("every")} ${t(DAYS[((p.dayOf % 7) + 7) % 7])}`
-    : `${t("day")} ${p.dayOf} ${t("of each month")}`;
+  p.cadence === "daily"
+    ? t("every day")
+    : p.cadence === "weekly"
+      ? `${t("every")} ${t(DAYS[((p.dayOf % 7) + 7) % 7])}`
+      : `${t("day")} ${p.dayOf} ${t("of each month")}`;
 
 const dt = (s: string) =>
   new Date(s).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
@@ -47,7 +49,7 @@ export function RecurringBuys({ securities }: { securities: { symbol: string; na
   const [form, setForm] = useState({
     symbol: securities[0]?.symbol ?? "CRDB",
     amount: "50000",
-    cadence: "monthly" as "weekly" | "monthly",
+    cadence: "monthly" as "daily" | "weekly" | "monthly",
     dayOf: 1,
   });
 
@@ -136,18 +138,20 @@ export function RecurringBuys({ securities }: { securities: { symbol: string; na
             </div>
           </label>
 
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {(["weekly", "monthly"] as const).map((c) => (
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {(["daily", "weekly", "monthly"] as const).map((c) => (
               <button key={c}
-                onClick={() => { haptic(); setForm({ ...form, cadence: c, dayOf: c === "weekly" ? 1 : 1 }); }}
-                className={`rounded-xl border px-3 py-2.5 text-[13px] font-medium transition-colors ${
+                onClick={() => { haptic(); setForm({ ...form, cadence: c, dayOf: 1 }); }}
+                className={`rounded-xl border px-2 py-2.5 text-[13px] font-medium transition-colors ${
                   form.cadence === c ? "border-[var(--fg)] bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"
                 }`}>
-                {c === "weekly" ? t("Every week") : t("Every month")}
+                {c === "daily" ? t("Every day") : c === "weekly" ? t("Every week") : t("Every month")}
               </button>
             ))}
           </div>
 
+          {/* Daily has no day to pick. */}
+          {form.cadence !== "daily" && (
           <label className="mt-3 block">
             <span className="eyebrow">{form.cadence === "weekly" ? t("Day") : t("Day of the month")}</span>
             {form.cadence === "weekly" ? (
@@ -167,6 +171,13 @@ export function RecurringBuys({ securities }: { securities: { symbol: string; na
               </>
             )}
           </label>
+          )}
+
+          {form.cadence === "daily" && (
+            <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
+              {t("Every morning at 9am, on the days the market trades. The 1% trade fee applies each time, so a small daily amount costs more in fees than the same money once a month.")}
+            </p>
+          )}
 
           {err && <p className="mt-2 text-[12px] text-[var(--color-down)]">{err}</p>}
 

@@ -18,7 +18,7 @@ import type { SessionUser } from "./auth";
  * pressing Buy, so a halted market or an unverified account refuses a
  * scheduled order exactly as it refuses a manual one.
  */
-export type Cadence = "weekly" | "monthly";
+export type Cadence = "daily" | "weekly" | "monthly";
 
 export type RecurringBuy = {
   id: string;
@@ -54,6 +54,12 @@ export function nextRunAfter(from: Date, cadence: Cadence, dayOf: number): Date 
   const at = (year: number, month: number, day: number) =>
     new Date(Date.UTC(year, month, day, 9, 0, 0) - EAT_OFFSET_MS);
 
+  // Daily ignores the day entirely: the next nine o'clock there is.
+  if (cadence === "daily") {
+    const today = at(y, m, d);
+    return today.getTime() > from.getTime() ? today : at(y, m, d + 1);
+  }
+
   if (cadence === "weekly") {
     const want = ((dayOf % 7) + 7) % 7;
     let candidate = at(y, m, d);
@@ -74,6 +80,7 @@ export function nextRunAfter(from: Date, cadence: Cadence, dayOf: number): Date 
 }
 
 export function describe(b: { cadence: string; dayOf: number }): string {
+  if (b.cadence === "daily") return "every day";
   if (b.cadence === "weekly") {
     const names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     return `every ${names[((b.dayOf % 7) + 7) % 7]}`;
@@ -91,7 +98,8 @@ type Row = {
 
 const toBuy = (r: Row): RecurringBuy => ({
   id: r.id, symbol: r.symbol, amountTzs: Number(r.amount_tzs),
-  cadence: r.cadence === "monthly" ? "monthly" : "weekly", dayOf: r.day_of,
+  cadence: r.cadence === "monthly" ? "monthly" : r.cadence === "daily" ? "daily" : "weekly",
+  dayOf: r.day_of,
   nextRun: r.next_run, status: r.status, lastRunAt: r.last_run_at,
   lastError: r.last_error, runs: r.runs, misses: r.misses,
 });
@@ -137,7 +145,8 @@ export async function updateFor(userId: string, id: string, action: "pause" | "r
   const [row] = await sql<{ cadence: string; day_of: number }[]>`
     select cadence, day_of from capx.recurring_buys where id = ${id}::uuid and user_id = ${userId}`;
   if (!row) return false;
-  const next = nextRunAfter(new Date(), row.cadence === "monthly" ? "monthly" : "weekly", row.day_of);
+  const cadence: Cadence = row.cadence === "monthly" ? "monthly" : row.cadence === "daily" ? "daily" : "weekly";
+  const next = nextRunAfter(new Date(), cadence, row.day_of);
   await sql`update capx.recurring_buys set status = 'active', next_run = ${next}, last_error = null
              where id = ${id}::uuid and user_id = ${userId}`;
   return true;

@@ -487,8 +487,8 @@ export const SW: Record<string, string> = {
   "Amount each time": "Kiasi kila mara",
   "Every day": "Kila siku",
   "every day": "kila siku",
-  "Every morning at 9am, on the days the market trades. The 1% trade fee applies each time, so a small daily amount costs more in fees than the same money once a month.":
-    "Kila asubuhi saa tatu, siku ambazo soko linafanya kazi. Ada ya 1% hutozwa kila mara, hivyo kiasi kidogo cha kila siku hugharimu ada zaidi kuliko fedha hizohizo mara moja kwa mwezi.",
+  "Every morning at 9am, on the days the market trades. The trade fee applies each time, so a small daily amount costs more in fees than the same money once a month.":
+    "Kila asubuhi saa tatu, siku ambazo soko linafanya kazi. Ada ya manunuzi hutozwa kila mara, hivyo kiasi kidogo cha kila siku hugharimu ada zaidi kuliko fedha hizohizo mara moja kwa mwezi.",
   "Every week": "Kila wiki",
   "Every month": "Kila mwezi",
   "Day": "Siku",

@@ -58,7 +58,7 @@ const SECTIONS: Section[] = [
   {
     h: "Fees",
     p: [
-      "CAPX charges 1% on the cash side of each trade, shown on the ticket before you confirm. There is no separate custody or account fee.",
+      "CAPX charges 2.5% on the cash side of each trade, shown on the ticket before you confirm. Of that, 1% goes to the licensed broker that holds the shares and 1.5% to CAPX. There is no separate custody or account fee.",
       "Network fees on the blockchain are paid by CAPX for custodial accounts. If you connect your own wallet, you pay your own network fees.",
       "We will tell you before a fee changes. A change never applies to a trade already placed.",
     ],

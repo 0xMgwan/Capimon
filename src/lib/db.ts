@@ -312,6 +312,35 @@ export async function migrate() {
         )`;
 
       await sql`
+        /*
+         * The broker's account with CAPX.
+         *
+         * Every shilling trade charges a fee and part of it is the broker's —
+         * they hold the shares and carry the regulated relationship with the
+         * exchange. That share is not a number computed for a dashboard: it is
+         * money owed, so it is an append-only ledger like the customers' one,
+         * with earnings positive and payouts negative and a balance that is
+         * their sum. Nothing is ever edited; a correction is another row.
+         *
+         * The shillings themselves sit in the omnibus until a payout is made,
+         * exactly as the customers' do.
+         */
+        create table if not exists capx.broker_ledger (
+          id         uuid primary key default gen_random_uuid(),
+          party      text not null default 'fimco',
+          /* fee | payout | adjustment */
+          kind       text not null,
+          amount_tzs numeric(38,2) not null,
+          security   text,
+          order_id   uuid,
+          /* Unique per event, so a replayed trade cannot pay twice. */
+          ref        text,
+          note       text,
+          created_by text,
+          created_at timestamptz not null default now()
+        )`;
+
+      await sql`
         create table if not exists capx.ops_contacts (
           /* Which party these addresses belong to: "fimco" today. */
           party      text primary key,
@@ -461,6 +490,10 @@ export async function migrate() {
       await sql`create unique index if not exists ledger_ref_idx on capx.ledger_entries(ref) where ref is not null`;
       await sql`create index if not exists notif_user_idx on capx.notifications(user_id, id desc)`;
       await sql`create unique index if not exists notif_ref_idx on capx.notifications(ref) where ref is not null`;
+      await sql`create unique index if not exists broker_ledger_ref_idx
+                  on capx.broker_ledger(ref) where ref is not null`;
+      await sql`create index if not exists broker_ledger_party_idx
+                  on capx.broker_ledger(party, created_at desc)`;
       await sql`create index if not exists push_user_idx on capx.push_subscriptions(user_id)`;
       await sql`create index if not exists recurring_due_idx
                   on capx.recurring_buys(next_run) where status = 'active'`;

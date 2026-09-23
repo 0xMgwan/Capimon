@@ -258,7 +258,7 @@ export function RecurringBuys({ securities }: { securities: Listing[] }) {
 
           {form.cadence === "daily" && (
             <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
-              {t("Every morning at 9am, on the days the market trades. The 1% trade fee applies each time, so a small daily amount costs more in fees than the same money once a month.")}
+              {t("Every morning at 9am, on the days the market trades. The trade fee applies each time, so a small daily amount costs more in fees than the same money once a month.")}
             </p>
           )}
 

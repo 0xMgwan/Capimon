@@ -152,6 +152,19 @@ export async function placeSecurityOrder(
 
     await sql`update capx.orders set status = 'settled', settled_at = now() where id = ${orderId}`;
 
+    /*
+     * The broker's share of the fee just charged.
+     *
+     * Recorded against the order that produced it, after the trade is
+     * settled: the customer's money is the thing that must not be got wrong,
+     * and the split is an accounting entry on our own side. It never throws,
+     * and it is keyed to the order so a retry cannot pay twice.
+     */
+    if (quote.fee > 0) {
+      const { accrueBrokerFee } = await import("./brokerLedger");
+      await accrueBrokerFee({ orderId, security: SEC, fee: quote.fee });
+    }
+
     await notify({
       userId: user.id, kind: "trade", ref: `order:${orderId}`, asset: SEC,
       title: `${side === "buy" ? "Bought" : "Sold"} ${quote.qty} ${SEC}`,

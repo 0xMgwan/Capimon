@@ -7,10 +7,11 @@ import "server-only";
  * receiver inside the swap the user already signs — no extra approval, no extra
  * transaction, and CAPX never holds the funds.
  *
- * Live at 100 bps. Set FEE_BPS to change it, or FEE_BPS=0 to switch it off
- * without a deploy. Charging a fee on securities transactions carries licensing
- * obligations — that is a business decision, taken deliberately, not a default
- * that drifted in.
+ * Live at 250 bps, of which 100 belongs to the broker that tokenised the
+ * security and the rest to CAPX. Set FEE_BPS to change the total, or FEE_BPS=0
+ * to switch it off without a deploy. Charging a fee on securities transactions
+ * carries licensing obligations — that is a business decision, taken
+ * deliberately, not a default that drifted in.
  */
 
 export const FEE_RECEIVER =
@@ -24,9 +25,9 @@ export const FEE_RECEIVER =
  * the number that was wanted, so a wrong one is indistinguishable from a right
  * one until someone reads the config.
  */
-const MAX_FEE_BPS = 200;
+const MAX_FEE_BPS = 400;
 
-const DEFAULT_FEE_BPS = 100;
+const DEFAULT_FEE_BPS = 250;
 
 // An explicit FEE_BPS wins, including "0" to disable. An unset or unparseable
 // value falls back to the default rather than silently charging nothing.
@@ -39,6 +40,34 @@ export const FEE_BPS = Math.min(
 );
 
 export const feeEnabled = FEE_BPS > 0;
+
+/**
+ * The broker's share of it.
+ *
+ * FIMCO holds the shares, files the attestation that lets them be tokenised
+ * and carries the regulated relationship with the exchange. A hundred basis
+ * points of the two hundred and fifty is theirs, and the rest is CAPX's.
+ *
+ * Clamped to the total, because a split that pays out more than was collected
+ * is not a configuration mistake anybody notices until the money is short.
+ */
+const brokerConfigured = process.env.BROKER_FEE_BPS?.trim();
+const brokerParsed = brokerConfigured !== undefined && brokerConfigured !== ""
+  ? Number(brokerConfigured) : 100;
+
+export const BROKER_FEE_BPS = Math.min(
+  FEE_BPS,
+  Math.max(0, Math.round(Number.isFinite(brokerParsed) ? brokerParsed : 100)),
+);
+
+/** What is left for CAPX once the broker has been paid. */
+export const CAPX_FEE_BPS = FEE_BPS - BROKER_FEE_BPS;
+
+/** The broker's cut of a fee already charged, in shillings. */
+export function brokerShare(fee: number): number {
+  if (!feeEnabled || BROKER_FEE_BPS <= 0) return 0;
+  return Math.round((fee * BROKER_FEE_BPS) / FEE_BPS * 100) / 100;
+}
 
 export type FeeParams = {
   feeAmount: number;

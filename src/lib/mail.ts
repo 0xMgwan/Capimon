@@ -21,7 +21,7 @@ const port = Number(process.env.SMTP_PORT ?? 465);
 export const mailConfigured = !!user && !!pass;
 
 /** Where operational notices go. */
-export const opsEmail = process.env.OPS_EMAIL ?? user ?? "rrefitanzania@gmail.com";
+export const opsEmail = process.env.OPS_EMAIL ?? user ?? "refitanzania@gmail.com";
 
 /** The sender. With Gmail this has to be the account itself, so it defaults to it. */
 const from = process.env.MAIL_FROM ?? (user ? `CAPX <${user}>` : "CAPX");

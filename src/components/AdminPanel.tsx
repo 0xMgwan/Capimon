@@ -177,6 +177,29 @@ export function AdminPanel() {
     return () => clearInterval(id);
   }, [data, token, load]);
 
+  const [bankNote, setBankNote] = useState<string | null>(null);
+
+  const probeBanks = async () => {
+    setBusy(true); setBankNote("Asking nTZS about each code…");
+    try {
+      const r = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "probe-banks" }),
+      });
+      const j = await r.json();
+      setBankNote(j.ok
+        ? `${j.saved} codes accepted${j.known?.length ? `: ${j.known.join(", ")}` : ""}. `
+          + `${j.rejected} refused.`
+          + (j.unclear?.length ? ` Unclear: ${j.unclear.map((u: { code: string; detail: string }) => `${u.code} (${u.detail})`).join("; ")}` : "")
+        : j.error ?? "The probe failed.");
+    } catch (e) {
+      setBankNote(e instanceof Error ? e.message : "The probe failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const settle = async () => {
     setBusy(true);
     await fetch("/api/ntzs/settle", {
@@ -393,6 +416,28 @@ export function AdminPanel() {
         * figure: the gap between them is money the business has earned but has
         * not taken out, and that gap is the thing worth acting on.
         */}
+      {/*
+        * Finding out which bank codes nTZS accepts.
+        *
+        * Their API publishes no list and the documented one 500s, so the only
+        * authority on whether a code is real is the rail itself. This asks it,
+        * one quote at a time — pricing a payout moves nothing — and keeps what
+        * it recognised. It takes a couple of minutes, which is why it is a
+        * button rather than something that runs on its own.
+        */}
+      <div id="banks" className="mt-4 flex flex-wrap items-center gap-3 scroll-mt-24 rounded-2xl border hairline px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="eyebrow">Bank codes</div>
+          <p className="mt-1 text-[12px] leading-relaxed text-[var(--muted)]">
+            {bankNote ?? "nTZS publishes no bank list. This asks the payout rail which codes it knows, by pricing a quote against each — no money moves. Takes about two minutes."}
+          </p>
+        </div>
+        <button onClick={probeBanks} disabled={busy}
+          className="shrink-0 rounded-full border hairline px-5 py-2.5 text-sm transition-colors hover:surface disabled:opacity-50">
+          {busy ? "Working…" : "Find bank codes"}
+        </button>
+      </div>
+
       {data.fees?.position && (
         <div id="fees" className="mt-4 scroll-mt-24 rounded-2xl border hairline px-4 py-3">
           <div className="flex flex-wrap items-center justify-between gap-3">

@@ -7,6 +7,8 @@ import { ntzsConfigured } from "@/lib/ntzs";
 import { roleOf } from "@/lib/adminAuth";
 
 export const dynamic = "force-dynamic";
+// The bank probe walks forty-odd candidates, spaced under nTZS's rate limit.
+export const maxDuration = 300;
 
 /**
  * Operations view. Token-gated: this exposes every customer's deposits, so it
@@ -184,6 +186,26 @@ export async function POST(req: Request) {
      * cannot sweep a number they typed. The destination is an env var for the
      * same reason.
      */
+    /*
+     * Asks nTZS which bank codes it knows.
+     *
+     * Slow on purpose — one quote per candidate, spaced under their rate
+     * limit — and it moves no money: a quote prices a payout and nothing
+     * else. Only the codes the rail recognised are saved.
+     */
+    if (body.action === "probe-banks") {
+      const { probeBankCodes, saveVerifiedBanks } = await import("@/lib/bankProbe");
+      const results = await probeBankCodes();
+      const saved = await saveVerifiedBanks(results);
+      return NextResponse.json({
+        ok: true, saved,
+        known: results.filter((r) => r.verdict === "known").map((r) => r.code),
+        unclear: results.filter((r) => r.verdict === "unclear").slice(0, 6),
+        rejected: results.filter((r) => r.verdict === "unknown").length,
+        sample: results.slice(0, 3),
+      });
+    }
+
     if (body.action === "sweep-fees") {
       const { sweepFees, sweepBrokerFees, feePosition } = await import("@/lib/feeSweep");
       try {

@@ -33,6 +33,20 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, code: "unauthenticated" }, { status: 401 });
   }
 
+  /*
+   * Codes nTZS has confirmed, when the desk has probed for them.
+   *
+   * They come first: an endpoint that does not exist cannot be waited for,
+   * and a list the rail itself accepted is better than three names from a
+   * paragraph.
+   */
+  const { verifiedBanks } = await import("@/lib/bankProbe");
+  const verified = await verifiedBanks().catch(() => []);
+  if (verified.length) {
+    return NextResponse.json({ ok: true, banks: verified, source: "verified" },
+      { headers: { "cache-control": "no-store" } });
+  }
+
   let tried: { path: string; outcome: string }[] = [];
   let sample: Record<string, unknown> | null = null;
   if (!cache || Date.now() - cache.at > 3600_000) {

@@ -34,11 +34,13 @@ export async function GET(req: Request) {
   }
 
   let tried: { path: string; outcome: string }[] = [];
+  let sample: Record<string, unknown> | null = null;
   if (!cache || Date.now() - cache.at > 3600_000) {
     const r = ntzsConfigured
-      ? await withdrawalBanksDetailed().catch(() => ({ banks: [], tried: [{ path: "*", outcome: "lookup threw" }] }))
-      : { banks: [], tried: [{ path: "*", outcome: "nTZS is not configured" }] };
+      ? await withdrawalBanksDetailed().catch(() => ({ banks: [], tried: [{ path: "*", outcome: "lookup threw" }], sample: null }))
+      : { banks: [], tried: [{ path: "*", outcome: "nTZS is not configured" }], sample: null };
     tried = r.tried;
+    sample = r.sample ?? null;
     if (r.banks.length) cache = { at: Date.now(), banks: r.banks };
   }
   const banks = cache?.banks ?? DOCUMENTED;
@@ -51,6 +53,6 @@ export async function GET(req: Request) {
      * an operator looking at three banks in a country with thirty-eight
      * does, and the alternative is guessing.
      */
-    ...(roleOf(req) && !cache ? { tried } : {}),
+    ...(roleOf(req) && !cache ? { tried, sample } : {}),
   }, { headers: { "cache-control": "no-store" } });
 }

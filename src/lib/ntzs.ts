@@ -309,6 +309,14 @@ export type BankLookup = {
   banks: { code: string; name: string }[];
   /** What each path answered, for the desk when the list comes back thin. */
   tried: { path: string; outcome: string }[];
+  /**
+   * One catalogue entry, when nothing matched.
+   *
+   * The shape upstream returns is not documented beyond "object", so if the
+   * match finds nothing the honest thing is to show what it was matching
+   * against rather than guessing again in the dark.
+   */
+  sample?: Record<string, unknown> | null;
 };
 
 function readBankList(r: unknown): { code: string; name: string }[] {
@@ -328,8 +336,72 @@ function readBankList(r: unknown): { code: string; name: string }[] {
   }).filter((b) => b.code);
 }
 
+/**
+ * Banks hiding in the biller catalogue.
+ *
+ * The public API has no bank-list endpoint — the OpenAPI document names
+ * thirty-two paths and none of them is one, which is why `/withdrawals/banks`
+ * answers 500: it is being read as `/withdrawals/{id}` with an id of "banks".
+ *
+ * But withdrawals and bill payments run on the same Selcom rail, and Selcom's
+ * biller catalogue in Tanzania carries bank deposits as billers. So the list
+ * exists, under another name, at an endpoint that is documented — which is
+ * very likely where the nTZS app gets it too.
+ *
+ * Matched loosely and on purpose: an entry counts as a bank if it is
+ * categorised as one or simply says so in its name, in either language. A
+ * false positive is a code that fails at the quote, before money moves; a
+ * false negative is a customer who cannot withdraw.
+ */
+function banksFromBillers(r: unknown): { code: string; name: string }[] {
+  const list = Array.isArray(r) ? r
+    : Array.isArray((r as { billers?: unknown[] })?.billers) ? (r as { billers: unknown[] }).billers
+    : Array.isArray((r as { data?: unknown[] })?.data) ? (r as { data: unknown[] }).data : [];
+
+  const seen = new Set<string>();
+  const banks: { code: string; name: string }[] = [];
+  for (const b of list) {
+    if (typeof b !== "object" || !b) continue;
+    const o = b as Record<string, unknown>;
+    const code = String(o.code ?? o.billerCode ?? o.fiCode ?? o.id ?? "").trim();
+    const name = String(o.name ?? o.billerName ?? o.label ?? code).trim();
+    if (!code || seen.has(code.toUpperCase())) continue;
+
+    const haystack = [o.category, o.type, o.group, o.sector, name]
+      .filter(Boolean).map((v) => String(v).toLowerCase()).join(" ");
+    if (!/\b(bank|benki)/.test(haystack)) continue;
+
+    seen.add(code.toUpperCase());
+    banks.push({ code, name });
+  }
+  return banks;
+}
+
 export async function withdrawalBanksDetailed(): Promise<BankLookup> {
   const tried: BankLookup["tried"] = [];
+  let sample: Record<string, unknown> | null = null;
+
+  /*
+   * The catalogue first, because it is the endpoint that is actually
+   * documented. The dedicated paths below are tried anyway in case one of
+   * them starts answering.
+   */
+  try {
+    const billers = await call<unknown>("/api/v1/spend/billers");
+    const banks = banksFromBillers(billers);
+    const total = Array.isArray(billers) ? billers.length
+      : Array.isArray((billers as { billers?: unknown[] })?.billers) ? (billers as { billers: unknown[] }).billers.length
+      : 0;
+    tried.push({ path: "/api/v1/spend/billers", outcome: `${banks.length} banks of ${total} billers` });
+    if (banks.length) return { banks, tried };
+    const first = (Array.isArray(billers) ? billers[0]
+      : (billers as { billers?: unknown[] })?.billers?.[0]) as Record<string, unknown> | undefined;
+    if (first) sample = first;
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : "failed";
+    tried.push({ path: "/api/v1/spend/billers", outcome: raw.slice(0, 120) });
+  }
+
   for (const path of [
     "/api/v1/withdrawals/banks",
     "/api/v1/withdrawals/institutions",
@@ -354,7 +426,7 @@ export async function withdrawalBanksDetailed(): Promise<BankLookup> {
       tried.push({ path, outcome: /<!DOCTYPE|<html/i.test(raw) ? "not an API route (HTML page)" : raw.slice(0, 120) });
     }
   }
-  return { banks: [], tried };
+  return { banks: [], tried, sample };
 }
 
 export async function withdrawalBanks(): Promise<{ code: string; name: string }[]> {

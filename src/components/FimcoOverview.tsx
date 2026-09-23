@@ -425,7 +425,8 @@ function PayoutAccount({ token, isAdmin, saved, onSaved }: {
         setBanks(j.banks ?? []);
         setBankNote(j.source === "ntzs" ? null
           : `Showing ${(j.banks ?? []).length} fallback banks — nTZS's list could not be read.`
-            + (j.tried?.length ? ` ${j.tried.map((t: { path: string; outcome: string }) => `${t.path}: ${t.outcome}`).join(" · ")}` : ""));
+            + (j.tried?.length ? ` ${j.tried.map((t: { path: string; outcome: string }) => `${t.path}: ${t.outcome}`).join(" · ")}` : "")
+            + (j.sample ? ` · a catalogue entry looks like: ${Object.keys(j.sample).join(", ")}` : ""));
       })
       .catch(() => { /* the field still accepts a code */ });
     return () => { alive = false; };

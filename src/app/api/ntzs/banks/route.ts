@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { withdrawalBanks, ntzsConfigured } from "@/lib/ntzs";
+import { withdrawalBanksDetailed, ntzsConfigured } from "@/lib/ntzs";
 import { currentUser } from "@/lib/auth";
 import { roleOf } from "@/lib/adminAuth";
 
@@ -33,11 +33,24 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, code: "unauthenticated" }, { status: 401 });
   }
 
+  let tried: { path: string; outcome: string }[] = [];
   if (!cache || Date.now() - cache.at > 3600_000) {
-    const banks = ntzsConfigured ? await withdrawalBanks().catch(() => []) : [];
-    if (banks.length) cache = { at: Date.now(), banks };
+    const r = ntzsConfigured
+      ? await withdrawalBanksDetailed().catch(() => ({ banks: [], tried: [{ path: "*", outcome: "lookup threw" }] }))
+      : { banks: [], tried: [{ path: "*", outcome: "nTZS is not configured" }] };
+    tried = r.tried;
+    if (r.banks.length) cache = { at: Date.now(), banks: r.banks };
   }
   const banks = cache?.banks ?? DOCUMENTED;
-  return NextResponse.json({ ok: true, banks, source: cache ? "ntzs" : "documented" },
-    { headers: { "cache-control": "no-store" } });
+  return NextResponse.json({
+    ok: true, banks, source: cache ? "ntzs" : "documented",
+    /*
+     * Why the list is short, for a desk only.
+     *
+     * A customer does not need to know which upstream path answered what;
+     * an operator looking at three banks in a country with thirty-eight
+     * does, and the alternative is guessing.
+     */
+    ...(roleOf(req) && !cache ? { tried } : {}),
+  }, { headers: { "cache-control": "no-store" } });
 }

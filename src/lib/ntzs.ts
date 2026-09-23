@@ -291,17 +291,64 @@ export async function createWithdrawal(input: { userId: string; quoteId: string;
  * key — and the docs point to "the full list in the API reference" without
  * publishing it. Read loosely because its shape is not written down anywhere.
  */
-export async function withdrawalBanks(): Promise<{ code: string; name: string }[]> {
-  const r = await call<unknown>("/api/v1/withdrawals/banks");
-  const list = Array.isArray(r) ? r
+/**
+ * Every bank a payout can reach.
+ *
+ * The docs say thirty-eight, by canonical FI code, with the list "in the API
+ * reference" — which does not carry it, and neither does the OpenAPI
+ * document. So the live endpoint is the only source, and when it answers with
+ * something unexpected the picker silently fell back to the three codes the
+ * prose happens to name. Three banks in a country with thirty-eight is a
+ * customer discovering at the worst moment that theirs is not there.
+ *
+ * Several shapes and several paths are tried, and whatever went wrong is
+ * returned rather than swallowed, so the desk can show it instead of an
+ * unexplained short list.
+ */
+export type BankLookup = {
+  banks: { code: string; name: string }[];
+  /** What each path answered, for the desk when the list comes back thin. */
+  tried: { path: string; outcome: string }[];
+};
+
+function readBankList(r: unknown): { code: string; name: string }[] {
+  const asList =
+    Array.isArray(r) ? r
     : Array.isArray((r as { banks?: unknown[] })?.banks) ? (r as { banks: unknown[] }).banks
-    : Array.isArray((r as { data?: unknown[] })?.data) ? (r as { data: unknown[] }).data : [];
-  return list.map((b) => {
+    : Array.isArray((r as { data?: unknown[] })?.data) ? (r as { data: unknown[] }).data
+    : Array.isArray((r as { institutions?: unknown[] })?.institutions) ? (r as { institutions: unknown[] }).institutions
+    : Array.isArray((r as { results?: unknown[] })?.results) ? (r as { results: unknown[] }).results
+    : [];
+
+  return asList.map((b) => {
     if (typeof b === "string") return { code: b, name: b };
     const o = b as Record<string, unknown>;
-    const code = String(o.code ?? o.bankCode ?? o.fiCode ?? o.id ?? "");
-    return { code, name: String(o.name ?? o.bankName ?? o.label ?? code) };
+    const code = String(o.code ?? o.bankCode ?? o.fiCode ?? o.fi_code ?? o.id ?? "").trim();
+    return { code, name: String(o.name ?? o.bankName ?? o.institutionName ?? o.label ?? code).trim() };
   }).filter((b) => b.code);
+}
+
+export async function withdrawalBanksDetailed(): Promise<BankLookup> {
+  const tried: BankLookup["tried"] = [];
+  for (const path of [
+    "/api/v1/withdrawals/banks",
+    "/api/v1/withdrawals/institutions",
+    "/api/v1/banks",
+  ]) {
+    try {
+      const r = await call<unknown>(path);
+      const banks = readBankList(r);
+      tried.push({ path, outcome: banks.length ? `${banks.length} banks` : `no list in ${typeof r === "object" ? Object.keys(r ?? {}).join(",") || "empty object" : typeof r}` });
+      if (banks.length) return { banks, tried };
+    } catch (e) {
+      tried.push({ path, outcome: e instanceof Error ? e.message.slice(0, 160) : "failed" });
+    }
+  }
+  return { banks: [], tried };
+}
+
+export async function withdrawalBanks(): Promise<{ code: string; name: string }[]> {
+  return (await withdrawalBanksDetailed()).banks;
 }
 
 export async function getWithdrawal(id: string) {

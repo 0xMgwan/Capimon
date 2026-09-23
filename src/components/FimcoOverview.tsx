@@ -409,6 +409,9 @@ function PayoutAccount({ token, isAdmin, saved, onSaved }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [banks, setBanks] = useState<{ code: string; name: string }[]>([]);
+  /* When the list is the fallback rather than nTZS's own, say so: three banks
+     where there should be thirty-eight is a fact an operator can act on. */
+  const [bankNote, setBankNote] = useState<string | null>(null);
   const [form, setForm] = useState<Payout>(saved ?? { method: "mobile", phoneNumber: "" });
 
   useEffect(() => {
@@ -416,7 +419,13 @@ function PayoutAccount({ token, isAdmin, saved, onSaved }: {
     let alive = true;
     fetch("/api/ntzs/banks", { headers: { authorization: `Bearer ${token}` }, cache: "no-store" })
       .then((r) => r.json())
-      .then((j) => { if (alive && j.ok) setBanks(j.banks ?? []); })
+      .then((j) => {
+        if (!alive || !j.ok) return;
+        setBanks(j.banks ?? []);
+        setBankNote(j.source === "ntzs" ? null
+          : `Showing ${(j.banks ?? []).length} fallback banks — nTZS's list could not be read.`
+            + (j.tried?.length ? ` ${j.tried.map((t: { path: string; outcome: string }) => `${t.path}: ${t.outcome}`).join(" · ")}` : ""));
+      })
       .catch(() => { /* the field still accepts a code */ });
     return () => { alive = false; };
   }, [form.method, banks.length, token]);
@@ -494,6 +503,7 @@ function PayoutAccount({ token, isAdmin, saved, onSaved }: {
                 <option value="">Choose a bank</option>
                 {banks.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}
               </select>
+              {bankNote && <p className="text-[11px] text-[#b45309]">{bankNote}</p>}
               <input
                 value={form.accountNumber ?? ""}
                 onChange={(e) => setForm({ ...form, accountNumber: e.target.value.replace(/[^0-9]/g, "") })}

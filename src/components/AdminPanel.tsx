@@ -518,6 +518,8 @@ export function AdminPanel() {
         <Cell label="Fees (held)" value={TZS(data.totalsExtra?.feesTzs ?? 0)} />
       </div>
 
+      <MailCheck token={token} />
+
       <div className="mt-6 flex gap-1 overflow-x-auto rounded-full border hairline p-1">
         {tabs.map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
@@ -788,6 +790,86 @@ function Detail({ k, v, mono, link }: { k: string; v: string | null | undefined;
         <a href={link} target="_blank" rel="noreferrer" className={`truncate underline ${mono ? "tnum" : ""}`}>{v}</a>
       ) : (
         <span className={`truncate text-right ${mono ? "tnum" : ""}`}>{v ?? "—"}</span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Does outbound mail work?
+ *
+ * Every other email this app sends goes out after the response, where a wrong
+ * password or a blocked port fails where nobody is looking — the customer's
+ * KYC submission succeeds and the notice simply never arrives. This sends one
+ * in the foreground and shows what SMTP said, so the failure has somewhere to
+ * appear before a customer is waiting on it.
+ */
+function MailCheck({ token }: { token: string }) {
+  const [to, setTo] = useState("");
+  const [state, setState] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [sending, setSending] = useState(false);
+  const [cfg, setCfg] = useState<{ configured: boolean; user: string | null; ops: string } | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    void fetch("/api/admin/mail-test", { headers: { authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((j) => { if (j.ok) setCfg(j); })
+      .catch(() => { /* the send will say so */ });
+  }, [token]);
+
+  const send = async () => {
+    setSending(true); setState(null);
+    try {
+      const r = await fetch("/api/admin/mail-test", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ to }),
+      });
+      const j = await r.json();
+      setState(j.ok
+        ? { ok: true, msg: `Sent to ${j.to}.` }
+        : { ok: false, msg: j.error ?? "Could not send" });
+    } catch (e) {
+      setState({ ok: false, msg: e instanceof Error ? e.message : "Could not send" });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-2xl border hairline p-3.5 sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="eyebrow">Email</div>
+          <p className="mt-1 text-[12px] text-[var(--muted)]">
+            {cfg === null ? "Checking…"
+              : cfg.configured
+                ? <>Sending as {cfg.user}. KYC notices go to {cfg.ops}.</>
+                : "Not configured — set SMTP_USER and SMTP_PASS."}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void send(); }}
+            placeholder={cfg?.ops ?? "name@example.com"}
+            className="w-56 rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+          />
+          <button
+            onClick={() => void send()}
+            disabled={sending || cfg?.configured === false}
+            className="rounded-xl bg-[var(--fg)] px-4 py-2 text-sm font-medium text-[var(--bg)] disabled:opacity-40"
+          >
+            {sending ? "Sending…" : "Send test"}
+          </button>
+        </div>
+      </div>
+      {state && (
+        <p className={`mt-2 text-[12px] ${state.ok ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+          {state.msg}
+        </p>
       )}
     </div>
   );

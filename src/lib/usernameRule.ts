@@ -50,14 +50,49 @@ export function cleanUsername(raw: string): string {
 }
 
 /**
+ * Handles nobody may take, because taking one would let a customer pass for
+ * CAPX or for someone they would then be trusted as.
+ *
+ * Not a naming policy — an impersonation control. Somebody messaging another
+ * customer as @support, or appearing in a list as @capx, is the beginning of
+ * a story that ends with a transfer nobody authorised. The separators are
+ * collapsed out before this is checked, so @c_a_p_x does not walk past it.
+ */
+const RESERVED = new Set([
+  // CAPX and its people.
+  "capx", "capximon", "capimon", "nedalabs", "neda", "team", "official", "staff",
+  // Anything that reads as the desk talking to you.
+  "admin", "administrator", "support", "help", "helpdesk", "service", "security",
+  "moderator", "mod", "root", "system", "info", "contact", "billing", "payments",
+  "noreply", "no-reply", "alert", "alerts", "notification", "notifications",
+  // The counterparties a customer is told to trust.
+  "fimco", "ntzs", "dse", "crdb", "nmb", "broker", "custodian", "treasury",
+  // Routes, so a handle can never read as a page of the site.
+  "api", "login", "signin", "signup", "register", "account", "settings",
+  "markets", "portfolio", "verify", "kyc", "wallet", "deposit", "withdraw",
+]);
+
+/**
  * What is wrong with an already-cleaned handle, or null if nothing is.
  *
  * Takes the output of cleanUsername: the caller cleans first, so the only
- * failure left is one no amount of tidying can fix.
+ * failures left are ones no amount of tidying can fix.
  */
 export function usernameProblem(cleaned: string): string | null {
   if (cleaned.length < MIN) return `A username needs at least ${MIN} characters.`;
+  if (isReserved(cleaned)) return "That username is reserved. Please choose another.";
   return null;
+}
+
+/**
+ * Is this handle one of the reserved ones?
+ *
+ * Compared with the separators stripped, so "c.a.p.x" and "capx_" are the
+ * same name to this check as "capx" — which is how a reader would see them.
+ */
+export function isReserved(cleaned: string): boolean {
+  const bare = cleaned.replace(/[._-]/g, "");
+  return RESERVED.has(cleaned) || RESERVED.has(bare);
 }
 
 /**
@@ -76,6 +111,8 @@ export async function suggestUsername(
   // The bare name first, then numbered; a handful of tries is enough, and an
   // unbounded loop against a database is not something to leave in a request.
   for (const candidate of [base, ...Array.from({ length: 20 }, (_, i) => `${base}${i + 2}`)]) {
+    // Never offer a name the same rules would then refuse.
+    if (isReserved(candidate)) continue;
     if (!(await taken(candidate))) return candidate;
   }
   return null;

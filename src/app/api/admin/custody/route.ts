@@ -5,6 +5,7 @@ import { roleOf, ACTOR, type OpsRole } from "@/lib/adminAuth";
 import { SECURITIES_CONTRACTS } from "@/lib/assets";
 import { treasuryAddress } from "@/lib/treasury";
 import { sendMail, opsEmail } from "@/lib/mail";
+import { contactsFor } from "@/lib/opsContacts";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,29 @@ const FIMCO_ACTIONS = new Set(["attest", "request-issuance", "register-security"
 
 /** About 4 MB once base64 has added its third. A scanned statement fits. */
 const MAX_DOC_BYTES = 5_600_000;
+
+/**
+ * Sends CAPX's decision back to the party that asked for it.
+ *
+ * The desk shows it either way; this is so a broker learns their filing was
+ * refused from their inbox rather than from noticing a status chip days
+ * later. Silent when they have not given an address — a decision must never
+ * fail because nobody is listening for it — and always in the background,
+ * like every other notice here.
+ */
+function tellFimco(subject: string, lines: string[]) {
+  after(async () => {
+    const to = await contactsFor("fimco");
+    if (!to.length) return;
+    const r = await sendMail({
+      to: to.join(", "),
+      subject,
+      replyTo: opsEmail,
+      text: [...lines, ``, `The securities desk has the detail:`, `https://www.capx.broker/admin/fimco`].join("\n"),
+    });
+    if (!r.sent) console.warn(`Decision notice to FIMCO not sent: ${r.reason}`);
+  });
+}
 
 /** Attestations and issuance history for the custody desk. */
 export async function GET(req: Request) {
@@ -307,15 +331,34 @@ export async function POST(req: Request) {
     if (action === "approve-attestation") {
       const id = String(body.id ?? "");
       if (!id) return NextResponse.json({ ok: false, error: "id is required" }, { status: 400 });
-      await sql`update capx.custody_attestations
-                   set status = 'approved', approved_by = ${ACTOR[role]}, approved_at = now()
-                 where id = ${id}::uuid and status = 'pending'`;
+      const [a] = await sql<{ security: string; quantity: number; custodian: string }[]>`
+        update capx.custody_attestations
+           set status = 'approved', approved_by = ${ACTOR[role]}, approved_at = now()
+         where id = ${id}::uuid and status = 'pending'
+        returning security, quantity::float8 as quantity, custodian`;
+      if (a) {
+        tellFimco(`Attestation approved — ${a.security}`, [
+          `CAPX approved your attestation for ${a.quantity.toLocaleString()} ${a.security}.`,
+          `The shares can now be tokenised.`,
+        ]);
+      }
       return NextResponse.json({ ok: true });
     }
 
     if (action === "reject-attestation") {
       const id = String(body.id ?? "");
-      await sql`update capx.custody_attestations set status = 'rejected' where id = ${id}::uuid`;
+      const reason = body.reason ? String(body.reason).slice(0, 500) : null;
+      const [a] = await sql<{ security: string; quantity: number }[]>`
+        update capx.custody_attestations set status = 'rejected' where id = ${id}::uuid
+        returning security, quantity::float8 as quantity`;
+      if (a) {
+        tellFimco(`Attestation rejected — ${a.security}`, [
+          `CAPX could not accept your attestation for ${a.quantity.toLocaleString()} ${a.security}.`,
+          ...(reason ? [``, `Reason: ${reason}`] : []),
+          ``,
+          `Nothing has been tokenised against it. You can file again.`,
+        ]);
+      }
       return NextResponse.json({ ok: true });
     }
 
@@ -388,9 +431,23 @@ export async function POST(req: Request) {
           if (refusal) return NextResponse.json({ ok: false, error: refusal }, { status: 409 });
         }
       }
-      await sql`update capx.issuance_requests
-                   set status = ${next}, decided_by = ${ACTOR[role]}, decided_at = now()
-                 where id = ${id}::uuid and status = 'pending'`;
+      const [req] = await sql<{ security: string; kind: string; quantity: number }[]>`
+        update capx.issuance_requests
+           set status = ${next}, decided_by = ${ACTOR[role]}, decided_at = now()
+         where id = ${id}::uuid and status = 'pending'
+        returning security, kind, quantity::float8 as quantity`;
+      if (req) {
+        const what = `${req.quantity.toLocaleString()} ${req.security}`;
+        const verb = req.kind === "burn" ? "burn" : "mint";
+        tellFimco(
+          `${verb === "burn" ? "Burn" : "Mint"} request ${next} — ${req.security}`,
+          next === "approved"
+            ? [`CAPX approved your request to ${verb} ${what}.`,
+               `It is signed with the issuer wallet next, and the desk will show the transaction.`]
+            : [`CAPX did not approve your request to ${verb} ${what}.`,
+               ...(body.reason ? [``, `Reason: ${String(body.reason).slice(0, 500)}`] : [])],
+        );
+      }
       return NextResponse.json({ ok: true });
     }
     if (action === "complete-request") {

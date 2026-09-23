@@ -262,6 +262,16 @@ export async function migrate() {
           primary key (symbol, at)
         )`;
       await sql`
+        create table if not exists capx.ops_contacts (
+          /* Which party these addresses belong to: "fimco" today. */
+          party      text primary key,
+          /* Addresses, in the order they were entered. */
+          emails     jsonb not null default '[]'::jsonb,
+          updated_at timestamptz not null default now(),
+          updated_by text
+        )`;
+
+      await sql`
         create table if not exists capx.sync_cursors (
           name  text primary key,
           block bigint not null,

@@ -566,6 +566,8 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
           securities={data.securities.map((x) => x.symbol)} />
       </div>
 
+      <NoticeContacts token={token} isAdmin={isAdmin} />
+
       {portal === "fimco" && <CustomersSection token={token} />}
 
       {isAdmin && <OracleAdmin token={token} busy={busy} setBusy={setBusy} setErr={setErr} setNote={setNote} />}
@@ -709,6 +711,82 @@ type AdminWithdrawal = { id: string; amount: string; ref: string | null; created
  * keeps — customers, orders, verifications, holdings, withdrawals — behind one
  * search that filters whichever tab is open.
  */
+/**
+ * Where CAPX's decisions are sent.
+ *
+ * FIMCO keeps this themselves: they read the mail, and a list only CAPX can
+ * edit is a list that goes stale the first time somebody joins their desk.
+ * CAPX can see it but has no reason to change it, so the field is theirs.
+ */
+function NoticeContacts({ token, isAdmin }: { token: string; isAdmin: boolean }) {
+  const [value, setValue] = useState("");
+  const [saved, setSaved] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    void fetch("/api/admin/contacts", { headers: { authorization: `Bearer ${token}` }, cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (j.ok) { setSaved(j.emails); setValue(j.emails.join(", ")); } })
+      .catch(() => { /* the save will say so */ });
+  }, [token]);
+
+  const save = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fetch("/api/admin/contacts", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ emails: value }),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error ?? "Could not save");
+      setSaved(j.emails); setValue(j.emails.join(", "));
+      setMsg(j.emails.length
+        ? `Saved. Decisions go to ${j.emails.length === 1 ? j.emails[0] : `${j.emails.length} addresses`}.`
+        : "Saved. No addresses, so no email will be sent.");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="mt-8 rounded-3xl border hairline p-5">
+      <div className="eyebrow">Email notices</div>
+      <p className="mt-1 text-[12px] leading-relaxed text-[var(--muted)]">
+        {isAdmin
+          ? "Where FIMCO is told when CAPX approves or rejects a filing. They keep this themselves."
+          : "Where we email you when CAPX approves or rejects an attestation or a mint. Separate several with commas."}
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !isAdmin) void save(); }}
+          readOnly={isAdmin}
+          placeholder="operations@fimco.co.tz, custody@fimco.co.tz"
+          className="min-w-0 flex-1 rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)] read-only:text-[var(--muted)]"
+        />
+        {!isAdmin && (
+          <button onClick={() => void save()} disabled={busy}
+            className="rounded-full bg-[var(--fg)] px-5 py-2.5 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40">
+            {busy ? "Saving…" : "Save"}
+          </button>
+        )}
+      </div>
+      {msg && <p className="mt-2 text-[12px] text-[var(--muted)]">{msg}</p>}
+      {!msg && saved?.length === 0 && (
+        <p className="mt-2 text-[12px] text-[var(--muted)]">
+          {isAdmin ? "FIMCO has not added an address yet." : "No address yet, so nothing is emailed."}
+        </p>
+      )}
+    </section>
+  );
+}
+
 function CustomersSection({ token }: { token: string }) {
   const [tab, setTab] = useState<"users" | "orders" | "kyc" | "holdings" | "withdrawals">("users");
   const [q, setQ] = useState("");

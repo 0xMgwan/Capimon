@@ -94,13 +94,21 @@ html { scroll-behavior: smooth; overflow-x: clip; }
 
 button, a { -webkit-tap-highlight-color: transparent; }
 
+/*
+ * The horizontal clip lives on <html> alone.
+ *
+ * On iOS Safari a clip on <body> takes the fixed tab bar with it: the bar
+ * stops being positioned against the viewport and drifts up into the content
+ * mid-scroll, settling back only when the scroll ends. One clip is enough to
+ * stop the page rubber-banding sideways, and the root is the one that does it
+ * without claiming the bar.
+ */
 body {
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  overflow-x: clip;
 }
 
 ::selection { background: var(--color-accent); color: #fff; }

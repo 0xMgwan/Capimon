@@ -84,7 +84,20 @@ export function MobileTabs() {
     <>
     {/* Clearance for the fixed bar, scoped to when the bar actually exists. */}
     <div className="h-[4.25rem] md:hidden" />
-    <nav className="safe-b fixed inset-x-0 bottom-0 z-50 border-t hairline bg-[var(--bg)] md:hidden">
+    {/*
+      * translateZ(0) puts the bar on its own compositor layer.
+      *
+      * iOS repaints fixed elements lazily during momentum scrolling, so a bar
+      * painted with the page appears to slide up into the content and snap
+      * back when the scroll stops. Its own layer is moved by the compositor
+      * instead of being redrawn, which is what keeps it still. Not
+      * will-change: a layer promoted for the whole session is what blanks the
+      * ticker, and this needs promoting only while it exists.
+      */}
+    <nav
+      style={{ transform: "translateZ(0)" }}
+      className="safe-b fixed inset-x-0 bottom-0 z-50 border-t hairline bg-[var(--bg)] md:hidden"
+    >
       <div className="flex">
         {TABS.map((t) => {
           const active = t.href === "/" ? path === "/" : path.startsWith(t.href);

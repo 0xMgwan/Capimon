@@ -8,18 +8,25 @@ export const maxDuration = 300;
 /**
  * One scheduled job that decides for itself what is due.
  *
- * Three separate crons — standing orders hourly, the oracle each morning, the
+ * Three separate crons — standing orders, the oracle each morning, the
  * portfolio note twice a day — were three schedules to keep in step and three
- * entries against the account's limit, for work that mostly consists of
- * asking whether there is anything to do. So there is one invocation an hour
- * and it asks all three questions.
+ * entries against the account's limit. There is one job instead, and it asks
+ * all three questions.
  *
- * The cheap question comes first and is usually answered by an index: a
- * `next_run <= now()` against no rows costs almost nothing, which is what
- * most of the twenty-four hourly runs will be. The expensive ones are gated
- * on the clock in East African time, so they fire once each and a manual run
- * does whatever the scheduler would have done at that hour rather than
- * something different.
+ * It runs three times a day rather than hourly, at the hours that actually
+ * mean something: 08:00 for the price refresh, 09:00 for the standing orders
+ * and the morning note, 18:00 for the evening one. Hourly spent twenty-one
+ * runs a day discovering there was nothing to do.
+ *
+ * The cost is patience. A standing order that cannot fill at nine — an empty
+ * balance, a halted market — waits until six rather than until ten, and a
+ * missed price refresh waits until tomorrow. Both are survivable: a mark has
+ * four days before it stops trading, and a missed instalment is a
+ * notification rather than a loss.
+ *
+ * Everything is gated on the clock in East African time, so a manual run does
+ * whatever the scheduler would have done at that hour rather than something
+ * different.
  */
 function hourEat(): number {
   return Number(new Date().toLocaleString("en-GB", {
@@ -36,9 +43,8 @@ export async function GET(req: Request) {
   const hour = hourEat();
   const did: Record<string, unknown> = { hour };
 
-  // 1. Standing orders. Every hour, because a plan should land near the time
-  //    it was promised, and because an hour when the market was halted or the
-  //    feed was down should not cost anybody their instalment.
+  // 1. Standing orders, on every run: the query is an index lookup against a
+  //    handful of rows, so asking costs nothing when the answer is none.
   try {
     const { runDue } = await import("@/lib/recurring");
     did.recurring = await runDue();

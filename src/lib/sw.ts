@@ -523,6 +523,7 @@ export const SW: Record<string, string> = {
   "next": "ifuatayo",
   "paused": "imesimamishwa",
   "bought": "zimenunuliwa",
+  "last": "mwisho",
   "Sunday": "Jumapili",
   "Monday": "Jumatatu",
   "Tuesday": "Jumanne",

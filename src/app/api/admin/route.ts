@@ -30,6 +30,8 @@ export async function GET(req: Request) {
     await migrate();
     const sql = db();
 
+    const jobs = await import("@/lib/jobRuns").then((m) => m.recentRuns()).catch(() => []);
+
     const [deposits, users, orders, totals, holdingsByAsset, ledgerTotals, withdrawals] = await Promise.all([
       // Everything needed to match a CAPX row against its nTZS counterpart,
       // plus the identity CAPX holds for the depositor.
@@ -139,6 +141,7 @@ export async function GET(req: Request) {
       capabilities: caps,
       collectionRoute: route,
       treasury: treasuryAddress(),
+      jobs,
       holdingsByAsset, ledgerTotals, withdrawals,
       deposits, users, orders,
     }, { headers: { "cache-control": "no-store" } });
@@ -193,6 +196,45 @@ export async function POST(req: Request) {
      * limit — and it moves no money: a quote prices a payout and nothing
      * else. Only the codes the rail recognised are saved.
      */
+    /*
+     * Runs the hourly job now.
+     *
+     * The scheduler is a promise made by the host, and when a standing order
+     * does not execute the first question is whether it ever ran. This makes
+     * that answerable from the desk rather than from a support ticket — it
+     * does exactly what the cron does, including deciding by the clock which
+     * of its pieces are due.
+     */
+    /*
+     * Sends the portfolio summary now.
+     *
+     * It otherwise happens twice a day at fixed hours, which is a long wait
+     * to find out whether push works at all. The slot follows the clock, so
+     * what arrives is exactly what would have arrived on its own.
+     */
+    if (body.action === "send-digest") {
+      const { pushConfigured } = await import("@/lib/push");
+      if (!pushConfigured) {
+        return NextResponse.json(
+          { ok: false, error: "Push is not configured. Set NEXT_PUBLIC_VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY." },
+          { status: 503 });
+      }
+      const { sendDigest } = await import("@/lib/digest");
+      const hour = Number(new Date().toLocaleString("en-GB", {
+        timeZone: "Africa/Dar_es_Salaam", hour: "2-digit", hour12: false,
+      }));
+      const r = await sendDigest(hour < 12 ? "morning" : "evening");
+      return NextResponse.json({ ok: true, ...r });
+    }
+
+    if (body.action === "run-tick") {
+      const url = new URL(req.url);
+      const r = await fetch(`${url.origin}/api/cron/tick`, {
+        headers: { authorization: req.headers.get("authorization") ?? "" },
+      });
+      return NextResponse.json({ ok: r.ok, ...(await r.json().catch(() => ({}))) });
+    }
+
     if (body.action === "probe-banks") {
       const { probeBankCodes, saveVerifiedBanks, TOTAL_CANDIDATES } = await import("@/lib/bankProbe");
       const offset = Math.max(0, Number(body.offset) || 0);

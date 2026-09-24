@@ -20,6 +20,8 @@ import { DseLogo } from "./DseLogo";
 type Plan = {
   id: string; symbol: string; amountTzs: number; cadence: "daily" | "weekly" | "monthly";
   dayOf: number; nextRun: string; status: string; lastError: string | null;
+  /** When the scheduler last attempted it, whether or not it bought. */
+  lastRunAt?: string | null;
   runs: number; misses: number;
 };
 
@@ -37,8 +39,19 @@ const when = (p: Plan, t: (s: string) => string) =>
       ? `${t("every")} ${t(DAYS[((p.dayOf % 7) + 7) % 7])}`
       : `${t("day")} ${p.dayOf} ${t("of each month")}`;
 
+/*
+ * The date and the hour.
+ *
+ * "next 24 Sep" left somebody watching all day to see whether it had
+ * happened, and with nothing bought yet there was no way to tell a plan that
+ * had not reached its time from one that had failed. Shown in East African
+ * time, which is the clock the schedule is set by.
+ */
 const dt = (s: string) =>
-  new Date(s).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  new Date(s).toLocaleString("en-GB", {
+    timeZone: "Africa/Dar_es_Salaam",
+    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false,
+  }).replace(",", " ·");
 
 type Listing = { symbol: string; name: string; logo: string | null; price: number };
 
@@ -185,13 +198,15 @@ export function RecurringBuys({ securities }: { securities: Listing[] }) {
   const active = live.length;
   const perRun = live.reduce((sum, p) => sum + p.amountTzs, 0);
   const soonest = live.map((p) => p.nextRun).sort()[0];
+  const shortDate = (iso: string) =>
+    new Date(iso).toLocaleDateString("en-GB", { timeZone: "Africa/Dar_es_Salaam", day: "numeric", month: "short" });
   const summary = !plans
     ? t("Loading…")
     : active === 0
       ? (plans.length
           ? t("All paused. Tap to see them.")
           : t("Buy the same amount on the same day, without thinking about it."))
-      : `${Math.round(perRun).toLocaleString()} TZS · ${t("next")} ${soonest ? dt(soonest) : "—"}`;
+      : `${Math.round(perRun).toLocaleString()} TZS · ${t("next")} ${soonest ? shortDate(soonest) : "—"}`;
 
   return (
     <section className="mt-3 rounded-2xl border hairline p-3.5 sm:p-5">
@@ -336,6 +351,7 @@ export function RecurringBuys({ securities }: { securities: Listing[] }) {
                   {when(p, t)}
                   {p.status === "active" ? ` · ${t("next")} ${dt(p.nextRun)}` : ` · ${t("paused")}`}
                   {p.runs > 0 && ` · ${p.runs} ${t("bought")}`}
+                  {p.lastRunAt && ` · ${t("last")} ${dt(p.lastRunAt)}`}
                 </span>
                 {p.lastError && p.status === "active" && (
                   <span className="block text-[11px] text-[var(--color-down)]">{p.lastError}</span>

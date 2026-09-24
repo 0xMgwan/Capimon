@@ -82,6 +82,16 @@ export async function GET(req: Request) {
     }
   }
 
+  /*
+   * Recorded whether or not anything happened.
+   *
+   * The empty runs are the point: a standing order that never executes looks
+   * the same as a scheduler that never fired, and only a timestamp tells them
+   * apart.
+   */
+  const { recordRun } = await import("@/lib/jobRuns");
+  await recordRun("tick", true, did);
+
   return NextResponse.json({ ok: true, ...did }, { headers: { "cache-control": "no-store" } });
 }
 

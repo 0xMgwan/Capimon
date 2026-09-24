@@ -43,6 +43,7 @@ type Admin = {
               assets: { asset: string; owed: number; held: number; covered: boolean }[];
               unavailable?: string } | null;
   totalsExtra: { settledOrders: number; failedOrders: number; feesTzs: number };
+  jobs?: { job: string; ranAt: string; ok: boolean; detail: Record<string, unknown> }[];
   fees?: {
     position: { charged: number; broker: number; brokerSwept: number; brokerUnswept: number;
                 brokerDestination: string | null; capx: number; swept: number; unswept: number; destination: string | null;
@@ -186,6 +187,54 @@ export function AdminPanel() {
    * does not fail, it simply never comes back, which is what a spinner
    * sitting there forever was. Ten at a time lands, reports, and carries on.
    */
+  const [tickNote, setTickNote] = useState<string | null>(null);
+
+  const runTick = async () => {
+    setBusy(true); setTickNote("Running…");
+    try {
+      const r = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "run-tick" }),
+      });
+      const j = await r.json();
+      const rec = j.recurring as { ran?: number; bought?: number; skipped?: number } | undefined;
+      setTickNote(j.ok
+        ? [
+            `Hour ${j.hour} EAT.`,
+            rec ? `Standing orders: ${rec.ran ?? 0} due, ${rec.bought ?? 0} bought, ${rec.skipped ?? 0} skipped.` : null,
+            j.digest ? `Digest: ${JSON.stringify(j.digest)}.` : "No digest at this hour.",
+            j.oracle ? "Prices refreshed." : null,
+          ].filter(Boolean).join(" ")
+        : j.error ?? "The run failed.");
+      await load(token);
+    } catch (e) {
+      setTickNote(e instanceof Error ? e.message : "The run failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sendDigest = async () => {
+    setBusy(true); setTickNote("Sending…");
+    try {
+      const r = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "send-digest" }),
+      });
+      const j = await r.json();
+      setTickNote(j.ok
+        ? `Summary sent to ${j.sent} device${j.sent === 1 ? "" : "s"} across ${j.users} holder${j.users === 1 ? "" : "s"}.`
+          + (j.sent === 0 ? " Nobody has turned notifications on yet." : "")
+        : j.error ?? "Could not send.");
+    } catch (e) {
+      setTickNote(e instanceof Error ? e.message : "Could not send.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const probeBanks = async () => {
     setBusy(true);
     const accepted: string[] = [];
@@ -435,6 +484,39 @@ export function AdminPanel() {
         * figure: the gap between them is money the business has earned but has
         * not taken out, and that gap is the thing worth acting on.
         */}
+      {/*
+        * Whether the scheduler is actually running.
+        *
+        * A cron that never fires and a cron that fires and finds nothing to
+        * do produce the same silence — no orders, no emails, no
+        * notifications. The timestamp is what tells them apart, and the
+        * button is what answers the question without waiting an hour for the
+        * next one.
+        */}
+      <div id="jobs" className="mt-4 flex flex-wrap items-center gap-3 scroll-mt-24 rounded-2xl border hairline px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="eyebrow">Scheduled jobs</div>
+          <p className="tnum mt-1 text-[12px] leading-relaxed text-[var(--muted)]">
+            {tickNote ?? (data.jobs?.length
+              ? data.jobs.map((j) =>
+                  `${j.job}: last ran ${new Date(j.ranAt).toLocaleString("en-GB", { timeZone: "Africa/Dar_es_Salaam", dateStyle: "medium", timeStyle: "short" })} EAT`,
+                ).join(" · ")
+              : "No scheduled run has been recorded yet. Standing orders, the price refresh and the portfolio summary all depend on it.")}
+          </p>
+        </div>
+        <span className="flex shrink-0 gap-2">
+          <button onClick={runTick} disabled={busy}
+            className="rounded-full border hairline px-5 py-2.5 text-sm transition-colors hover:surface disabled:opacity-50">
+            {busy ? "Working…" : "Run now"}
+          </button>
+          {/* Twice a day is a long wait to learn whether push works at all. */}
+          <button onClick={sendDigest} disabled={busy}
+            className="rounded-full border hairline px-4 py-2.5 text-sm transition-colors hover:surface disabled:opacity-50">
+            Send summary
+          </button>
+        </span>
+      </div>
+
       {/*
         * Finding out which bank codes nTZS accepts.
         *

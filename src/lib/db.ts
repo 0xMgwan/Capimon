@@ -341,6 +341,23 @@ export async function migrate() {
         )`;
 
       await sql`
+        /*
+         * When each scheduled job last ran, and what it did.
+         *
+         * A cron that is not firing looks exactly like a cron that is firing
+         * and finding nothing to do — standing orders that never execute and
+         * a portfolio summary that never arrives are the same silence. One
+         * row per job, overwritten each run, so the desk can say "last ran at
+         * 09:00, bought two" instead of leaving somebody to guess.
+         */
+        create table if not exists capx.job_runs (
+          job        text primary key,
+          ran_at     timestamptz not null default now(),
+          ok         boolean not null default true,
+          detail     jsonb not null default '{}'::jsonb
+        )`;
+
+      await sql`
         create table if not exists capx.ops_contacts (
           /* Which party these addresses belong to: "fimco" today. */
           party      text primary key,

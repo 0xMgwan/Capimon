@@ -8,6 +8,10 @@ import { useT } from "@/lib/i18n";
 import { haptic } from "@/lib/haptics";
 import { NtzsIcon } from "./icons/Ntzs";
 import { DseLogo } from "./DseLogo";
+import { AssetPicker } from "./AssetPicker";
+import { useMarkets } from "@/lib/useMarkets";
+import { useVenues } from "@/lib/useVenues";
+import { useRouter } from "next/navigation";
 
 /**
  * Buying and selling a tokenised DSE share — CRDB first, now any listing.
@@ -48,6 +52,14 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
 }) {
   const { t } = useT();
   const { account, refresh } = useCapimonAccount();
+  const router = useRouter();
+  const { venues } = useVenues();
+  const { data: marketData } = useMarkets();
+  /* Tradeable venues first, the same ordering the dollar ticket uses. */
+  const picker = useMemo(() => {
+    const rank = (sym: string) => (venues[sym]?.tradeable ? 0 : 1);
+    return [...(marketData?.markets ?? [])].sort((a, b) => rank(a.symbol) - rank(b.symbol));
+  }, [marketData, venues]);
   const [data, setData] = useState<{ market: Market; dse: Dse } | null>(null);
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [raw, setRaw] = useState("");
@@ -199,6 +211,31 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
               Settling at {tzs.format(price)} until the mark is refreshed.
             </span>
           )}
+        </div>
+      )}
+
+      {/*
+        * The same company selector the dollar ticket has.
+        *
+        * It was only ever rendered on the US pages, so somebody looking at
+        * CRDB had to go back to Markets to reach NMB — while a customer on
+        * NVIDIA could switch companies without leaving the ticket. The list
+        * is the same one either way: the shilling shares and the US names
+        * together, which is also the shortest way to show that both are here.
+        *
+        * Shown whether or not this panel draws its own header: on a
+        * security's page the header is drawn above by the intro, and that is
+        * exactly where somebody is most likely to want another company.
+        */}
+      {picker.length > 0 && (
+        <div className="mb-4">
+          <div className="eyebrow mb-2">{t("Company")}</div>
+          <AssetPicker
+            markets={picker}
+            venues={venues}
+            dseSelected={symbol}
+            onSelect={(ticker) => router.push(`/markets/${ticker.toLowerCase()}`)}
+          />
         </div>
       )}
 

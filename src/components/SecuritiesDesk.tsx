@@ -623,7 +623,8 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
 
       {isAdmin && (
         <div id="prices" className="scroll-mt-24">
-          <OracleAdmin token={token} busy={busy} setBusy={setBusy} setErr={setErr} setNote={setNote} />
+          <OracleAdmin token={token} busy={busy} setBusy={setBusy} setErr={setErr} setNote={setNote}
+            external={data.securities.filter((x) => x.kind === "external").map((x) => x.symbol)} />
         </div>
       )}
 
@@ -2006,12 +2007,15 @@ function FileAttestation({ onAct, busy, lockToBroker = false, securities = [] }:
  * expecting an operator to type 2500000000000000000000 invites the kind of
  * mistake that prices a trade a thousand times wrong.
  */
-function OracleAdmin({ token, busy, setBusy, setErr, setNote }: {
+function OracleAdmin({ token, busy, setBusy, setErr, setNote, external }: {
   token: string; busy: boolean;
   setBusy: (b: boolean) => void;
   setErr: (s: string | null) => void;
   setNote: (s: string | null) => void;
+  /** Symbols CAPX prices by hand, which have no feed to age against. */
+  external: string[];
 }) {
+  const externalSymbols = new Set(external);
   const [f, setF] = useState({ symbol: "CRDB", price: "", source: "DSE reference (manual)" });
   const [quotes, setQuotes] = useState<{ symbol: string; price: number; source: string; updatedAt: string; fresh: boolean }[]>([]);
 
@@ -2097,12 +2101,25 @@ function OracleAdmin({ token, busy, setBusy, setErr, setNote }: {
               <span className="tnum flex-1 text-sm">{q.price.toLocaleString()} TZS</span>
               <span className="text-[11px] text-[var(--muted)]">{q.source}</span>
               <span className="text-[11px] text-[var(--muted)]">{dt(q.updatedAt)}</span>
-              {/* A stale mark must be visible: settlement refuses to price
-                  against it, and the desk should say so before someone tries. */}
-              <span className={`rounded-full px-2 py-0.5 text-[10px] uppercase ${
-                q.fresh ? "bg-[var(--color-up)]/10 text-[var(--color-up)]" : "bg-[var(--color-down)]/10 text-[var(--color-down)]"}`}>
-                {q.fresh ? "live" : "stale"}
-              </span>
+              {/*
+                * A stale mark must be visible: settlement refuses to price
+                * against it, and the desk should say so before someone tries.
+                *
+                * Except where there is nothing to go stale against. A DSE
+                * share ages out because the exchange has stopped printing
+                * and our number is drifting from a market that is still
+                * moving; a listing CAPX prices by hand has no such feed, and
+                * trading does not stop for it. Calling that "stale" sent
+                * somebody looking for a fault that was not there.
+                */}
+              {(() => {
+                const manual = externalSymbols.has(q.symbol);
+                const label = manual ? "set by CAPX" : q.fresh ? "live" : "stale";
+                const tone = manual ? "surface text-[var(--muted)]"
+                  : q.fresh ? "bg-[var(--color-up)]/10 text-[var(--color-up)]"
+                  : "bg-[var(--color-down)]/10 text-[var(--color-down)]";
+                return <span className={`rounded-full px-2 py-0.5 text-[10px] uppercase ${tone}`}>{label}</span>;
+              })()}
               <span className="text-[11px] text-[var(--muted)]">edit</span>
             </button>
           ))}
@@ -2110,9 +2127,9 @@ function OracleAdmin({ token, busy, setBusy, setErr, setNote }: {
       )}
       <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
         Entered in whole shillings and stored with its source and timestamp. Press a row to
-        change that security&rsquo;s price. Settlement refuses to price a trade against a mark that
-        has gone stale, and a mark goes stale four days after it is set — a DSE listing is
-        re-marked automatically from the exchange, but a manually priced one has to be set
+        change that security&rsquo;s price. A DSE listing is re-marked automatically from the
+        exchange and stops trading if that stops happening; a listing CAPX prices by hand
+        has no feed to age against, so its mark stands until it is changed here. Set
         again before then or it stops trading.
       </p>
     </section>

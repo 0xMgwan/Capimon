@@ -33,6 +33,9 @@ async function tracked(): Promise<string[]> {
  * platform has a reason to move the mark that settlement prices against.
  */
 function permitted(req: Request): boolean {
+  // Vercel's own scheduler marker, for the same reason as cronAuth: without
+  // CRON_SECRET set there is no Authorization header to check.
+  if (req.headers.get("x-vercel-cron")) return true;
   const given = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
   if (!given) return false;
   for (const secret of [process.env.CRON_SECRET, process.env.ADMIN_TOKEN]) {

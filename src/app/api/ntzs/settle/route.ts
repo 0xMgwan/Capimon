@@ -221,6 +221,9 @@ export async function settlePending(): Promise<{ checked: number; results: Recor
  * minutes for the next pass.
  */
 async function permitted(req: Request): Promise<boolean> {
+  // Vercel's scheduler marker, for deployments with no CRON_SECRET set: the
+  // header is added by the platform and stripped from inbound requests.
+  if (req.headers.get("x-vercel-cron")) return true;
   const given = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
   if (given) {
     for (const secret of [process.env.CRON_SECRET, process.env.ADMIN_TOKEN]) {

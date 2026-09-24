@@ -254,8 +254,28 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
       )}
 
       <label className="mt-3 block">
-        <span className="eyebrow">
-          {t(side === "buy" ? "Spend (TZS)" : sellIn === "tzs" ? "Receive about (TZS)" : "Shares to sell")}
+        {/*
+          * What you hold, in the unit being typed.
+          *
+          * The percentage buttons below already work off the holding, but the
+          * holding itself was nowhere on the panel — so "50%" was half of a
+          * number the seller had to remember from another screen. Shown in
+          * whichever unit the field is asking for, because a shilling value
+          * answers "how much can I take out" and a share count answers "how
+          * much do I own", and the toggle is exactly that question.
+          */}
+        <span className="eyebrow flex items-center justify-between gap-2">
+          <span>{t(side === "buy" ? "Spend (TZS)" : sellIn === "tzs" ? "Receive about (TZS)" : "Shares to sell")}</span>
+          {side === "sell" && held > 0 && (
+            <span className="tnum normal-case tracking-normal text-[var(--muted)]">
+              {t("You hold")}{" "}
+              <span className="text-[var(--fg)]">
+                {sellIn === "tzs"
+                  ? `${Math.floor(held * price).toLocaleString()} TZS`
+                  : `${fmtQty(held)} ${symbol}`}
+              </span>
+            </span>
+          )}
         </span>
         <input
           inputMode="decimal"

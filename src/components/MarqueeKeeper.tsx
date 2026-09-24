@@ -26,6 +26,23 @@ export function MarqueeKeeper() {
     const revive = () => {
       if (document.visibilityState !== "visible") return;
       for (const el of document.querySelectorAll<HTMLElement>(".marquee-track")) {
+        /*
+         * Rebuilt, not just restarted.
+         *
+         * Restarting the animation fixes a clock that stopped. It does
+         * nothing for the other failure, which is the one that shows in an
+         * installed app: the layer comes back from suspension blank, still
+         * animating, painting nothing. Taking the element out of the layout
+         * for a frame forces the layer to be discarded and drawn again,
+         * which is the only thing that reliably brings the content back.
+         *
+         * One frame, at the moment the app is being looked at again, so the
+         * flicker has nothing to flicker against.
+         */
+        el.style.display = "none";
+        void el.offsetHeight;
+        el.style.display = "";
+
         el.style.animation = "none";
         // Read a layout property so the removal is flushed before the restore;
         // without it both writes land in the same frame and nothing restarts.
@@ -59,6 +76,15 @@ export function MarqueeKeeper() {
     // Coming back from the back/forward cache, where the page was never
     // unloaded and no other event fires.
     window.addEventListener("pageshow", revive);
+    /*
+     * An installed app resuming.
+     *
+     * A home-screen app is suspended and restored rather than reloaded, and
+     * which events it fires on the way back is not consistent — focus is the
+     * one that arrives every time. Reviving twice costs a frame; not reviving
+     * leaves an empty strip where the prices should be.
+     */
+    window.addEventListener("focus", revive);
     // A rotation or a keyboard closing re-lays-out the strip; a blanked layer
     // usually repaints here too.
     window.addEventListener("orientationchange", revive);
@@ -67,6 +93,7 @@ export function MarqueeKeeper() {
       window.clearInterval(watch);
       document.removeEventListener("visibilitychange", revive);
       window.removeEventListener("pageshow", revive);
+      window.removeEventListener("focus", revive);
       window.removeEventListener("orientationchange", revive);
     };
   }, []);

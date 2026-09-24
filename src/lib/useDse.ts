@@ -44,8 +44,25 @@ export function useDse(): DseListing[] {
   const [list, setList] = useState<DseListing[]>(cache ?? []);
   useEffect(() => {
     let alive = true;
-    fetchList().then((l) => { if (alive) setList(l); });
-    return () => { alive = false; };
+    const load = () => { fetchList().then((l) => { if (alive) setList(l); }); };
+    load();
+
+    /*
+     * Refetched when the app is looked at again.
+     *
+     * The list was fetched once on mount and held in a module cache, which is
+     * right for a page someone opens and reads. An installed app is not that:
+     * it is suspended and resumed for days, and the shilling prices leading
+     * the ticker would be however old the last session left them.
+     */
+    const onVisible = () => { if (document.visibilityState === "visible") load(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      alive = false;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
   }, []);
   return list;
 }

@@ -423,8 +423,8 @@ function PayoutAccount({ token, isAdmin, saved, onSaved }: {
       .then((j) => {
         if (!alive || !j.ok) return;
         setBanks(j.banks ?? []);
-        setBankNote(j.source === "ntzs" ? null
-          : `Showing ${(j.banks ?? []).length} fallback banks — nTZS's list could not be read.`
+        setBankNote(j.source === "ntzs" || j.source === "verified" ? null
+          : `${(j.banks ?? []).length} banks from Selcom's published list — nTZS exposes no endpoint of its own.`
             + (j.tried?.length ? ` ${j.tried.map((t: { path: string; outcome: string }) => `${t.path}: ${t.outcome}`).join(" · ")}` : "")
             + (j.sample
                 ? ` · catalogue: ${Object.entries(j.sample).map(([k, v]) =>

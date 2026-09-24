@@ -5,7 +5,7 @@ import { omnibusUserId } from "./omnibus";
 import { TZ_BANK_CANDIDATES } from "./tzBanks";
 
 /**
- * Asking nTZS which bank codes it actually knows.
+ * Asking nTZS which of Selcom's bank codes it accepts.
  *
  * A quote prices a payout and moves nothing — it is the one call that can
  * ask "would you accept this?" without anybody being paid. So each candidate
@@ -67,7 +67,27 @@ export async function probeBankCodes(limit = TZ_BANK_CANDIDATES.length): Promise
 /** Saves the codes the rail recognised, so the picker can serve them. */
 export async function saveVerifiedBanks(results: ProbeResult[]): Promise<number> {
   if (!dbConfigured) return 0;
-  const known = results.filter((r) => r.verdict === "known").map((r) => ({ code: r.code, name: r.name }));
+
+  /*
+   * One entry per bank.
+   *
+   * Selcom's list and nTZS's examples disagree on a few — CRDBBANK against
+   * CRDB — so both forms are probed and the rail decides. If it takes both,
+   * the first is kept: a picker offering the same bank twice under two codes
+   * asks the customer a question they have no way to answer.
+   */
+  const seen = new Set<string>();
+  const known = results
+    .filter((r) => r.verdict === "known")
+    .filter((r) => {
+      const key = r.name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map((r) => ({ code: r.code, name: r.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   if (!known.length) return 0;
   await migrate();
   await db()`

@@ -2,19 +2,31 @@ import { NextResponse } from "next/server";
 import { withdrawalBanksDetailed, ntzsConfigured } from "@/lib/ntzs";
 import { currentUser } from "@/lib/auth";
 import { roleOf } from "@/lib/adminAuth";
+import { TZ_BANK_CANDIDATES } from "@/lib/tzBanks";
 
 export const dynamic = "force-dynamic";
 
-/**
- * The only bank codes the nTZS docs name. Used when the bank list cannot be
- * read, so a customer can still pay out to the largest banks rather than
- * facing an empty picker.
+
+/*
+ * Selcom's own published list, which is the rail nTZS pays banks over.
+ *
+ * Used directly rather than as a last resort: nTZS exposes no bank endpoint,
+ * so there is nothing to prefer over it until the desk has probed which
+ * codes the rail accepts — and that probe only narrows this list, never
+ * replaces it with something better sourced.
+ *
+ * The duplicate short forms are dropped here: a picker offering CRDB Bank
+ * twice under two codes asks the customer a question they cannot answer.
  */
-const DOCUMENTED = [
-  { code: "CRDB", name: "CRDB Bank" },
-  { code: "NMB", name: "NMB Bank" },
-  { code: "NBC", name: "NBC Bank" },
-];
+const DOCUMENTED = (() => {
+  const seen = new Set<string>();
+  return TZ_BANK_CANDIDATES.filter((b) => {
+    const key = b.name.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).sort((a, b) => a.name.localeCompare(b.name));
+})();
 
 let cache: { at: number; banks: { code: string; name: string }[] } | null = null;
 
@@ -59,7 +71,7 @@ export async function GET(req: Request) {
   }
   const banks = cache?.banks ?? DOCUMENTED;
   return NextResponse.json({
-    ok: true, banks, source: cache ? "ntzs" : "documented",
+    ok: true, banks, source: cache ? "ntzs" : "selcom",
     /*
      * Why the list is short, for a desk only.
      *

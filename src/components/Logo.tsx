@@ -3,20 +3,24 @@
 export const BRAND = "#6247F5";
 
 /**
- * The CAPX mark: an open counter with an arrow leaving it — capital in
- * motion. The arc uses butt caps so the opening reads as a deliberate gap
- * rather than a rounded gesture.
+ * The CAPX mark: four bars rising, the last one leaving the others behind —
+ * capital in motion, drawn as the thing it measures.
+ *
+ * The lean is what makes it a movement rather than a chart: every bar shears
+ * to the right, so the whole group reads as travelling even standing still.
+ * The dark bars take currentColor and invert with the theme; the leader keeps
+ * the brand indigo in both, because it is the part that means something.
  */
 export function Logo({ className = "h-7 w-7" }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" className={className} role="img" aria-label="CAPX">
-      <path
-        d="M43 12.95A22 22 0 1 0 43 51.05"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="9.5"
-      />
-      <path d="M22 27.6H44V19l17 13-17 13v-8.6H22Z" fill={BRAND} />
+      <g fill="currentColor">
+        <path d="M9 50h8l2.6-12h-8z" />
+        <path d="M21 50h8l2.6-19.9h-8z" />
+        <path d="M33 50h8l2.6-27.7h-8z" />
+        <rect x="7" y="52.6" width="50" height="4.6" />
+      </g>
+      <path d="M45 50h8l2.6-37.1h-8z" fill={BRAND} />
     </svg>
   );
 }

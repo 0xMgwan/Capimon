@@ -79,8 +79,13 @@ export default async function OpengraphImage() {
 
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <svg width="54" height="54" viewBox="0 0 64 64">
-            <path d="M43 12.95A22 22 0 1 0 43 51.05" fill="none" stroke="#0a0a0b" strokeWidth="9.5" />
-            <path d="M22 27.6H44V19l17 13-17 13v-8.6H22Z" fill={BRAND} />
+            <g fill="#0a0a0b">
+              <path d="M9 50h8l2.6-12h-8z" />
+              <path d="M21 50h8l2.6-19.9h-8z" />
+              <path d="M33 50h8l2.6-27.7h-8z" />
+              <rect x="7" y="52.6" width="50" height="4.6" />
+            </g>
+            <path d="M45 50h8l2.6-37.1h-8z" fill={BRAND} />
           </svg>
           <div style={{ display: "flex", fontSize: 44, fontWeight: 700, letterSpacing: -2, color: "#0a0a0b" }}>CAPX</div>
         </div>

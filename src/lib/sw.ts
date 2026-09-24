@@ -477,6 +477,7 @@ export const SW: Record<string, string> = {
   "Could not send a test": "Imeshindikana kutuma jaribio",
   "Sent. It should appear in a moment.": "Imetumwa. Itaonekana hivi punde.",
   "Nothing was sent to this account.": "Hakuna kilichotumwa kwa akaunti hii.",
+  "All paused. Tap to see them.": "Zote zimesimamishwa. Gusa kuziona.",
   "Automatic investing": "Uwekezaji wa kiotomatiki",
   "Invest on payday, every payday.": "Wekeza siku ya mshahara, kila mshahara.",
   "Set an amount and a day, and CAPX buys for you — weekly or monthly, in any listed share. It spends only what is already in your account, and you can pause it whenever you like.":

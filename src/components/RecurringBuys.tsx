@@ -133,6 +133,8 @@ export function RecurringBuys({ securities }: { securities: Listing[] }) {
   const { t } = useT();
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [open, setOpen] = useState(false);
+  /** Whether the section itself is unfolded. Closed until asked for. */
+  const [shown, setShown] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -173,24 +175,69 @@ export function RecurringBuys({ securities }: { securities: Listing[] }) {
   // Nothing listed yet: do not offer a plan for a market that has none.
   if (!securities.length) return null;
 
+  /*
+   * What the fold has to say for itself.
+   *
+   * Not "2 plans" — the number people care about is what is leaving their
+   * balance and when, so the summary carries the money and the next date.
+   */
+  const live = (plans ?? []).filter((p) => p.status === "active");
+  const active = live.length;
+  const perRun = live.reduce((sum, p) => sum + p.amountTzs, 0);
+  const soonest = live.map((p) => p.nextRun).sort()[0];
+  const summary = !plans
+    ? t("Loading…")
+    : active === 0
+      ? (plans.length
+          ? t("All paused. Tap to see them.")
+          : t("Buy the same amount on the same day, without thinking about it."))
+      : `${Math.round(perRun).toLocaleString()} TZS · ${t("next")} ${soonest ? dt(soonest) : "—"}`;
+
   return (
     <section className="mt-3 rounded-2xl border hairline p-3.5 sm:p-5">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="eyebrow">{t("Automatic investing")}</div>
-          <p className="mt-1 text-[12px] leading-relaxed text-[var(--muted)]">
-            {t("Buy the same amount on the same day, without thinking about it.")}
-          </p>
-        </div>
+      {/*
+        * Folded away by default.
+        *
+        * A standing order is set once and then works without being watched,
+        * so on the page somebody opens to see their money it was several
+        * rows of settled business pushing the balance and the holdings down.
+        * The summary is the part worth a glance — how many plans, how much
+        * they move — and the rest opens when it is actually wanted.
+        */}
+      <button
+        onClick={() => { haptic(); setShown((v) => !v); }}
+        aria-expanded={shown}
+        className="flex w-full items-center justify-between gap-3 text-left"
+      >
+        <span className="min-w-0">
+          <span className="eyebrow block">{t("Automatic investing")}</span>
+          <span className="mt-1 block text-[12px] leading-relaxed text-[var(--muted)]">
+            {summary}
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          {active > 0 && (
+            <span className="rounded-full surface px-2 py-0.5 text-[11px] tnum">{active}</span>
+          )}
+          <svg viewBox="0 0 24 24" className={`h-4 w-4 text-[var(--muted)] transition-transform ${shown ? "rotate-180" : ""}`}
+            fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </span>
+      </button>
+
+      {shown && (
+      <div className="mt-3 flex items-center justify-end">
         <button
           onClick={() => { haptic(); setOpen((v) => !v); setErr(null); }}
-          className="shrink-0 rounded-full border hairline px-3.5 py-1.5 text-[12px] font-medium hover:surface"
+          className="rounded-full border hairline px-3.5 py-1.5 text-[12px] font-medium hover:surface"
         >
           {open ? t("Close") : t("New plan")}
         </button>
       </div>
+      )}
 
-      {open && (
+      {shown && open && (
         <div className="mt-3 rounded-2xl surface p-3.5">
           <div>
             <span className="eyebrow">{t("Share")}</span>
@@ -277,7 +324,7 @@ export function RecurringBuys({ securities }: { securities: Listing[] }) {
         </div>
       )}
 
-      {plans && plans.length > 0 && (
+      {shown && plans && plans.length > 0 && (
         <div className="mt-3 grid gap-1.5">
           {plans.map((p) => (
             <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-2xl border hairline px-3.5 py-2.5">

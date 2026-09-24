@@ -16,6 +16,7 @@ const OPS_SECTIONS: DeskSection[] = [
   { id: "position", label: "Position", hint: "Solvency, float and totals" },
   { id: "custody", label: "Custody", hint: "Held at nTZS and onchain" },
   { id: "fees", label: "Fees", hint: "Charged, owed and swept" },
+  { id: "correct", label: "Corrections", hint: "Put a balance right" },
   { id: "email", label: "Email", hint: "Whether notices go out" },
   { id: "records", label: "Records", hint: "Deposits, users, orders, KYC" },
 ];
@@ -484,6 +485,8 @@ export function AdminPanel() {
         * figure: the gap between them is money the business has earned but has
         * not taken out, and that gap is the thing worth acting on.
         */}
+      <Correction token={token} users={data.users} onDone={() => load(token)} />
+
       {/*
         * Whether the scheduler is actually running.
         *
@@ -987,6 +990,134 @@ function Detail({ k, v, mono, link }: { k: string; v: string | null | undefined;
  * in the foreground and shows what SMTP said, so the failure has somewhere to
  * appear before a customer is waiting on it.
  */
+/**
+ * Putting a balance right.
+ *
+ * The ledger is append-only, so a correction is another entry rather than an
+ * edit — the mistake stays visible and the repair sits beside it with the
+ * reason attached. That is the whole point: a balance that can be quietly
+ * rewritten is a balance nobody can audit.
+ *
+ * Deliberately plain and deliberately slow. It asks for a reason before it
+ * will do anything, shows exactly what is about to be posted, and makes the
+ * operator confirm it — this is the one control here that can hand somebody
+ * money or take it away.
+ */
+function Correction({ token, users, onDone }: {
+  token: string;
+  users: { id: string; email: string; name: string | null }[];
+  onDone: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [userId, setUserId] = useState("");
+  const [asset, setAsset] = useState("TZS");
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const matches = query.trim().length < 2 ? [] : users.filter((u) =>
+    `${u.email} ${u.name ?? ""}`.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 5);
+  const chosen = users.find((u) => u.id === userId);
+  const n = Number(amount);
+  const ready = !!userId && Number.isFinite(n) && n !== 0 && reason.trim().length > 3;
+
+  const post = async () => {
+    const who = chosen?.email ?? userId;
+    if (!window.confirm(
+      `${n > 0 ? "Credit" : "Debit"} ${Math.abs(n).toLocaleString()} ${asset} `
+      + `${n > 0 ? "to" : "from"} ${who}?\n\nReason: ${reason.trim()}\n\n`
+      + "This writes a correcting entry to the ledger. It cannot be deleted, only corrected again.",
+    )) return;
+
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ userId, asset, amount: n, reason: reason.trim() }),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error ?? "The correction was refused.");
+      setMsg(j.duplicate
+        ? "That exact correction was already posted — nothing changed."
+        : `Posted. ${who} now holds ${Number(j.balance).toLocaleString()} ${asset}.`);
+      setAmount(""); setReason("");
+      onDone();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "The correction was refused.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section id="correct" className="mt-4 scroll-mt-24 rounded-2xl border hairline px-4 py-3">
+      <div className="eyebrow">Correct a balance</div>
+      <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-[var(--muted)]">
+        Writes a correcting entry against an account — a duplicate credit reversed, a
+        reconciliation, a mistake put right. The ledger keeps both the error and the repair,
+        with the reason you give here attached to it.
+      </p>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-[1.4fr_auto_auto]">
+        <div className="relative">
+          <input
+            value={chosen ? `${chosen.email}` : query}
+            onChange={(e) => { setQuery(e.target.value); setUserId(""); }}
+            placeholder="Customer email"
+            className="w-full rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+          />
+          {!chosen && matches.length > 0 && (
+            <div className="absolute left-0 right-0 z-20 mt-1 overflow-hidden rounded-xl border hairline bg-[var(--bg)] shadow-lg">
+              {matches.map((u) => (
+                <button key={u.id} onClick={() => { setUserId(u.id); setQuery(""); }}
+                  className="block w-full px-3 py-2 text-left text-[13px] hover:surface">
+                  {u.email}{u.name ? ` · ${u.name}` : ""}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <select value={asset} onChange={(e) => setAsset(e.target.value)}
+          className="rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]">
+          <option value="TZS">TZS</option>
+          <option value="USDC">USDC</option>
+        </select>
+
+        <input
+          value={amount}
+          onChange={(e) => setAmount(e.target.value.replace(/[^0-9.-]/g, ""))}
+          placeholder="Amount, − to take back"
+          className="tnum w-48 rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+        />
+      </div>
+
+      <input
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder="Why — this is kept with the entry"
+        className="mt-2 w-full rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+      />
+
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <button onClick={post} disabled={busy || !ready}
+          className="rounded-full bg-[var(--fg)] px-5 py-2 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40">
+          {busy ? "Posting…" : "Post correction"}
+        </button>
+        {ready && !busy && (
+          <span className="tnum text-[12px] text-[var(--muted)]">
+            {n > 0 ? "Credit" : "Debit"} {Math.abs(n).toLocaleString()} {asset}
+            {chosen ? ` ${n > 0 ? "to" : "from"} ${chosen.email}` : ""}
+          </span>
+        )}
+      </div>
+      {msg && <p className="mt-2 text-[12px] text-[var(--muted)]">{msg}</p>}
+    </section>
+  );
+}
+
 function MailCheck({ token }: { token: string }) {
   const [to, setTo] = useState("");
   const [state, setState] = useState<{ ok: boolean; msg: string } | null>(null);

@@ -342,12 +342,8 @@ export const SW: Record<string, string> = {
   // A registered company name. Listed so the coverage check stays honest about
   // what is deliberately untranslated rather than what was forgotten.
   "CRDB Bank Plc": "CRDB Bank Plc",
-  "Tanzania’s largest bank by assets, listed on the Dar es Salaam Stock Exchange. One CRDBt is one share, held in custody and settled in shillings.":
-    "Benki kubwa kuliko zote Tanzania kwa mali, iliyoorodheshwa kwenye Soko la Hisa la Dar es Salaam. CRDBt moja ni hisa moja, inashikiliwa kwa dhamana na hulipwa kwa shilingi.",
-  // Landing reorder, CRDB quick buy and bank-transfer deposits.
-  "Invest locally and globally. Buy and sell tokenized stocks 24/7.":
-    "Wekeza hapa nyumbani na duniani kote. Nunua na uza hisa za kidijitali saa 24/7.",
-  "1 year": "Mwaka 1",
+  "Tanzania’s largest bank by assets. One CRDBt is one share, held in custody for you.":
+    "Benki kubwa zaidi Tanzania kwa mali. CRDBt moja ni hisa moja, inayoshikiliwa kwa niaba yako.",
   "And beyond the DSE": "Na zaidi ya DSE",
   "Browse US equities": "Tazama hisa za Marekani",
   "Buy CRDB in shillings": "Nunua CRDB kwa shilingi",
@@ -400,7 +396,8 @@ export const SW: Record<string, string> = {
   "Choose your bank": "Chagua benki yako",
   "Mobile money": "Pesa ya simu",
   "Bank": "Benki",
-  "Listed on the Dar es Salaam Stock Exchange. One {sym}t is one share, held in custody and settled in shillings.": "Imeorodheshwa kwenye Soko la Hisa la Dar es Salaam. {sym}t moja ni hisa moja, inashikiliwa kwa dhamana na hulipwa kwa shilingi.",
+  "Listed on the Dar es Salaam Stock Exchange. One {sym}t is one share, held in custody.":
+    "Imeorodheshwa kwenye Soko la Hisa la Dar es Salaam. {sym}t moja ni hisa moja, inayoshikiliwa kwa niaba yako.",
   "suspended": "imesimamishwa",
   // How it works, rewritten in plain language.
   "Sign up with your phone number, then verify who you are with a photo of your ID and a quick selfie. It takes a few minutes, and you only do it once.": "Jisajili kwa namba yako ya simu, kisha thibitisha utambulisho wako kwa picha ya kitambulisho na selfie fupi. Inachukua dakika chache, na unafanya mara moja tu.",

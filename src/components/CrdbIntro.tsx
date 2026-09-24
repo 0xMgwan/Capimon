@@ -71,8 +71,17 @@ export function CrdbIntro({ symbol = "CRDB", name = "CRDB Bank Plc" }: { symbol?
           ? t("Tokenised by {issuer}. CAPX buys and holds the token, and prices it in shillings.")
               .replace("{issuer}", d?.issuer ?? t("its issuer"))
           : symbol === "CRDB"
-            ? t("Tanzania’s largest bank by assets, listed on the Dar es Salaam Stock Exchange. One CRDBt is one share, held in custody and settled in shillings.")
-            : t("Listed on the Dar es Salaam Stock Exchange. One {sym}t is one share, held in custody and settled in shillings.").replace("{sym}", symbol)}
+            /*
+              * Two lines, because that is what the space is.
+              *
+              * The clamp was cutting this one mid-sentence — a description
+              * that ends in an ellipsis tells the reader less than a shorter
+              * one that finishes. What mattered is that it is a real share
+              * held for them; "settled in shillings" is said again on the
+              * ticket below, where it is about to matter.
+              */
+            ? t("Tanzania’s largest bank by assets. One CRDBt is one share, held in custody for you.")
+            : t("Listed on the Dar es Salaam Stock Exchange. One {sym}t is one share, held in custody.").replace("{sym}", symbol)}
       </p>
       {/*
         * Said plainly when the exchange is down.

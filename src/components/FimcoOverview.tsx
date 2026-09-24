@@ -423,13 +423,20 @@ function PayoutAccount({ token, isAdmin, saved, onSaved }: {
       .then((j) => {
         if (!alive || !j.ok) return;
         setBanks(j.banks ?? []);
-        setBankNote(j.source === "ntzs" || j.source === "verified" ? null
-          : `${(j.banks ?? []).length} banks from Selcom's published list — nTZS exposes no endpoint of its own.`
-            + (j.tried?.length ? ` ${j.tried.map((t: { path: string; outcome: string }) => `${t.path}: ${t.outcome}`).join(" · ")}` : "")
-            + (j.sample
-                ? ` · catalogue: ${Object.entries(j.sample).map(([k, v]) =>
-                    typeof v === "string" && k.includes(" ") ? `${k} = ${v}` : k).join(", ")}`
-                : ""));
+        /*
+         * A warning only when something is wrong.
+         *
+         * The list is Selcom's published one — the rail's own — so serving it
+         * is the working state, not a degraded one. Shouting about which
+         * nTZS endpoints do not exist under a picker that is full of banks
+         * tells an operator to worry about a thing that is fine. The
+         * plumbing is only worth saying when the list is thin enough to be a
+         * problem.
+         */
+        const list = j.banks ?? [];
+        setBankNote(list.length > 5 ? null
+          : `Only ${list.length} banks — nTZS's list could not be read.`
+            + (j.tried?.length ? ` ${j.tried.map((t: { path: string; outcome: string }) => `${t.path}: ${t.outcome}`).join(" · ")}` : ""));
       })
       .catch(() => { /* the field still accepts a code */ });
     return () => { alive = false; };

@@ -536,6 +536,9 @@ export async function migrate() {
       await sql`create index if not exists orders_user_idx on capx.orders(user_id, created_at desc)`;
       await sql`create index if not exists deposits_user_idx on capx.deposits(user_id, created_at desc)`;
       await sql`create index if not exists deposits_status_idx on capx.deposits(status)`;
+      /* The duplicate check reads this on every settlement pass. */
+      await sql`create index if not exists deposits_ntzs_ref_idx
+                  on capx.deposits(ntzs_reference) where ntzs_reference is not null`;
     })().catch((e) => {
       migrated = null;
       throw e;

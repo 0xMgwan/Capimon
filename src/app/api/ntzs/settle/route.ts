@@ -105,11 +105,24 @@ export async function settlePending(): Promise<{ checked: number; results: Recor
         if (!remote.status) {
           const list = await rampSettlements().catch(() => null);
           const rows = (list?.settlements ?? list?.data ?? []) as Record<string, unknown>[];
+          /*
+           * By identifier only.
+           *
+           * There used to be a fallback here that matched a settlement to a
+           * deposit on the shilling amount alone, to recover rows whose
+           * upstream id we had failed to store. It credited a customer twice:
+           * a prompt that never arrived, a second attempt for the same 2,000
+           * that was paid, and one settlement that matched both rows because
+           * both were for 2,000.
+           *
+           * An amount is not an identity. Recovering an unmatched deposit is
+           * a job for the desk, where somebody looks at it; guessing costs
+           * real money and the guess is wrong exactly when two attempts are
+           * involved, which is the commonest way a deposit goes wrong.
+           */
           const match = rows.find((r) =>
             [r.id, r.reference, r.quoteId, r.settlementId]
-              .some((v) => v && String(v) === d.ntzs_deposit_id)
-            // Last resort: the same shilling amount, still unsettled locally.
-            || Number(r.tzsAmount ?? r.amountTzs ?? r.tzs ?? 0) === d.amount_tzs);
+              .some((v) => v && String(v) === d.ntzs_deposit_id));
           if (match) remote = match;
         }
       } else {
@@ -148,6 +161,29 @@ export async function settlePending(): Promise<{ checked: number; results: Recor
       // in TZS. Nothing is converted here — the swap to USDC happens when the
       // user buys, so the rate they get is the rate at the moment they invest.
       // This is what keeps owed and held both in TZS.
+      /*
+       * One upstream payment credits one account, once.
+       *
+       * The ledger's own ref keys on our deposit row, so two rows pointing at
+       * the same upstream collection each look new to it. This is the guard
+       * that notices: if another settled deposit already carries this
+       * reference, the money arrived once and has been credited once, and
+       * this row is the attempt that was never paid.
+       */
+      if (reference) {
+        const [twin] = await sql<{ id: string }[]>`
+          select id::text from capx.deposits
+           where ntzs_reference = ${reference} and id <> ${d.id}::uuid
+             and status = 'settled' limit 1`;
+        if (twin) {
+          await sql`update capx.deposits
+                       set status = 'duplicate', error = ${`same upstream payment as ${twin.id}`}
+                     where id = ${d.id}`;
+          results.push({ id: d.id, outcome: `duplicate of ${twin.id} — not credited` });
+          continue;
+        }
+      }
+
       if (!viaRamp) {
         const route = d.metadata?.route ?? "treasury";
         await record([

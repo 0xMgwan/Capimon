@@ -42,6 +42,9 @@ const STATUS_LABEL: Record<string, string> = {
   // Declined or ignored on the phone. Still watched server-side, so the wording
   // does not promise it can never arrive.
   expired: "Payment not completed",
+  /* An attempt that was never paid, matched to a payment already credited
+     from another attempt. Says so plainly rather than looking like a loss. */
+  duplicate: "Not charged — same payment as another attempt",
 };
 
 const IN_FLIGHT = new Set(["pending", "uncertain"]);

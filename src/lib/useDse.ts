@@ -10,6 +10,8 @@ import { useEffect, useState } from "react";
  */
 export type DseListing = {
   symbol: string; name: string; logo: string | null; status: string;
+  /** The share token's address on Base, for anyone who wants to check it. */
+  token?: string | null;
   price: number; changePct: number; tradeDate: string | null; feeBps: number;
   /**
    * Where the shown price came from: "dse" live from the exchange, "oracle"

@@ -194,15 +194,20 @@ export async function POST(req: Request) {
      * else. Only the codes the rail recognised are saved.
      */
     if (body.action === "probe-banks") {
-      const { probeBankCodes, saveVerifiedBanks } = await import("@/lib/bankProbe");
-      const results = await probeBankCodes();
-      const saved = await saveVerifiedBanks(results);
+      const { probeBankCodes, saveVerifiedBanks, TOTAL_CANDIDATES } = await import("@/lib/bankProbe");
+      const offset = Math.max(0, Number(body.offset) || 0);
+      // Ten at roughly a second each: comfortably inside a request, and the
+      // desk sees progress instead of a spinner that never resolves.
+      const size = 10;
+      const results = await probeBankCodes(offset, size);
+      const saved = await saveVerifiedBanks(results, offset > 0);
+      const next = offset + size;
       return NextResponse.json({
-        ok: true, saved,
+        ok: true, saved, offset, total: TOTAL_CANDIDATES,
+        next: next < TOTAL_CANDIDATES ? next : null,
         known: results.filter((r) => r.verdict === "known").map((r) => r.code),
-        unclear: results.filter((r) => r.verdict === "unclear").slice(0, 6),
+        unclear: results.filter((r) => r.verdict === "unclear").map((r) => ({ code: r.code, detail: r.detail })),
         rejected: results.filter((r) => r.verdict === "unknown").length,
-        sample: results.slice(0, 3),
       });
     }
 

@@ -405,7 +405,8 @@ export const SW: Record<string, string> = {
   "Sell and withdraw whenever you like": "Uza na toa pesa wakati wowote",
   "Sell some or all of your shares and the shillings are back in your balance straight away. Withdraw to your mobile money or bank account in a couple of taps.": "Uza baadhi au hisa zako zote na shilingi zinarudi kwenye salio lako mara moja. Toa pesa kwenda simu au akaunti ya benki kwa kubofya mara chache.",
   "What does it cost?": "Inagharimu kiasi gani?",
-  "1% when you buy and 1% when you sell. There is no account fee and no monthly charge. Mobile money and bank transfers may carry the network's own small fee, and you always see it before you confirm.": "1% unaponunua na 1% unapouza. Hakuna ada ya akaunti wala malipo ya kila mwezi. Pesa ya simu na uhamisho wa benki huenda zikawa na ada ndogo ya mtandao, na unaiona kila mara kabla ya kuthibitisha.",
+  "2.5% when you buy and 2.5% when you sell — 1% of that goes to the licensed broker that holds the shares. There is no account fee and no monthly charge. Mobile money and bank transfers may carry the network's own small fee, and you always see it before you confirm.":
+    "2.5% unaponunua na 2.5% unapouza — kati ya hizo, 1% huenda kwa dalali mwenye leseni anayeshikilia hisa. Hakuna ada ya akaunti wala malipo ya kila mwezi. Pesa ya simu na uhamisho wa benki huenda zikawa na ada ndogo ya mtandao, na unaiona kila mara kabla ya kuthibitisha.",
   "Is my share a real share?": "Je, hisa yangu ni hisa halisi?",
   "Yes. Every CRDB or NMB share in your account is a real share held for you by a licensed broker, and CAPX never sells more than it holds. You can see the totals on the proof page whenever you want.": "Ndiyo. Kila hisa ya CRDB au NMB kwenye akaunti yako ni hisa halisi inayoshikiliwa kwa ajili yako na dalali mwenye leseni, na CAPX haiuzi zaidi ya inachoshikilia. Unaweza kuona jumla kwenye ukurasa wa uthibitisho wakati wowote.",
   "What happens when I sell?": "Nini kinatokea ninapouza?",
@@ -488,6 +489,17 @@ export const SW: Record<string, string> = {
   "Close": "Funga",
   "Share": "Hisa",
   "Amount each time": "Kiasi kila mara",
+  "Try it": "Ijaribu",
+  "Daily": "Kila siku",
+  "Weekly": "Kila wiki",
+  "Monthly": "Kila mwezi",
+  "every week": "kila wiki",
+  "every month": "kila mwezi",
+  "Each time, about": "Kila mara, takriban",
+  "Invested in a year": "Iliyowekezwa kwa mwaka",
+  "At today's price of": "Kwa bei ya leo ya",
+  "a share. Fractions are fine — you never have to buy a whole one.":
+    "kwa hisa. Sehemu ya hisa inakubalika — huhitaji kununua hisa nzima.",
   "Every day": "Kila siku",
   "every day": "kila siku",
   "Every morning at 9am, on the days the market trades. The trade fee applies each time, so a small daily amount costs more in fees than the same money once a month.":

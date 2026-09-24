@@ -41,11 +41,19 @@ function readVerdict(message: string): { verdict: ProbeResult["verdict"]; detail
   return { verdict: "unclear", detail: message.slice(0, 140) };
 }
 
-export async function probeBankCodes(limit = TZ_BANK_CANDIDATES.length): Promise<ProbeResult[]> {
+/**
+ * Probes a slice of the list.
+ *
+ * In batches because a single pass over forty-odd candidates, spaced under
+ * the rate limit, outlives a serverless request — it does not fail so much
+ * as never answer, which is what a spinner that sits there forever is. The
+ * caller walks through with an offset and sees each batch land.
+ */
+export async function probeBankCodes(offset = 0, limit = TZ_BANK_CANDIDATES.length): Promise<ProbeResult[]> {
   const userId = await omnibusUserId();
   const out: ProbeResult[] = [];
 
-  for (const candidate of TZ_BANK_CANDIDATES.slice(0, limit)) {
+  for (const candidate of TZ_BANK_CANDIDATES.slice(offset, offset + limit)) {
     try {
       await withdrawalQuote({
         userId, amountTzs: PROBE_TZS,
@@ -58,15 +66,23 @@ export async function probeBankCodes(limit = TZ_BANK_CANDIDATES.length): Promise
       out.push({ ...candidate, ...readVerdict(message) });
     }
     // Their lookup is rate limited at 30/min; this stays well inside it.
-    await new Promise((r) => setTimeout(r, 2_200));
+    await new Promise((r) => setTimeout(r, 1_200));
   }
 
   return out;
 }
 
 /** Saves the codes the rail recognised, so the picker can serve them. */
-export async function saveVerifiedBanks(results: ProbeResult[]): Promise<number> {
+export async function saveVerifiedBanks(results: ProbeResult[], merge = false): Promise<number> {
   if (!dbConfigured) return 0;
+
+  // Batches arrive one at a time, so each one adds to what is already saved
+  // rather than replacing it with its own slice.
+  const previous = merge ? await verifiedBanks() : [];
+  results = [
+    ...previous.map((b) => ({ ...b, verdict: "known" as const, detail: "saved" })),
+    ...results,
+  ];
 
   /*
    * One entry per bank.
@@ -109,3 +125,6 @@ export async function verifiedBanks(): Promise<{ code: string; name: string }[]>
     return [];
   }
 }
+
+/** How many candidates there are, so the desk can show progress. */
+export const TOTAL_CANDIDATES = TZ_BANK_CANDIDATES.length;

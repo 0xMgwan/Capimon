@@ -38,6 +38,9 @@ export async function GET() {
     const fallback = q ? null : await readOraclePrice(s.symbol).catch(() => null);
     return {
       symbol: s.symbol, name: s.name, logo: s.logo, status: s.status,
+      /* The token's address, so a customer can count the shares themselves.
+         It is on a public chain; publishing it is the point. */
+      token: s.token,
       kind: s.kind, issuer: s.issuer, buyOnly: s.buyOnly,
       price: q ? currentPrice(q) : fallback?.price ?? 0,
       changePct: q?.changePct ?? 0,

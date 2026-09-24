@@ -179,20 +179,39 @@ export function AdminPanel() {
 
   const [bankNote, setBankNote] = useState<string | null>(null);
 
+  /*
+   * Walked in batches, so each request answers.
+   *
+   * One pass over forty-odd candidates outlives a serverless request — it
+   * does not fail, it simply never comes back, which is what a spinner
+   * sitting there forever was. Ten at a time lands, reports, and carries on.
+   */
   const probeBanks = async () => {
-    setBusy(true); setBankNote("Asking nTZS about each code…");
+    setBusy(true);
+    const accepted: string[] = [];
+    const unclear: string[] = [];
+    let refused = 0;
+    let offset: number | null = 0;
+
     try {
-      const r = await fetch("/api/admin", {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: "probe-banks" }),
-      });
-      const j = await r.json();
-      setBankNote(j.ok
-        ? `${j.saved} codes accepted${j.known?.length ? `: ${j.known.join(", ")}` : ""}. `
-          + `${j.rejected} refused.`
-          + (j.unclear?.length ? ` Unclear: ${j.unclear.map((u: { code: string; detail: string }) => `${u.code} (${u.detail})`).join("; ")}` : "")
-        : j.error ?? "The probe failed.");
+      while (offset !== null) {
+        setBankNote(`Asking nTZS about each code — ${offset} checked so far…`);
+        const r: Response = await fetch("/api/admin", {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: "probe-banks", offset }),
+        });
+        const j = await r.json();
+        if (!j.ok) { setBankNote(j.error ?? "The probe failed."); return; }
+        accepted.push(...(j.known ?? []));
+        refused += j.rejected ?? 0;
+        unclear.push(...(j.unclear ?? []).map((u: { code: string; detail: string }) => `${u.code} (${u.detail})`));
+        offset = j.next;
+      }
+      setBankNote(
+        `${accepted.length} codes accepted${accepted.length ? `: ${accepted.join(", ")}` : ""}. ${refused} refused.`
+        + (unclear.length ? ` Unclear: ${unclear.slice(0, 8).join("; ")}` : ""),
+      );
     } catch (e) {
       setBankNote(e instanceof Error ? e.message : "The probe failed.");
     } finally {

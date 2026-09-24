@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Reveal, RevealWords } from "@/components/Reveal";
 import { ASSETS } from "@/lib/assets";
+import { useDse } from "@/lib/useDse";
 import { useT } from "@/lib/i18n";
 
 /*
@@ -54,7 +55,7 @@ const STEPS = [
 const FAQ = [
   {
     q: "What does it cost?",
-    a: "1% when you buy and 1% when you sell. There is no account fee and no monthly charge. Mobile money and bank transfers may carry the network's own small fee, and you always see it before you confirm.",
+    a: "2.5% when you buy and 2.5% when you sell — 1% of that goes to the licensed broker that holds the shares. There is no account fee and no monthly charge. Mobile money and bank transfers may carry the network's own small fee, and you always see it before you confirm.",
   },
   {
     q: "Is my share a real share?",
@@ -80,6 +81,7 @@ const FAQ = [
 
 export function HowItWorksView() {
   const { t } = useT();
+  const dse = useDse();
   return (
     <div className="mx-auto max-w-[1400px] px-5 pb-24 pt-12 sm:px-8">
       <Reveal>
@@ -129,7 +131,29 @@ export function HowItWorksView() {
               <p className="mt-2 text-[12px] leading-relaxed text-[var(--muted)]">
                 {t("For the curious: every company on CAPX has a public address where its shares can be counted. Tap one to see it.")}
               </p>
+              {/*
+                * The Tanzanian shares first, and by name.
+                *
+                * This list was the US tokens alone, which on a page whose
+                * whole argument is "CRDB is really held" left the shares
+                * somebody came to check missing from the one place they
+                * could check them. They are tokens CAPX issued, so their
+                * addresses are as public as anything here.
+                */}
               <div className="scroll-thin mt-4 max-h-[420px] space-y-2.5 overflow-y-auto pr-1">
+                {dse.filter((d) => d.token).map((d) => (
+                  <div key={d.symbol} className="flex items-center justify-between gap-3 text-xs">
+                    <Link href={`/markets/${d.symbol.toLowerCase()}`} className="flex items-center gap-2 hover:opacity-70">
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-[#0B7D3E]" />
+                      <span className="font-medium">{d.symbol}</span>
+                      <span className="text-[var(--muted)]">{d.kind === "external" ? "" : "· DSE"}</span>
+                    </Link>
+                    <a href={`https://basescan.org/address/${d.token}`} target="_blank" rel="noreferrer"
+                      className="tnum text-[var(--muted)] transition-colors hover:text-[var(--fg)]">
+                      {d.token!.slice(0, 8)}…{d.token!.slice(-4)} ↗
+                    </a>
+                  </div>
+                ))}
                 {ASSETS.map((a) => (
                   <div key={a.symbol} className="flex items-center justify-between gap-3 text-xs">
                     <Link href={`/markets/${a.ticker.toLowerCase()}`} className="flex items-center gap-2 hover:opacity-70">

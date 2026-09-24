@@ -5,6 +5,7 @@ import { motion, useScroll, useTransform } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useDse, type DseListing } from "@/lib/useDse";
 import { DseLogo } from "./DseLogo";
+import { haptic } from "@/lib/haptics";
 import type { Candle } from "@/lib/useMarkets";
 import { useMarkets } from "@/lib/useMarkets";
 import { Reveal, RevealWords } from "./Reveal";
@@ -473,9 +474,30 @@ export function BeliefSection() {
  */
 export function AutoInvestBand() {
   const { t } = useT();
+  const dse = useDse().filter((d) => d.status === "live" && d.price > 0);
+  const [cadence, setCadence] = useState<"daily" | "weekly" | "monthly">("monthly");
+  const [amount, setAmount] = useState(50_000);
+  const [pick, setPick] = useState(0);
+
+  const share = dse[pick % Math.max(1, dse.length)];
+  const perYear = cadence === "daily" ? 250 : cadence === "weekly" ? 52 : 12;
+
+  /*
+   * What the plan buys, at today's price.
+   *
+   * Priced from the live mark rather than a number written into the page:
+   * the whole promise is "a little, often, in a real share", and an
+   * illustration that cannot move is a brochure. Two hundred and fifty days
+   * for daily, because the exchange does not trade at weekends.
+   */
+  const shares = share ? (amount / share.price) : 0;
+  const yearly = amount * perYear;
+
+  const money = (n: number) => `${Math.round(n).toLocaleString()} TZS`;
+
   return (
     <section className="border-y hairline">
-      <div className="mx-auto flex max-w-[1400px] flex-col gap-6 px-5 py-12 sm:px-8 sm:py-16 md:flex-row md:items-center md:justify-between">
+      <div className="mx-auto grid max-w-[1400px] gap-8 px-5 py-12 sm:px-8 sm:py-16 lg:grid-cols-[1fr_minmax(360px,460px)] lg:items-center lg:gap-16">
         <div className="max-w-xl">
           <div className="eyebrow">{t("Automatic investing")}</div>
           <h2 className="display mt-3 text-[clamp(1.5rem,4vw,2.6rem)]">
@@ -484,19 +506,78 @@ export function AutoInvestBand() {
           <p className="mt-3 text-[17px] leading-relaxed text-[var(--muted)]">
             {t("Set an amount and a day, and CAPX buys for you — weekly or monthly, in any listed share. It spends only what is already in your account, and you can pause it whenever you like.")}
           </p>
+          <Link href="/join"
+            className="mt-6 inline-block rounded-full bg-[var(--fg)] px-6 py-3 text-sm font-medium text-[var(--bg)] transition-transform active:scale-95">
+            {t("Open an account")}
+          </Link>
         </div>
-        <div className="shrink-0">
-          <div className="rounded-3xl border hairline p-5 sm:p-6">
-            <div className="tnum text-[13px] text-[var(--muted)]">{t("For example")}</div>
-            <div className="mt-2 text-[22px] font-medium tracking-[-0.03em] sm:text-[26px]">
-              50,000 TZS → CRDB
+
+        {/*
+          * The example, with the reader's hands on it.
+          *
+          * A fixed "50,000 TZS → CRDB" says what the feature is; letting
+          * somebody set their own amount and see it become a number of real
+          * shares at today's price says what it would do for them, which is
+          * the question they actually have.
+          */}
+        <div className="rounded-3xl border hairline p-5 sm:p-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="eyebrow">{t("Try it")}</div>
+            <div className="flex rounded-full surface p-0.5 text-[11px]">
+              {(["daily", "weekly", "monthly"] as const).map((c) => (
+                <button key={c} onClick={() => { haptic(); setCadence(c); }}
+                  className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
+                    cadence === c ? "bg-[var(--bg)] shadow-sm" : "text-[var(--muted)]"
+                  }`}>
+                  {t(c === "daily" ? "Daily" : c === "weekly" ? "Weekly" : "Monthly")}
+                </button>
+              ))}
             </div>
-            <div className="mt-1 text-[13px] text-[var(--muted)]">{t("on the 1st of each month")}</div>
-            <Link href="/join"
-              className="mt-5 inline-block rounded-full bg-[var(--fg)] px-5 py-2.5 text-[13px] font-medium text-[var(--bg)]">
-              {t("Open an account")}
-            </Link>
           </div>
+
+          <div className="tnum mt-4 text-[clamp(1.6rem,5vw,2.2rem)] font-medium leading-none tracking-[-0.04em]">
+            {money(amount)}
+            <span className="ml-2 text-[13px] font-normal text-[var(--muted)]">
+              {t(cadence === "daily" ? "every day" : cadence === "weekly" ? "every week" : "every month")}
+            </span>
+          </div>
+
+          <input
+            type="range" min={1000} max={500_000} step={1000}
+            value={amount}
+            onChange={(e) => setAmount(Number(e.target.value))}
+            aria-label={t("Amount each time")}
+            className="mt-4 w-full accent-[var(--color-accent)]"
+          />
+
+          <div className="mt-4 flex flex-wrap items-center gap-1.5">
+            {dse.slice(0, 5).map((d, i) => (
+              <button key={d.symbol} onClick={() => { haptic(); setPick(i); }}
+                className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                  share?.symbol === d.symbol ? "border-[var(--fg)] bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"
+                }`}>
+                {d.symbol}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)]">
+            <div className="bg-[var(--bg)] px-4 py-3">
+              <div className="eyebrow truncate">{t("Each time, about")}</div>
+              <div className="tnum mt-1 text-lg font-medium">
+                {shares >= 1 ? shares.toFixed(2) : shares.toFixed(4)}
+                <span className="ml-1 text-[12px] font-normal text-[var(--muted)]">{share?.symbol ?? "—"}</span>
+              </div>
+            </div>
+            <div className="bg-[var(--bg)] px-4 py-3">
+              <div className="eyebrow truncate">{t("Invested in a year")}</div>
+              <div className="tnum mt-1 text-lg font-medium">{money(yearly)}</div>
+            </div>
+          </div>
+
+          <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
+            {t("At today's price of")} {share ? money(share.price) : "—"} {t("a share. Fractions are fine — you never have to buy a whole one.")}
+          </p>
         </div>
       </div>
     </section>

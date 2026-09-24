@@ -74,9 +74,25 @@ html.dark {
   color-scheme: dark;
 }
 
-/* `clip` (not `hidden`) — `hidden` makes the element a scroll container, which
-   breaks window scrolling and position:sticky on descendants. */
-html { scroll-behavior: smooth; overflow-x: clip; }
+/*
+ * No overflow on the root, and none on the body.
+ *
+ * Either of them clipping is enough to unseat `position: fixed` on iOS: the
+ * tab bar stops being measured against the viewport and rides up into the
+ * content as the page scrolls, settling back when it stops. The rules are
+ * also where the spec gets slippery — an overflow on one axis can force the
+ * other to compute as `auto`, quietly turning the root into a scroll
+ * container — and a fixed bar that depends on that not happening is a bar
+ * that will drift again on the next engine.
+ *
+ * The sideways clip moved to a wrapper around the page content instead. It
+ * contains everything that could overflow, and the bar is its sibling rather
+ * than its descendant, so nothing can capture it.
+ */
+html { scroll-behavior: smooth; }
+
+/* The clip, on content only. */
+.page-clip { overflow-x: clip; }
 
 /* App-like on phones: fill the dynamic viewport, respect the notch and home
    indicator, and never rubber-band horizontally. */

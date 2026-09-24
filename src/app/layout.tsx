@@ -117,8 +117,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <TickerTape />
             <Nav />
           </div>
-          <main className="safe-x">{children}</main>
-          <Footer />
+          {/*
+            * The horizontal clip lives here, not on the root.
+            *
+            * Everything that can overflow sideways is inside this wrapper,
+            * and the tab bar below is its sibling — so the clip contains the
+            * page without ever becoming the containing block for the one
+            * element that has to stay pinned to the viewport.
+            */}
+          <div className="page-clip">
+            <main className="safe-x">{children}</main>
+            <Footer />
+          </div>
           <MobileTabs />
           <Haptics />
           <ThemeColor />

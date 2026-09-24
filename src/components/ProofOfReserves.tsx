@@ -69,9 +69,7 @@ export function ProofOfReserves() {
       <div className="eyebrow">{t("Transparency")}</div>
       <h1 className="display mt-2 text-[clamp(1.8rem,5vw,3.2rem)]">{t("Every share, accounted for.")}</h1>
       <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-[var(--muted)]">
-        Each tokenised security here is backed one-for-one by shares held with a licensed
-        custodian. This page shows what is held, what has been issued against it, and when
-        custody was last confirmed. It updates on its own and needs no account.
+        {t("Each tokenised security here is backed one-for-one by shares held with a licensed custodian. This page shows what is held, what has been issued against it, and when custody was last confirmed. It updates on its own and needs no account.")}
       </p>
 
       {securities === null ? (
@@ -158,7 +156,7 @@ export function ProofOfReserves() {
                       <Row k={t("Token issued by")} v={s.issuer ?? "—"} />
                       <Row k={t("Selling")} v={s.buyOnly ? t("Opens when the offer closes") : t("Open")} warn={s.buyOnly} />
                       <Row
-                        k="Token"
+                        k={t("Token")}
                         v={s.token_address ? `${s.token_address.slice(0, 10)}…${s.token_address.slice(-6)}` : "—"}
                       />
                     </dl>
@@ -180,16 +178,16 @@ export function ProofOfReserves() {
                 </div>
 
                 <dl className="mt-4 grid min-w-0 gap-1.5 text-[13px] sm:grid-cols-2">
-                  <Row k="Custodian" v={b.custodian ?? "Not yet attested"} />
-                  <Row k="Last verified" v={dt(b.lastVerified)} />
+                  <Row k={t("Custodian")} v={b.custodian ?? t("Not yet attested")} />
+                  <Row k={t("Last verified")} v={dt(b.lastVerified)} />
                   <Row
-                    k="Attestation expires"
-                    v={b.fresh ? dt(b.expiresAt) : "Expired. Issuance is halted"}
+                    k={t("Attestation expires")}
+                    v={b.fresh ? dt(b.expiresAt) : t("Expired. Issuance is halted")}
                     warn={!b.fresh}
                   />
                   <Row
                     k="Token"
-                    v={s.token_address ? `${s.token_address.slice(0, 10)}…${s.token_address.slice(-6)}` : "Not deployed"}
+                    v={s.token_address ? `${s.token_address.slice(0, 10)}…${s.token_address.slice(-6)}` : t("Not deployed")}
                   />
                 </dl>
                   </>

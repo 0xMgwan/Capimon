@@ -1015,18 +1015,33 @@ function Correction({ token, users, onDone }: {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  /*
+   * The direction is a choice, not a character.
+   *
+   * This asked for a signed number and derived "give" or "take back" from
+   * whether a minus had been typed. Somebody meaning to reverse a duplicate
+   * credit typed 2000, and it credited 2,000 more — the preview said so and
+   * the confirmation said so, and both were read past, because a minus sign
+   * in a number field is not where the eye looks for direction. Now it is
+   * two buttons, the amount is always positive, and the sign is worked out
+   * rather than typed.
+   */
+  const [direction, setDirection] = useState<"take" | "give">("take");
 
   const matches = query.trim().length < 2 ? [] : users.filter((u) =>
     `${u.email} ${u.name ?? ""}`.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 5);
   const chosen = users.find((u) => u.id === userId);
-  const n = Number(amount);
-  const ready = !!userId && Number.isFinite(n) && n !== 0 && reason.trim().length > 3;
+  const magnitude = Math.abs(Number(amount));
+  const n = direction === "take" ? -magnitude : magnitude;
+  const ready = !!userId && Number.isFinite(n) && magnitude > 0 && reason.trim().length > 3;
 
   const post = async () => {
     const who = chosen?.email ?? userId;
     if (!window.confirm(
-      `${n > 0 ? "Credit" : "Debit"} ${Math.abs(n).toLocaleString()} ${asset} `
-      + `${n > 0 ? "to" : "from"} ${who}?\n\nReason: ${reason.trim()}\n\n`
+      `${direction === "take" ? "TAKE BACK" : "GIVE"} ${magnitude.toLocaleString()} ${asset} `
+      + `${direction === "take" ? "from" : "to"} ${who}\n\n`
+      + `Their balance goes ${direction === "take" ? "DOWN" : "UP"} by ${magnitude.toLocaleString()} ${asset}.\n\n`
+      + `Reason: ${reason.trim()}\n\n`
       + "This writes a correcting entry to the ledger. It cannot be deleted, only corrected again.",
     )) return;
 
@@ -1056,8 +1071,9 @@ function Correction({ token, users, onDone }: {
       <div className="eyebrow">Correct a balance</div>
       <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-[var(--muted)]">
         Writes a correcting entry against an account — a duplicate credit reversed, a
-        reconciliation, a mistake put right. The ledger keeps both the error and the repair,
-        with the reason you give here attached to it.
+        reconciliation, a mistake put right. Choose which way the money goes; the amount is
+        always a positive number. The ledger keeps both the error and the repair, with the
+        reason you give here attached to it.
       </p>
 
       <div className="mt-3 grid gap-2 sm:grid-cols-[1.4fr_auto_auto]">
@@ -1088,10 +1104,30 @@ function Correction({ token, users, onDone }: {
 
         <input
           value={amount}
-          onChange={(e) => setAmount(e.target.value.replace(/[^0-9.-]/g, ""))}
-          placeholder="Amount, − to take back"
-          className="tnum w-48 rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+          onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+          placeholder="Amount"
+          className="tnum w-40 rounded-xl border hairline bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
         />
+      </div>
+
+      {/* Which way the money goes, said in words and picked deliberately. */}
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:max-w-md">
+        {([
+          ["take", "Take back", "Their balance goes down"],
+          ["give", "Give", "Their balance goes up"],
+        ] as const).map(([k, label, hint]) => (
+          <button key={k} onClick={() => setDirection(k)}
+            className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+              direction === k
+                ? k === "take"
+                  ? "border-[var(--color-down)] bg-[var(--color-down)]/10"
+                  : "border-[var(--color-up)] bg-[var(--color-up)]/10"
+                : "hairline hover:surface"
+            }`}>
+            <span className="block text-[13px] font-medium">{label}</span>
+            <span className="block text-[11px] text-[var(--muted)]">{hint}</span>
+          </button>
+        ))}
       </div>
 
       <input
@@ -1107,9 +1143,10 @@ function Correction({ token, users, onDone }: {
           {busy ? "Posting…" : "Post correction"}
         </button>
         {ready && !busy && (
-          <span className="tnum text-[12px] text-[var(--muted)]">
-            {n > 0 ? "Credit" : "Debit"} {Math.abs(n).toLocaleString()} {asset}
-            {chosen ? ` ${n > 0 ? "to" : "from"} ${chosen.email}` : ""}
+          <span className={`tnum text-[12px] ${
+            direction === "take" ? "text-[var(--color-down)]" : "text-[var(--color-up)]"}`}>
+            {direction === "take" ? "−" : "+"}{magnitude.toLocaleString()} {asset}
+            {chosen ? ` ${direction === "take" ? "from" : "to"} ${chosen.email}` : ""}
           </span>
         )}
       </div>

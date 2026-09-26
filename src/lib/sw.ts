@@ -473,6 +473,10 @@ export const SW: Record<string, string> = {
   "Password changed.": "Nenosiri limebadilishwa.",
   "Could not change your password": "Imeshindikana kubadilisha nenosiri",
   "Max": "Kiwango cha juu",
+  "Someone bought": "Mtu amenunua",
+  "Someone sold": "Mtu ameuza",
+  "just now": "sasa hivi",
+  "ago": "iliyopita",
   "Notifications": "Arifa",
   "Deposits, fills, and your portfolio morning and evening.":
     "Amana, manunuzi, na taarifa ya mali yako asubuhi na jioni.",

@@ -250,3 +250,8 @@ html {
 a, button, input, select, textarea, label, [role="button"] {
   touch-action: manipulation;
 }
+
+/* A line that changes without moving. Used by the trade strip, where a
+   movement would pull the eye off the prices it sits above. */
+@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+.fade-in { animation: fade-in 420ms ease-out; }

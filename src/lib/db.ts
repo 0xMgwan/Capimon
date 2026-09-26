@@ -373,6 +373,72 @@ export async function migrate() {
 
       await sql`
         /*
+         * An external wallet, bound to a verified CAPX account.
+         *
+         * This is where the KYC perimeter reaches self-custody. CAPX will only
+         * ever send a tokenised share to an address that appears here against
+         * an approved account, so "who did we sell to" has the same answer for
+         * a MetaMask buyer as it does for a custodial one.
+         *
+         * The binding is proved by a signature over a nonce we issued, so an
+         * address cannot be claimed by someone who does not hold its key.
+         * One address belongs to one account: linking it elsewhere would make
+         * the KYC record ambiguous at exactly the moment it matters.
+         */
+        create table if not exists capx.wallet_links (
+          id          uuid primary key default gen_random_uuid(),
+          user_id     uuid not null references capx.users(id) on delete cascade,
+          address     text not null,
+          /* The challenge most recently issued for this address. */
+          nonce       text,
+          nonce_at    timestamptz,
+          verified_at timestamptz,
+          revoked_at  timestamptz,
+          created_at  timestamptz not null default now()
+        )`;
+
+      await sql`
+        /*
+         * A share sold to, or bought back from, somebody's own wallet.
+         *
+         * CAPX is the counterparty: there is no pool in these securities and
+         * does not need to be. The price is the DSE close the oracle carries,
+         * converted at the nTZS rate — the same two numbers the custodial
+         * ticket uses, so a share cannot cost one thing in the app and another
+         * on-chain.
+         *
+         * Money moves in two legs and they are deliberately not simultaneous:
+         * the customer pays first, from the address they verified, and CAPX
+         * sends only against a mined receipt it has read itself. The funding
+         * hash is unique in this table, so a receipt replayed twice settles once.
+         */
+        create table if not exists capx.otc_orders (
+          id           uuid primary key default gen_random_uuid(),
+          reference    text not null,
+          user_id      uuid not null references capx.users(id) on delete cascade,
+          address      text not null,
+          security     text not null,
+          side         text not null,
+          /* Shares, and the two numbers that priced them, kept so a fill can
+             be explained months later without re-deriving anything. */
+          qty          numeric not null,
+          price_tzs    numeric not null,
+          usd_per_tzs  numeric not null,
+          gross_usdc   numeric not null,
+          fee_usdc     numeric not null,
+          /* What the customer actually pays, or is actually paid. */
+          net_usdc     numeric not null,
+          status       text not null default 'quoted',
+          funding_tx   text,
+          settle_tx    text,
+          failure      text,
+          expires_at   timestamptz not null,
+          settled_at   timestamptz,
+          created_at   timestamptz not null default now()
+        )`;
+
+      await sql`
+        /*
          * A one-time ticket to set a new password.
          *
          * The token itself is never stored — only its SHA-256 — so a leaked
@@ -588,6 +654,17 @@ export async function migrate() {
       await sql`create index if not exists comments_symbol_idx
                   on capx.comments(symbol, created_at desc)`;
       await sql`create index if not exists comments_user_idx on capx.comments(user_id)`;
+      await sql`create unique index if not exists wallet_links_address_idx
+                  on capx.wallet_links (lower(address)) where revoked_at is null`;
+      await sql`create index if not exists wallet_links_user_idx on capx.wallet_links(user_id)`;
+      await sql`create unique index if not exists otc_reference_idx on capx.otc_orders(reference)`;
+      /* The replay guard: one funding receipt settles one order, ever. */
+      await sql`create unique index if not exists otc_funding_idx
+                  on capx.otc_orders (lower(funding_tx)) where funding_tx is not null`;
+      await sql`create index if not exists otc_user_idx on capx.otc_orders(user_id, created_at desc)`;
+      /* Read on every quote to work out what inventory is already spoken for. */
+      await sql`create index if not exists otc_open_idx
+                  on capx.otc_orders(security, status) where status in ('quoted', 'funded')`;
       await sql`create unique index if not exists password_resets_token_idx
                   on capx.password_resets(token_hash)`;
       await sql`create index if not exists password_resets_user_idx

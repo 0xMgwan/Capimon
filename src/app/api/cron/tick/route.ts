@@ -53,6 +53,21 @@ export async function GET(req: Request) {
   }
 
   /*
+   * Lapsed self-custody quotes, also on every run.
+   *
+   * A quote holds inventory for fifteen minutes so two buyers cannot both be
+   * promised the last share. Left alone, an abandoned one holds it forever —
+   * the reservation query already ignores expired rows, so this is only about
+   * the status reading honestly on the desk.
+   */
+  try {
+    const { expireStaleQuotes } = await import("@/lib/otc");
+    did.otcExpired = await expireStaleQuotes();
+  } catch (e) {
+    did.otcExpired = { error: e instanceof Error ? e.message : "failed" };
+  }
+
+  /*
    * 2. The marks settlement prices against, once each morning before the
    *    portfolio note goes out — a summary computed from yesterday's prices
    *    would be worse than no summary.

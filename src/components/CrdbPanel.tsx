@@ -9,6 +9,7 @@ import { haptic } from "@/lib/haptics";
 import { NtzsIcon } from "./icons/Ntzs";
 import { DseLogo } from "./DseLogo";
 import { AssetPicker } from "./AssetPicker";
+import { SelfCustodyTicket } from "./SelfCustodyTicket";
 import { useMarkets } from "@/lib/useMarkets";
 import { useVenues } from "@/lib/useVenues";
 import { useRouter } from "next/navigation";
@@ -51,6 +52,17 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
   showHeader?: boolean;
 }) {
   const { t } = useT();
+  /*
+   * Where the share ends up.
+   *
+   * The same ticket, not a second one. A DSE share bought here is the same
+   * share at the same published price whichever way it settles; "account"
+   * writes a ledger row in shillings, "wallet" sends the token itself and is
+   * paid for in USDC, because that is what a wallet holds. Everything above
+   * this line — the company, the price, the fee — is shared, which is the
+   * point of keeping it here.
+   */
+  const [dest, setDest] = useState<"account" | "wallet">("account");
   const { account, refresh } = useCapimonAccount();
   const router = useRouter();
   const { venues } = useVenues();
@@ -274,6 +286,33 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
       </div>
       )}
 
+      {/*
+        * Delivery, chosen once and shown plainly.
+        *
+        * Buried behind an "advanced" disclosure this would be a feature
+        * nobody finds; given its own page it would be a second desk. One row
+        * of two words, under the side tabs, where the next decision belongs.
+        */}
+      <div className="mt-3 flex items-center gap-2">
+        <span className="eyebrow shrink-0">{t("Deliver to")}</span>
+        <span className="inline-flex overflow-hidden rounded-full border hairline text-[11px]">
+          {([["account", t("CAPX account")], ["wallet", t("My wallet")]] as const).map(([k, label]) => (
+            <button
+              key={k}
+              onClick={() => { haptic(); setDest(k); setMsg(null); }}
+              className={`px-3 py-1 transition-colors ${
+                dest === k ? "bg-[var(--fg)] text-[var(--bg)]" : "text-[var(--muted)] hover:surface"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </span>
+      </div>
+
+      {dest === "wallet" ? (
+        <SelfCustodyTicket symbol={symbol} priceTzs={price} side={side} />
+      ) : (
+      <>
       {side === "sell" && (
         <div className="mt-3 flex gap-1 text-[11px]">
           {(["tzs", "shares"] as const).map((k) => (
@@ -426,7 +465,11 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
           {msg.text}
         </p>
       )}
+      </>
+      )}
 
+      {/* Custody is the same fact whichever way the share is delivered, so
+          the footer belongs to both tickets. */}
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t hairline pt-3 text-[11px] text-[var(--muted)]">
         <span>
           {m ? `${fmtQty(m.availableShares)} of ${fmtQty(m.custodyShares)} shares available` : "—"}

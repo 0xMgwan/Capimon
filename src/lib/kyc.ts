@@ -28,6 +28,15 @@ export type KycSubmission = {
   /** Bytes, so a list can show sizes without carrying the images. */
   doc_bytes: number;
   selfie_bytes: number;
+  /**
+   * Addresses this applicant has proved they control.
+   *
+   * A reviewer deciding whether to verify somebody who will hold securities
+   * in their own wallet should be able to see which wallet, without going to
+   * another screen to find out. Null where there is none, which is the usual
+   * case for a custodial customer.
+   */
+  wallets: string[] | null;
   /** A reviewer needs to know whether the document is a picture or a PDF. */
   doc_mime: string;
 };
@@ -134,7 +143,14 @@ export async function listKyc(limit = 50): Promise<KycSubmission[]> {
            k.doc_type, k.doc_number, k.status, k.reason,
            k.reviewed_by, k.reviewed_at, k.created_at,
            length(k.doc_image) as doc_bytes, length(k.selfie_image) as selfie_bytes,
-           k.doc_mime
+           k.doc_mime,
+           /* Live wallet links only: a revoked one is not something this
+              person currently holds, and showing it would invite a reviewer
+              to approve against an address that no longer applies. */
+           (select json_agg(w.address order by w.verified_at)
+              from capx.wallet_links w
+             where w.user_id = k.user_id
+               and w.verified_at is not null and w.revoked_at is null) as wallets
       from capx.kyc_submissions k
       join capx.users u on u.id = k.user_id
      order by (k.status = 'pending') desc, k.created_at desc

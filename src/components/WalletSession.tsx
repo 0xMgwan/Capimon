@@ -30,7 +30,7 @@ import { haptic } from "@/lib/haptics";
 export function WalletSession() {
   const { t } = useT();
   const { account, refresh, signOut } = useCapimonAccount();
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, status } = useAccount();
   const { signMessageAsync } = useSignMessage();
 
   const [offer, setOffer] = useState<{ address: string; label: string } | null>(null);
@@ -64,13 +64,35 @@ export function WalletSession() {
     return () => { alive = false; };
   }, [account, address, isConnected, t]);
 
-  /* 2 — the wallet that opened this session has gone. */
+  /*
+   * 2 — the wallet that opened this session has gone.
+   *
+   * "Gone" has to mean gone, and wagmi says `disconnected` on its way to
+   * saying `connected`: a reload starts disconnected, spends a moment
+   * reconnecting, and only then reports the wallet it has had all along.
+   * Acting on the first reading would sign somebody out during their own
+   * page load, and a thirty-day session would then ask for a signature on
+   * every visit. A delay is the correct behaviour here rather than a
+   * workaround: the question is whether the wallet is gone, and that is not
+   * answerable from one reading.
+   *
+   * So: only from a state that was genuinely connected, only once the status
+   * has settled on disconnected, and only if it is still disconnected a few
+   * seconds later.
+   */
   useEffect(() => {
-    if (isConnected) { wasConnected.current = true; return; }
-    if (!wasConnected.current) return;
-    wasConnected.current = false;
-    if (account?.user.via === "wallet") void signOut();
-  }, [isConnected, account, signOut]);
+    if (status === "connected") { wasConnected.current = true; return; }
+    if (status !== "disconnected" || !wasConnected.current) return;
+    if (account?.user.via !== "wallet") return;
+
+    const id = window.setTimeout(() => {
+      wasConnected.current = false;
+      void signOut();
+    }, 4000);
+    // The effect's own cleanup is the guard: any change of status — including
+    // reconnecting after all — tears this down before it fires.
+    return () => window.clearTimeout(id);
+  }, [status, account, signOut]);
 
   /*
    * Re-opened on request.

@@ -35,6 +35,8 @@ type KycRow = {
   doc_type: string; doc_number: string | null; status: string; reason: string | null;
   reviewed_by: string | null; reviewed_at: string | null; created_at: string;
   doc_bytes: number; selfie_bytes: number; doc_mime: string;
+  /** Addresses this applicant has proved they control, live links only. */
+  wallets: string[] | null;
 };
 
 type Admin = {
@@ -908,6 +910,32 @@ export function AdminPanel() {
                     {k.name ?? "no name"} · {k.doc_type}
                     {k.doc_number ? ` · ${k.doc_number}` : ""}
                   </div>
+                  {/*
+                    * The wallet, where there is one.
+                    *
+                    * Approving this applicant is what lets CAPX send a
+                    * security to an address they hold, so which address that
+                    * is belongs on the row where the decision is made rather
+                    * than on a screen the reviewer has to go and find. Linked
+                    * to the explorer, because the first thing anybody wants
+                    * to know about an address is what else it has done.
+                    */}
+                  {(k.wallets ?? []).length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {k.wallets!.map((w) => (
+                        <a
+                          key={w}
+                          href={`https://basescan.org/address/${w}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="tnum rounded-full surface px-2 py-0.5 text-[10px] hover:text-[var(--color-accent)]"
+                          title={w}
+                        >
+                          {w.slice(0, 6)}…{w.slice(-4)} ↗
+                        </a>
+                      ))}
+                    </div>
+                  )}
                   {k.reason && (
                     <div className="mt-1 text-[11px] text-[var(--color-down)]">{k.reason}</div>
                   )}

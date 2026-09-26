@@ -13,7 +13,7 @@ import { db, migrate } from "./db";
  * twice — or a settle triggered from two places at once — cannot deliver the
  * same news twice.
  */
-export type NotifyKind = "deposit" | "trade" | "withdrawal" | "alert";
+export type NotifyKind = "deposit" | "trade" | "withdrawal" | "alert" | "mention";
 
 export async function notify(input: {
   userId: string;
@@ -23,15 +23,23 @@ export async function notify(input: {
   ref?: string;
   /** The holding this concerns, when it concerns one. */
   asset?: string | null;
-  /** Where tapping the push notification should land. */
+  /** Where tapping this should land — in the bell as well as in a push. */
   url?: string;
+  /**
+   * The handle behind it, where a person caused it.
+   *
+   * Stored rather than resolved later so the row survives the actor changing
+   * their username, and so the bell can show a face without a lookup per row.
+   */
+  actor?: string | null;
 }) {
   try {
     await migrate();
     const rows = await db()`
-      insert into capx.notifications (user_id, kind, title, body, ref, asset)
+      insert into capx.notifications (user_id, kind, title, body, ref, asset, url, actor)
       values (${input.userId}, ${input.kind}, ${input.title}, ${input.body ?? null},
-              ${input.ref ?? null}, ${input.asset ?? null})
+              ${input.ref ?? null}, ${input.asset ?? null}, ${input.url ?? null},
+              ${input.actor ?? null})
       on conflict (ref) where ref is not null do nothing
       returning id`;
 
@@ -64,8 +72,9 @@ export async function notify(input: {
 export async function listNotifications(userId: string, limit = 30) {
   await migrate();
   return db()<{ id: string; kind: string; title: string; body: string | null;
-                asset: string | null; read_at: string | null; created_at: string }[]>`
-    select id::text, kind, title, body, asset, read_at, created_at
+                asset: string | null; url: string | null; actor: string | null;
+                read_at: string | null; created_at: string }[]>`
+    select id::text, kind, title, body, asset, url, actor, read_at, created_at
       from capx.notifications
      where user_id = ${userId}
      -- Sort by the timestamp the list actually displays. Ordering by id sorts

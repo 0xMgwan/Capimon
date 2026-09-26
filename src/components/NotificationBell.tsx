@@ -1,15 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { pollWhileVisible } from "@/lib/usePoll";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { useT } from "@/lib/i18n";
 import { AssetLogo } from "./AssetLogo";
+import { Avatar } from "./Avatar";
 import { useDse, dseLogoOf } from "@/lib/useDse";
 import { useMarkets } from "@/lib/useMarkets";
 
 type Item = {
   id: string; kind: string; title: string; body: string | null; asset: string | null;
+  url: string | null; actor: string | null;
   read_at: string | null; created_at: string;
 };
 
@@ -65,11 +68,47 @@ const MONEY_MARK: Record<string, { className: string; draw: React.ReactNode }> =
       </>
     ),
   },
+  /*
+   * Somebody said your name.
+   *
+   * It used to arrive as the hazard triangle every other alert wears, which
+   * is the wrong register entirely — being mentioned is sociable, not a
+   * warning. This is only the fallback: where the sender has a picture, that
+   * is what the row shows, and the mark below is for when they have not set
+   * one yet.
+   */
+  mention: {
+    className: "bg-[var(--color-accent)]/12 text-[var(--color-accent)]",
+    draw: (
+      <>
+        <circle cx="8" cy="8" r="2.4" />
+        <path d="M10.4 5.6v3.2a1.9 1.9 0 0 0 3.8 0V8a6.2 6.2 0 1 0-2.5 4.97" />
+      </>
+    ),
+  },
 };
 
-function KindIcon({ kind, asset }: { kind: string; asset: string | null }) {
+function KindIcon({ kind, asset, actor }: { kind: string; asset: string | null; actor: string | null }) {
   const { data } = useMarkets();
   const dse = useDse();
+
+  /*
+   * A mention wears the sender's face.
+   *
+   * Avatar falls back to their initials on a stable colour when there is no
+   * photograph, which is both prettier and more useful than a generic glyph —
+   * the same person is always the same colour, so a regular correspondent is
+   * recognisable before the sentence is read. The picture comes from the
+   * avatar route rather than inside the row, so thirty rows are not thirty
+   * base64 photographs of JSON.
+   */
+  if (kind === "mention" && actor) {
+    return (
+      <span className="mt-0.5 shrink-0">
+        <Avatar src={`/api/avatar?u=${encodeURIComponent(actor)}`} name={actor} email={actor} size={32} />
+      </span>
+    );
+  }
 
   if (kind === "trade" && asset) {
     const m = data?.markets.find((x) => x.symbol === asset || x.ticker === asset);
@@ -214,8 +253,17 @@ export function NotificationBell() {
           ) : (
             <div className="scroll-thin max-h-[60vh] divide-y divide-[var(--border)] overflow-y-auto">
               {items.map((n) => (
-                <div key={n.id} className="flex gap-3 px-4 py-3">
-                  <KindIcon kind={n.kind} asset={n.asset} />
+                /*
+                 * A row goes where the event is.
+                 *
+                 * The destination was only ever attached to the push payload,
+                 * so the same mention opened the right page from a phone's
+                 * lock screen and did nothing at all from inside the app —
+                 * which is the one place somebody is already looking. Rows
+                 * without a destination stay inert rather than pretending.
+                 */
+                <Row key={n.id} item={n} onNavigate={() => setOpen(false)}>
+                  <KindIcon kind={n.kind} asset={n.asset} actor={n.actor} />
                   <span className="min-w-0 flex-1">
                     <span className="block text-[13px] font-medium leading-snug">{n.title}</span>
                     {n.body && (
@@ -227,12 +275,36 @@ export function NotificationBell() {
                       })}
                     </span>
                   </span>
-                </div>
+                </Row>
               ))}
             </div>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * One line of the list, clickable when the event has a place to be.
+ *
+ * `Link` rather than a router push so a long-press still offers "open in new
+ * tab", and so the hash in a mention's destination is handled the way every
+ * other link in the app handles one.
+ */
+function Row({ item, onNavigate, children }: {
+  item: { url: string | null };
+  onNavigate: () => void;
+  children: React.ReactNode;
+}) {
+  if (!item.url) return <div className="flex gap-3 px-4 py-3">{children}</div>;
+  return (
+    <Link
+      href={item.url}
+      onClick={onNavigate}
+      className="flex gap-3 px-4 py-3 text-left transition-colors hover:surface"
+    >
+      {children}
+    </Link>
   );
 }

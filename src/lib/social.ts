@@ -90,10 +90,11 @@ export async function postComment(userId: string, symbol: string, body: string):
        where lower(username) = any(${mentions}) and id <> ${userId}::uuid`;
     const who = author?.username ? `@${author.username}` : author?.name ?? "Someone";
     await Promise.all(targets.map((t) => notify({
-      userId: t.id, kind: "alert", ref: `mention:${row.id}:${t.id}`, asset: symbol.toUpperCase(),
+      userId: t.id, kind: "mention", ref: `mention:${row.id}:${t.id}`, asset: symbol.toUpperCase(),
       title: `${who} mentioned you`,
       body: text.slice(0, 140),
       url: `/markets/${symbol.toLowerCase()}#comments`,
+      actor: author?.username ?? null,
     })));
   }
 

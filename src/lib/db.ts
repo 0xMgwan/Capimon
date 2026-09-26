@@ -146,6 +146,13 @@ export async function migrate() {
           body        text,
           /* Unique per event, so a cron that runs twice cannot notify twice. */
           ref         text,
+          /* Where tapping this should land. Stored, not only pushed: a row in
+             the bell that says something happened and then refuses to show it
+             is a worse answer than no row. */
+          url         text,
+          /* The handle behind it, where a person caused it — so a mention can
+             wear their face rather than a generic warning triangle. */
+          actor       text,
           read_at     timestamptz,
           created_at  timestamptz not null default now()
         )`;
@@ -620,6 +627,13 @@ export async function migrate() {
              the company rather than a generic arrow. Null on deposits and
              withdrawals, which are about money rather than a share. */
           "asset text",
+          /* Where tapping the row should go. It was only ever passed to the
+             push payload, so the same event opened the right page from a
+             phone's lock screen and nothing at all from inside the app. */
+          "url text",
+          /* Who did it, where a person did. A mention wearing the sender's
+             face is recognisable before the sentence is read. */
+          "actor text",
         ],
       };
       for (const [table, columns] of Object.entries(lateColumns)) {
@@ -627,6 +641,30 @@ export async function migrate() {
           await sql.unsafe(`alter table capx.${table} add column if not exists ${col}`);
         }
       }
+
+      /*
+       * Mentions that predate the columns above.
+       *
+       * They were written as generic alerts with nowhere to go and nobody
+       * attached, so in the bell they are a hazard triangle that does not
+       * open. The handle is recoverable from the title CAPX wrote and the
+       * destination from the security, so they are repaired rather than left
+       * as a pocket of rows that behave differently from every later one.
+       *
+       * Idempotent by the `actor is null` guard: once repaired, no row
+       * matches again.
+       */
+      await sql`
+        update capx.notifications
+           set kind  = 'mention',
+               actor = substring(title from '^@([A-Za-z0-9._-]+) '),
+               url   = case when asset is not null
+                            then '/markets/' || lower(asset) || '#comments'
+                            else url end
+         where kind = 'alert'
+           and actor is null
+           and title like '@%% mentioned you'
+           and substring(title from '^@([A-Za-z0-9._-]+) ') is not null`;
 
       // Indexes last: every column they reference exists by now.
       await sql`create index if not exists sessions_user_idx on capx.sessions(user_id)`;

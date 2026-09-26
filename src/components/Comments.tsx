@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Avatar } from "./Avatar";
 import { ProfileCard } from "./ProfileCard";
+import { pollWhileVisible } from "@/lib/usePoll";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { useT } from "@/lib/i18n";
 import { haptic } from "@/lib/haptics";
@@ -67,14 +68,40 @@ export function Comments({ symbol }: { symbol: string }) {
   const [token, setToken] = useState<string | null>(null);
   const boxRef = useRef<HTMLTextAreaElement>(null);
 
+  /*
+   * Loaded once, then kept current while somebody is actually reading it.
+   *
+   * Three conditions, and each one is there to keep this cheap. It polls only
+   * while the thread is open — a folded section is a count nobody is watching
+   * change. It polls only while the tab is visible, so a phone in a pocket
+   * asks for nothing. And twenty-five seconds is slow enough that a page left
+   * open all afternoon is a couple of hundred requests, not a couple of
+   * thousand.
+   *
+   * The reply replaces the list only when it differs, so a poll that finds
+   * nothing new does not re-render the thread under someone mid-sentence.
+   */
   useEffect(() => {
     let alive = true;
-    fetch(`/api/comments?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => { if (alive) setComments(j.ok ? j.comments : []); })
-      .catch(() => { if (alive) setComments([]); });
-    return () => { alive = false; };
-  }, [symbol]);
+    const load = () => {
+      fetch(`/api/comments?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => {
+          if (!alive) return;
+          const next: Comment[] = j.ok ? j.comments : [];
+          setComments((prev) => {
+            if (prev && prev.length === next.length
+                && prev.every((c, i) => c.id === next[i]?.id)) return prev;
+            return next;
+          });
+        })
+        .catch(() => { if (alive) setComments((prev) => prev ?? []); });
+    };
+    load();
+    if (!open) return () => { alive = false; };
+    const stop = pollWhileVisible(load, 25_000);
+    return () => { alive = false; stop(); };
+  }, [symbol, open]);
 
   /*
    * The word being typed after an @, if there is one.

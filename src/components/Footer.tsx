@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Lockup } from "./Logo";
 import { useT } from "@/lib/i18n";
+import { useCapimonAccount } from "@/lib/useCapimonAccount";
 
 /*
  * Links a customer would look for. The developer ones — the B20 spec, the
@@ -35,11 +36,47 @@ const COLS = [
 
 export function Footer() {
   const { t } = useT();
+  const { account } = useCapimonAccount();
   /* The desks are an internal tool, not a page of the site: a column of
      customer links and a marketing disclosure under a custody ledger is
      furniture from somewhere else. */
   const path = usePathname();
   if (path?.startsWith("/admin")) return null;
+
+  /*
+   * Signed in, the footer is mostly furniture.
+   *
+   * Its link columns are an invitation to an app somebody is already inside —
+   * Markets, Portfolio and Account are two taps away on the bottom bar, and
+   * "Open an account" is addressed to a person who has one. Under every
+   * screen, that is a wall of grey to scroll past on a phone.
+   *
+   * What does not go is the disclosure. Shares carrying no dividend
+   * entitlement and being a representation rather than registered
+   * shareholding is a thing a customer is entitled to find, and it belongs
+   * somewhere less than a tap away rather than nowhere. So it keeps one line
+   * of links, and the sentences live at /terms where they are anyway.
+   */
+  if (account) {
+    return (
+      <footer className="border-t hairline">
+        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-2 px-5 py-5 text-[11px] text-[var(--muted)] sm:px-8">
+          {[
+            { label: "Terms of service", href: "/terms" },
+            { label: "Privacy policy", href: "/privacy" },
+            { label: "Proof of reserves", href: "/proof" },
+            { label: "How it works", href: "/how-it-works" },
+          ].map((l) => (
+            <Link key={l.href} href={l.href} className="transition-colors hover:text-[var(--fg)]">
+              {t(l.label)}
+            </Link>
+          ))}
+          <span className="tnum ml-auto">CAPX © {new Date().getFullYear()}</span>
+        </div>
+      </footer>
+    );
+  }
+
   return (
     <footer className="border-t hairline">
       <div className="mx-auto max-w-[1400px] px-5 py-10 sm:px-8 sm:py-16">

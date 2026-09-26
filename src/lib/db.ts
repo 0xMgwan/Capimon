@@ -374,6 +374,10 @@ export async function migrate() {
           /* Handles named with @, stored so a mention survives a later
              username change and can be highlighted without re-parsing. */
           mentions   jsonb not null default '[]'::jsonb,
+          /* What this is a reply to. One level: a thread of threads is a
+             different product, and a flat list of replies under a comment is
+             what a conversation about a share actually looks like. */
+          parent_id  uuid references capx.comments(id) on delete cascade,
           deleted_at timestamptz,
           created_at timestamptz not null default now()
         )`;
@@ -622,6 +626,10 @@ export async function migrate() {
              its own route. */
           "document text", "document_name text",
         ],
+        comments: [
+          /* Replies arrived after the table did. */
+          "parent_id uuid references capx.comments(id) on delete cascade",
+        ],
         notifications: [
           /* Which holding a trade notification concerns, so the row can show
              the company rather than a generic arrow. Null on deposits and
@@ -692,6 +700,8 @@ export async function migrate() {
       await sql`create index if not exists comments_symbol_idx
                   on capx.comments(symbol, created_at desc)`;
       await sql`create index if not exists comments_user_idx on capx.comments(user_id)`;
+      await sql`create index if not exists comments_parent_idx
+                  on capx.comments(parent_id, created_at) where parent_id is not null`;
       await sql`create unique index if not exists wallet_links_address_idx
                   on capx.wallet_links (lower(address)) where revoked_at is null`;
       await sql`create index if not exists wallet_links_user_idx on capx.wallet_links(user_id)`;

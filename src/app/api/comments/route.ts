@@ -43,7 +43,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    const result = await postComment(user.id, String(body.symbol ?? ""), String(body.body ?? ""));
+    // `parentId` makes it a reply; absent, it starts a thread.
+    const result = await postComment(
+      user.id,
+      String(body.symbol ?? ""),
+      String(body.body ?? ""),
+      body.parentId ? String(body.parentId) : null,
+    );
     if ("error" in result) return bad(result.error, "refused", 429);
     return NextResponse.json({ ok: true, comment: result });
   } catch (e) {

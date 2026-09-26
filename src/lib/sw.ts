@@ -736,4 +736,8 @@ export const SW: Record<string, string> = {
   "To your own wallet": "Kwenye pochi yako mwenyewe",
   "Verify your identity to trade": "Thibitisha utambulisho wako ili kufanya biashara",
   "sent to your own wallet": "inatumwa kwenye pochi yako mwenyewe",
+  /* Replies. */
+  "Reply": "Jibu",
+  "Replying to": "Unamjibu",
+  "Write your reply…": "Andika jibu lako…",
 };

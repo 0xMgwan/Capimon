@@ -23,6 +23,10 @@ export type Comment = {
   createdAt: string;
   author: { username: string | null; name: string | null; avatar: string | null };
   mine?: boolean;
+  /** What this answers, or null for a comment that starts a thread. */
+  parentId: string | null;
+  /** Answers to this one, oldest first. Only ever one level deep. */
+  replies?: Comment[];
 };
 
 /** Handles named with @ in a comment, lowercased and deduplicated. */
@@ -31,29 +35,65 @@ export function parseMentions(body: string): string[] {
   return [...new Set(found.map((m) => m.slice(1).toLowerCase()))].slice(0, 10);
 }
 
+/**
+ * The thread for a security: top-level comments newest first, each with its
+ * answers oldest first.
+ *
+ * Both orders are deliberate and they disagree on purpose. A list of comments
+ * is a feed — the newest thing is the thing you have not read. A list of
+ * replies is a conversation, and a conversation read newest-first is
+ * nonsense.
+ *
+ * One query, assembled here. Fetching replies per comment would be a query
+ * per row for a list that is capped at a hundred.
+ */
 export async function listComments(symbol: string, viewerId?: string): Promise<Comment[]> {
   if (!dbConfigured) return [];
   await migrate();
   const rows = await db()<{ id: string; symbol: string; body: string; mentions: string[];
                             created_at: string; username: string | null; name: string | null;
-                            avatar: string | null; user_id: string }[]>`
+                            avatar: string | null; user_id: string; parent_id: string | null }[]>`
     select c.id::text, c.symbol, c.body, c.mentions, c.created_at,
-           u.username, u.name, u.avatar, c.user_id::text
+           u.username, u.name, u.avatar, c.user_id::text, c.parent_id::text
       from capx.comments c join capx.users u on u.id = c.user_id
      where c.symbol = ${symbol.toUpperCase()} and c.deleted_at is null
      order by c.created_at desc
-     limit 100`;
+     limit 200`;
 
-  return rows.map((r) => ({
+  const all = rows.map((r) => ({
     id: r.id, symbol: r.symbol, body: r.body,
     mentions: Array.isArray(r.mentions) ? r.mentions : [],
     createdAt: r.created_at,
     author: { username: r.username, name: r.name, avatar: r.avatar },
     mine: !!viewerId && r.user_id === viewerId,
+    parentId: r.parent_id,
+    replies: [] as Comment[],
   }));
+
+  const byId = new Map(all.map((c) => [c.id, c]));
+  const top: Comment[] = [];
+  for (const c of all) {
+    /*
+     * A reply whose parent is gone is promoted rather than dropped.
+     *
+     * Deleting a comment should not silently take other people's answers
+     * with it — they were written by somebody else and may stand on their
+     * own.
+     */
+    const parent = c.parentId ? byId.get(c.parentId) : undefined;
+    if (parent) parent.replies!.push(c);
+    else top.push(c);
+  }
+  for (const c of top) c.replies!.reverse();
+  return top.slice(0, 100);
 }
 
-export async function postComment(userId: string, symbol: string, body: string): Promise<Comment | { error: string }> {
+export async function postComment(
+  userId: string,
+  symbol: string,
+  body: string,
+  parentId?: string | null,
+): Promise<Comment | { error: string }> {
   const text = body.trim().replace(/\s+\n/g, "\n").slice(0, MAX_COMMENT);
   if (text.length < 2) return { error: "Say something first." };
 
@@ -68,9 +108,27 @@ export async function postComment(userId: string, symbol: string, body: string):
   }
 
   const mentions = parseMentions(text);
+
+  /*
+   * A reply to a reply attaches to the same parent.
+   *
+   * The thread stays one level deep by construction rather than by the page
+   * remembering not to nest — otherwise the first person to answer an answer
+   * creates a shape nothing here knows how to draw.
+   */
+  let parent: string | null = null;
+  if (parentId) {
+    const [p] = await sql<{ id: string; parent_id: string | null }[]>`
+      select id::text, parent_id::text from capx.comments
+       where id = ${parentId}::uuid and symbol = ${symbol.toUpperCase()} and deleted_at is null`;
+    if (!p) return { error: "That comment is no longer there." };
+    parent = p.parent_id ?? p.id;
+  }
+
   const [row] = await sql<{ id: string; created_at: string }[]>`
-    insert into capx.comments (symbol, user_id, body, mentions)
-    values (${symbol.toUpperCase()}, ${userId}::uuid, ${text}, ${JSON.stringify(mentions)}::jsonb)
+    insert into capx.comments (symbol, user_id, body, mentions, parent_id)
+    values (${symbol.toUpperCase()}, ${userId}::uuid, ${text}, ${JSON.stringify(mentions)}::jsonb,
+            ${parent}::uuid)
     returning id::text, created_at`;
 
   const [author] = await sql<{ username: string | null; name: string | null; avatar: string | null }[]>`
@@ -83,13 +141,38 @@ export async function postComment(userId: string, symbol: string, body: string):
    * a phone rather than waiting to be discovered. Never to the author: being
    * told you mentioned yourself is noise.
    */
+  const { notify } = await import("./notify");
+  const who = author?.username ? `@${author.username}` : author?.name ?? "Someone";
+  const told = new Set<string>([userId]);
+
+  /*
+   * Being answered is news too.
+   *
+   * Somebody who asked a question and was replied to has no way of finding
+   * out except by going back and looking, which is the thing notifications
+   * exist to save them. Told before the mentions and recorded in `told`, so
+   * a reply that also names them arrives once rather than twice.
+   */
+  if (parent) {
+    const [target] = await sql<{ id: string }[]>`
+      select user_id::text as id from capx.comments where id = ${parent}::uuid`;
+    if (target && !told.has(target.id)) {
+      told.add(target.id);
+      await notify({
+        userId: target.id, kind: "mention", ref: `reply:${row.id}`, asset: symbol.toUpperCase(),
+        title: `${who} replied to you`,
+        body: text.slice(0, 140),
+        url: `/markets/${symbol.toLowerCase()}#comments`,
+        actor: author?.username ?? null,
+      });
+    }
+  }
+
   if (mentions.length) {
-    const { notify } = await import("./notify");
     const targets = await sql<{ id: string; username: string }[]>`
       select id::text, username from capx.users
        where lower(username) = any(${mentions}) and id <> ${userId}::uuid`;
-    const who = author?.username ? `@${author.username}` : author?.name ?? "Someone";
-    await Promise.all(targets.map((t) => notify({
+    await Promise.all(targets.filter((t) => !told.has(t.id)).map((t) => notify({
       userId: t.id, kind: "mention", ref: `mention:${row.id}:${t.id}`, asset: symbol.toUpperCase(),
       title: `${who} mentioned you`,
       body: text.slice(0, 140),
@@ -103,6 +186,8 @@ export async function postComment(userId: string, symbol: string, body: string):
     createdAt: row.created_at,
     author: { username: author?.username ?? null, name: author?.name ?? null, avatar: author?.avatar ?? null },
     mine: true,
+    parentId: parent,
+    replies: [],
   };
 }
 

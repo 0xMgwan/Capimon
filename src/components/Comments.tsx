@@ -27,6 +27,8 @@ type Comment = {
   createdAt: string;
   author: { username: string | null; name: string | null; avatar: string | null };
   mine?: boolean;
+  parentId?: string | null;
+  replies?: Comment[];
 };
 
 const MAX = 500;
@@ -62,6 +64,8 @@ export function Comments({ symbol }: { symbol: string }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
+  /** The comment being answered, or null when writing a new one. */
+  const [replyTo, setReplyTo] = useState<Comment | null>(null);
 
   /* The @ autocomplete. */
   const [handles, setHandles] = useState<{ username: string; name: string | null; avatar: string | null }[]>([]);
@@ -143,16 +147,29 @@ export function Comments({ symbol }: { symbol: string }) {
 
   const post = async () => {
     setBusy(true); setErr(null);
+    const parent = replyTo;
     try {
       const r = await fetch("/api/comments", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ symbol, body }),
+        body: JSON.stringify({ symbol, body, parentId: parent?.id ?? null }),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error ?? t("Could not post your comment"));
-      setComments((c) => [j.comment, ...(c ?? [])]);
+      /*
+       * Placed where it will be after the next load, rather than at the top.
+       * A reply that appears above the thread it answers and then jumps into
+       * place on the next poll reads as a bug.
+       */
+      setComments((c) => {
+        const list = c ?? [];
+        if (!parent) return [j.comment, ...list];
+        const anchor = parent.parentId ?? parent.id;
+        return list.map((x) =>
+          x.id === anchor ? { ...x, replies: [...(x.replies ?? []), j.comment] } : x);
+      });
       setBody("");
+      setReplyTo(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : t("Could not post your comment"));
     } finally {
@@ -161,7 +178,9 @@ export function Comments({ symbol }: { symbol: string }) {
   };
 
   const remove = async (id: string) => {
-    setComments((c) => (c ?? []).filter((x) => x.id !== id));
+    setComments((c) => (c ?? [])
+      .filter((x) => x.id !== id)
+      .map((x) => ({ ...x, replies: (x.replies ?? []).filter((r) => r.id !== id) })));
     await fetch("/api/comments", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -169,7 +188,9 @@ export function Comments({ symbol }: { symbol: string }) {
     }).catch(() => { /* it is gone from the page either way */ });
   };
 
-  const count = comments?.length ?? 0;
+  // Replies count: somebody deciding whether to open the thread is asking how
+  // much is in it, not how many of it are top-level.
+  const count = (comments ?? []).reduce((n, c) => n + 1 + (c.replies?.length ?? 0), 0);
 
   return (
     <section id="comments" className="mt-3 scroll-mt-24 rounded-3xl border hairline p-4 sm:p-5">
@@ -196,11 +217,29 @@ export function Comments({ symbol }: { symbol: string }) {
         <>
           {account ? (
             <div className="relative mt-3">
+              {/* What this will answer, and a way out of answering it. */}
+              {replyTo && (
+                <div className="mb-1.5 flex items-center gap-2 rounded-full surface px-3 py-1.5 text-[11.5px]">
+                  <span className="min-w-0 flex-1 truncate text-[var(--muted)]">
+                    {t("Replying to")}{" "}
+                    <span className="text-[var(--fg)]">
+                      {replyTo.author.username ? `@${replyTo.author.username}` : t("A customer")}
+                    </span>
+                  </span>
+                  <button
+                    onClick={() => { setReplyTo(null); setBody(""); }}
+                    className="shrink-0 text-[var(--muted)] hover:text-[var(--fg)]"
+                    aria-label={t("Cancel")}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
               <textarea
                 ref={boxRef}
                 value={body}
                 onChange={(e) => onType(e.target.value, e.target.selectionStart ?? 0)}
-                placeholder={t("Say something. Use @ to mention someone.")}
+                placeholder={replyTo ? t("Write your reply…") : t("Say something. Use @ to mention someone.")}
                 rows={2}
                 className="w-full resize-none rounded-2xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
               />
@@ -234,40 +273,48 @@ export function Comments({ symbol }: { symbol: string }) {
             </p>
           )}
 
-          <div className="mt-3 grid gap-3">
+          <div className="mt-4 grid gap-3.5">
             {(comments ?? []).map((c) => (
-              <div key={c.id} className="flex gap-2.5">
-                <Avatar src={c.author.avatar} name={c.author.name} email={c.author.username ?? ""} size={28} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2">
-                    <button
-                      onClick={() => c.author.username && setViewing(c.author.username)}
-                      disabled={!c.author.username}
-                      className="text-[13px] font-medium hover:underline disabled:no-underline"
-                    >
-                      {c.author.username ? `@${c.author.username}` : c.author.name ?? t("A customer")}
-                    </button>
-                    <span className="text-[11px] text-[var(--muted)]">{ago(c.createdAt, t)}</span>
-                    {c.mine && (
-                      <button onClick={() => void remove(c.id)}
-                        className="ml-auto text-[11px] text-[var(--muted)] hover:text-[var(--color-down)]">
-                        {t("Remove")}
-                      </button>
-                    )}
+              <div key={c.id}>
+                <One
+                  c={c}
+                  canReply={!!account}
+                  onView={setViewing}
+                  onReply={(target) => {
+                    setReplyTo(target);
+                    // Prefilled, because a reply to somebody is nearly always
+                    // addressed to them — and it can be deleted if it is not.
+                    setBody(target.author.username ? `@${target.author.username} ` : "");
+                    requestAnimationFrame(() => boxRef.current?.focus());
+                  }}
+                  onRemove={remove}
+                  t={t}
+                />
+                {(c.replies?.length ?? 0) > 0 && (
+                  /*
+                    Indented once and no further. The rule is a thread line,
+                    not decoration: it is what says these belong to the
+                    comment above rather than to the list.
+                  */
+                  <div className="mt-3 grid gap-3 border-l hairline pl-3 ml-[14px]">
+                    {c.replies!.map((r) => (
+                      <One
+                        key={r.id}
+                        c={r}
+                        small
+                        canReply={!!account}
+                        onView={setViewing}
+                        onReply={(target) => {
+                          setReplyTo(target);
+                          setBody(target.author.username ? `@${target.author.username} ` : "");
+                          requestAnimationFrame(() => boxRef.current?.focus());
+                        }}
+                        onRemove={remove}
+                        t={t}
+                      />
+                    ))}
                   </div>
-                  <p className="mt-0.5 whitespace-pre-line break-words text-[13.5px] leading-snug">
-                    {/* Handles become taps; everything else is plain text, which
-                        is also what stops a comment from carrying markup. */}
-                    {c.body.split(/(@[a-z0-9._-]{3,20})/gi).map((part, i) =>
-                      part.startsWith("@") ? (
-                        <button key={i} onClick={() => setViewing(part.slice(1))}
-                          className="text-[var(--color-accent)] hover:underline">{part}</button>
-                      ) : (
-                        <span key={i}>{part}</span>
-                      ),
-                    )}
-                  </p>
-                </div>
+                )}
               </div>
             ))}
           </div>
@@ -276,5 +323,66 @@ export function Comments({ symbol }: { symbol: string }) {
 
       {viewing && <ProfileCard username={viewing} onClose={() => setViewing(null)} />}
     </section>
+  );
+}
+
+/**
+ * One comment, at either level.
+ *
+ * A reply is the same object drawn slightly smaller — same author, same
+ * handles, same removal. Making it a separate component would have meant two
+ * places to change when any of that does.
+ */
+function One({ c, small, canReply, onView, onReply, onRemove, t }: {
+  c: Comment;
+  small?: boolean;
+  canReply: boolean;
+  onView: (handle: string) => void;
+  onReply: (c: Comment) => void;
+  onRemove: (id: string) => void;
+  t: (s: string) => string;
+}) {
+  return (
+    <div className="flex gap-2.5">
+      <Avatar src={c.author.avatar} name={c.author.name} email={c.author.username ?? ""} size={small ? 24 : 28} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <button
+            onClick={() => c.author.username && onView(c.author.username)}
+            disabled={!c.author.username}
+            className={`font-medium hover:underline disabled:no-underline ${small ? "text-[12.5px]" : "text-[13px]"}`}
+          >
+            {c.author.username ? `@${c.author.username}` : c.author.name ?? t("A customer")}
+          </button>
+          <span className="text-[11px] text-[var(--muted)]">{ago(c.createdAt, t)}</span>
+          {c.mine && (
+            <button onClick={() => void onRemove(c.id)}
+              className="ml-auto text-[11px] text-[var(--muted)] hover:text-[var(--color-down)]">
+              {t("Remove")}
+            </button>
+          )}
+        </div>
+        <p className={`mt-0.5 whitespace-pre-line break-words leading-snug ${small ? "text-[13px]" : "text-[13.5px]"}`}>
+          {/* Handles become taps; everything else is plain text, which is
+              also what stops a comment from carrying markup. */}
+          {c.body.split(/(@[a-z0-9._-]{3,20})/gi).map((part, i) =>
+            part.startsWith("@") ? (
+              <button key={i} onClick={() => onView(part.slice(1))}
+                className="text-[var(--color-accent)] hover:underline">{part}</button>
+            ) : (
+              <span key={i}>{part}</span>
+            ),
+          )}
+        </p>
+        {canReply && (
+          <button
+            onClick={() => onReply(c)}
+            className="mt-1 text-[11px] font-medium text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
+          >
+            {t("Reply")}
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

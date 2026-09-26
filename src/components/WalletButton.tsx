@@ -100,7 +100,15 @@ export function WalletButton() {
               <div className="mt-1 truncate text-sm">{account.user.email}</div>
               <div className="tnum mt-2 text-sm">{usd(account.total)}</div>
             </div>
+            {/*
+              The places that are not on the bottom bar.
+              Three tabs cover home, markets and account; everything else has
+              to be reachable from somewhere, and a menu already attached to
+              the customer's own face is where people look for the rest.
+            */}
             <a href="/portfolio" className="mt-1 block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">{t("Portfolio")}</a>
+            <a href="/leaderboard" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">{t("Top traders")}</a>
+            <a href="/how-it-works" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">{t("How it works")}</a>
             <a href="/settings" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">{t("Settings")}</a>
             <a href="/join" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">{t("Fund with shillings")}</a>
             <button

@@ -44,7 +44,7 @@ export function Leaderboard() {
 
   return (
     <div className="mx-auto max-w-[760px] px-4 pb-24 pt-4 sm:px-8 sm:pt-10">
-      <div className="eyebrow">{t("Leaderboard")}</div>
+      <div className="eyebrow">{t("Top traders")}</div>
       <h1 className="display mt-2 text-[clamp(1.6rem,4.5vw,2.6rem)]">{t("Who is trading.")}</h1>
       <p className="mt-3 max-w-xl text-[14px] leading-relaxed text-[var(--muted)]">
         {t("Only accounts that have chosen to publish their trading appear here. You can turn yours on, or off again, in settings.")}

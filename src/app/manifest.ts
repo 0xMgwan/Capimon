@@ -43,7 +43,7 @@ export default function manifest(): MetadataRoute.Manifest {
     shortcuts: [
       { name: "Markets", url: "/markets" },
       { name: "Portfolio", url: "/portfolio" },
-      { name: "Leaderboard", url: "/leaderboard" },
+      { name: "Top traders", url: "/leaderboard" },
     ],
   };
 }

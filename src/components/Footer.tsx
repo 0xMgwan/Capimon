@@ -20,7 +20,7 @@ const COLS = [
       { label: "NMB Bank", href: "/markets/nmb" },
       { label: "Open an account", href: "/join" },
       { label: "Portfolio", href: "/portfolio" },
-      { label: "Leaderboard", href: "/leaderboard" },
+      { label: "Top traders", href: "/leaderboard" },
     ],
   },
   {

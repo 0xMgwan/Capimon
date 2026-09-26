@@ -67,6 +67,22 @@ export function CustodialPortfolio() {
           * single card draws that line, and the shares/cash strip sits
           * inside it as a panel rather than beside it as a fragment.
           */}
+        {/*
+          * Greeted by the name they chose.
+          *
+          * The handle was here already, as a small grey line that read as a
+          * label on the card rather than as anything addressed to the person
+          * holding the phone. Same information, said as a greeting — and the
+          * handle first, because a username is what somebody picked to be
+          * called and an email address is what they had to type.
+          */}
+        <p className="mb-2 text-[13px] text-[var(--muted)]">
+          {t("Welcome back")}
+          {account.user.username
+            ? <span className="text-[var(--fg)]">, {account.user.username}</span>
+            : account.user.name ? <span className="text-[var(--fg)]">, {account.user.name.split(/\s+/)[0]}</span> : ""}
+        </p>
+
         <div className="rounded-3xl border hairline p-4 sm:p-5">
         <div className="flex items-center justify-between gap-3 text-[12px] text-[var(--muted)]">
           <span className="flex min-w-0 items-center gap-2">
@@ -141,9 +157,6 @@ export function CustodialPortfolio() {
         * external listing that has closed, or a suspended share, would take
         * the money and refuse the order every month.
         */}
-      {/* Everyone else, so the app is a market rather than a spreadsheet. */}
-      <MarketRoom />
-
       {/* Anchored, so a link can land on the standing orders directly. */}
       <div id="recurring" className="scroll-mt-24" />
       <RecurringBuys securities={dse
@@ -197,6 +210,8 @@ export function CustodialPortfolio() {
         ) : null}
       />
 
+      {/* Everyone else, once you have finished reading your own numbers. */}
+      <MarketRoom />
     </div>
   );
 }

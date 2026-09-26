@@ -494,7 +494,7 @@ export const SW: Record<string, string> = {
   "Volume": "Kiasi",
   "Realised": "Iliyopatikana",
   "This account keeps its trading private.": "Akaunti hii inaweka manunuzi yake faragha.",
-  "Leaderboard": "Jedwali la viongozi",
+  "Top traders": "Wafanyabiashara bora",
   "Who is trading.": "Nani anafanya biashara.",
   "Only accounts that have chosen to publish their trading appear here. You can turn yours on, or off again, in settings.":
     "Ni akaunti zilizochagua kuonyesha manunuzi yake pekee zinazoonekana hapa. Unaweza kuwasha au kuzima yako kwenye mipangilio.",
@@ -728,9 +728,6 @@ export const SW: Record<string, string> = {
   "Welcome back": "Karibu tena",
   "Happening now": "Yanayoendelea sasa",
   "See all": "Ona yote",
-  "Add money and make your first buy": "Weka pesa na ununue mara yako ya kwanza",
-  "Set an amount and a day. CAPX buys for you, from what is already in your account, and you can pause it whenever you like.": "Weka kiasi na siku. CAPX inanunua kwa niaba yako, kutoka kile kilichopo kwenye akaunti yako, na unaweza kusitisha wakati wowote.",
-  "Set one up": "Weka moja",
   /* The compact currency row on the ticket. */
   "To your CAPX balance": "Kwenye salio lako la CAPX",
   "To your own wallet": "Kwenye pochi yako mwenyewe",

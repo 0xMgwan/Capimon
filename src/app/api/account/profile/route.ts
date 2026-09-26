@@ -98,8 +98,20 @@ export async function PATCH(req: Request) {
      * Off unless explicitly set true — a missing value must never be read as
      * consent.
      */
+    /*
+     * Applied outside `patch`, and counted anyway.
+     *
+     * This used to write the row and then fall through to the "nothing to
+     * update" refusal below, because the refusal counted only the columns in
+     * `patch` and this one is not there. The client saw a failure, snapped
+     * the switch back, and never refetched — so somebody turning their
+     * trading on watched it turn itself off, while the database had in fact
+     * said yes. Anything applied here has to be counted here.
+     */
+    let touched = false;
     if (body.shareActivity !== undefined) {
       await sql`update capx.users set share_activity = ${body.shareActivity === true} where id = ${user.id}`;
+      touched = true;
     }
 
     if (body.name !== undefined) patch.name = String(body.name ?? "").trim().slice(0, 80) || null;
@@ -139,7 +151,7 @@ export async function PATCH(req: Request) {
       patch.avatar = avatar;
     }
 
-    if (Object.keys(patch).length === 0) return bad("Nothing to update.");
+    if (Object.keys(patch).length === 0 && !touched) return bad("Nothing to update.");
 
     for (const [column, value] of Object.entries(patch)) {
       // Column names come from the fixed set above, never from the request.

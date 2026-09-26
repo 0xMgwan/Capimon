@@ -8,6 +8,7 @@ import { Footer } from "@/components/Footer";
 import { TickerTape } from "@/components/TickerTape";
 import { DseTape } from "@/components/DseTape";
 import { MobileTabs } from "@/components/MobileTabs";
+import { SafeArea } from "@/components/SafeArea";
 import { ThemeColor } from "@/components/ThemeColor";
 import { AppLaunch } from "@/components/AppLaunch";
 import { Haptics } from "@/components/Haptics";
@@ -130,6 +131,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Footer />
           </div>
           <MobileTabs />
+          <SafeArea />
           <Haptics />
           <ThemeColor />
           <MarqueeKeeper />

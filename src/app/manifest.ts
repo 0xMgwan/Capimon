@@ -19,8 +19,15 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "CAPX · Capital in Motion",
     short_name: "CAPX",
     description: "Tanzanian and US shares, in shillings.",
-    // The app opens on the markets, where people act; the landing page is for visitors.
-    start_url: "/markets",
+    /*
+     * The installed app opens on the portfolio.
+     *
+     * Whoever added CAPX to their home screen has an account, and what they
+     * open it for is their own balance — the markets are one tap from there.
+     * A signed-out visitor landing here is redirected to the account screen
+     * by the page itself, which is the right first step for them anyway.
+     */
+    start_url: "/portfolio",
     scope: "/",
     display: "standalone",
     orientation: "portrait",
@@ -36,6 +43,7 @@ export default function manifest(): MetadataRoute.Manifest {
     shortcuts: [
       { name: "Markets", url: "/markets" },
       { name: "Portfolio", url: "/portfolio" },
+      { name: "Leaderboard", url: "/leaderboard" },
     ],
   };
 }

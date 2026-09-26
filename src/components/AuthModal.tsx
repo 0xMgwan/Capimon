@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { useConnect } from "wagmi";
 import { base } from "wagmi/chains";
@@ -28,6 +29,7 @@ const ICONS: Record<string, (p: { className?: string }) => React.ReactElement> =
  */
 export function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useT();
+  const router = useRouter();
   const { connectors, connectAsync, isPending } = useConnect();
   /** What went wrong with the last attempt, said out loud rather than swallowed. */
   const [walletErr, setWalletErr] = useState<string | null>(null);
@@ -88,7 +90,19 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
             {custodialEnabled && (
               <>
                 <div className="mt-5">
-                  <AccountForm mode={mode} onModeChange={setMode} compact onDone={async () => { await refresh(); onClose(); }} />
+                  {/*
+                    Signing in lands on the portfolio.
+                    Closing the modal onto whatever page the sign-in happened
+                    to start from leaves somebody who just authenticated
+                    looking at a marketing section. Their balance is the
+                    answer to why they signed in.
+                  */}
+                  <AccountForm
+                    mode={mode}
+                    onModeChange={setMode}
+                    compact
+                    onDone={async () => { await refresh(); onClose(); router.push("/portfolio"); }}
+                  />
                 </div>
 
                 <div className="my-5 flex items-center gap-3">

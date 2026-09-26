@@ -94,12 +94,36 @@ html { scroll-behavior: smooth; }
 /* The clip, on content only. */
 .page-clip { overflow-x: clip; }
 
+/*
+ * No rubber-band.
+ *
+ * Overscrolling past the end of the document bounces the whole page on iOS,
+ * and a fixed element bounces with it — the other half of the drifting
+ * bottom bar, and the half that shows up in the installed app where there is
+ * no toolbar to blame.
+ */
+html, body { overscroll-behavior-y: none; }
+
 /* App-like on phones: fill the dynamic viewport, respect the notch and home
    indicator, and never rubber-band horizontally. */
 @supports (height: 100dvh) {
   .min-h-screen-d { min-height: 100dvh; }
 }
-.safe-b { padding-bottom: env(safe-area-inset-bottom); }
+/*
+ * The bottom inset, frozen.
+ *
+ * `env(safe-area-inset-bottom)` is not a constant on iOS. With
+ * viewport-fit=cover it reads 0 while Safari's toolbar occupies that strip
+ * and about 34px once the toolbar collapses — and it changes *during* the
+ * collapse animation, every time a scroll starts or stops. A bar padded with
+ * it therefore grows and shrinks by 34px as you scroll, which is the bottom
+ * navigation appearing to drift. The box never moved; its padding did.
+ *
+ * So the live value is only the starting point. `SafeArea` measures it, keeps
+ * the largest it has seen, and writes that to --safe-b, which settles within
+ * a second of load and then does not move again until the phone is rotated.
+ */
+.safe-b { padding-bottom: var(--safe-b, env(safe-area-inset-bottom)); }
 .safe-t { padding-top: env(safe-area-inset-top); }
 .safe-x { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
 

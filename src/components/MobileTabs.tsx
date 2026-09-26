@@ -80,6 +80,23 @@ export function MobileTabs() {
 
   if (!isConnected && !account) return null;
 
+  /*
+   * Home is wherever your money is.
+   *
+   * For a signed-in customer the landing page is an advertisement for a thing
+   * they already bought, and the portfolio is what they actually opened the
+   * app to see — so Home points there and the separate Portfolio tab goes,
+   * because two tabs to one page is a tab wasted. Somebody browsing without
+   * an account still gets the landing page, which for them is the point.
+   *
+   * The bar is otherwise untouched: three destinations on a phone is as many
+   * as a thumb can aim at without looking.
+   */
+  const tabs = account
+    ? TABS.filter((t) => t.href !== "/portfolio").map((t) =>
+        t.href === "/" ? { ...t, href: "/portfolio" } : t)
+    : TABS;
+
   return (
     <>
     {/* Clearance for the fixed bar, scoped to when the bar actually exists. */}
@@ -99,7 +116,7 @@ export function MobileTabs() {
       className="safe-b fixed inset-x-0 bottom-0 z-50 border-t hairline bg-[var(--bg)] md:hidden"
     >
       <div className="flex">
-        {TABS.map((t) => {
+        {tabs.map((t) => {
           const active = t.href === "/" ? path === "/" : path.startsWith(t.href);
           return (
             <Link

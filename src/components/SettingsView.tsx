@@ -20,19 +20,48 @@ const AVATAR_PX = 128;
  * 28px in a corner, so it is reduced before it ever leaves the device — the
  * upload is instant and the row stays small.
  */
+/**
+ * The photograph, squared and shrunk to something a row can carry.
+ *
+ * Two ways in, because `createImageBitmap` refuses some of what an iPhone
+ * produces — HEIC most of all, which is what the camera saves by default.
+ * When it refuses, the same file goes through an <img>, which Safari decodes
+ * with the system codecs and therefore accepts. Cropping and scaling are
+ * identical either way; only the decoder differs.
+ */
+async function decode(file: File): Promise<{ w: number; h: number; draw: CanvasImageSource; done: () => void }> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    return { w: bitmap.width, h: bitmap.height, draw: bitmap, done: () => bitmap.close() };
+  } catch {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error("decode failed"));
+        el.src = url;
+      });
+      return {
+        w: img.naturalWidth, h: img.naturalHeight, draw: img,
+        done: () => URL.revokeObjectURL(url),
+      };
+    } catch (e) {
+      URL.revokeObjectURL(url);
+      throw e;
+    }
+  }
+}
+
 async function toSquareDataUrl(file: File): Promise<string> {
-  const bitmap = await createImageBitmap(file);
-  const side = Math.min(bitmap.width, bitmap.height);
+  const { w, h, draw, done } = await decode(file);
+  const side = Math.min(w, h);
   const canvas = document.createElement("canvas");
   canvas.width = AVATAR_PX;
   canvas.height = AVATAR_PX;
   const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(
-    bitmap,
-    (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side,
-    0, 0, AVATAR_PX, AVATAR_PX,
-  );
-  bitmap.close();
+  ctx.drawImage(draw, (w - side) / 2, (h - side) / 2, side, side, 0, 0, AVATAR_PX, AVATAR_PX);
+  done();
   return canvas.toDataURL("image/jpeg", 0.82);
 }
 
@@ -117,6 +146,7 @@ export function SettingsView() {
   const pickPhoto = async (file?: File) => {
     if (!file) return;
     setError(null);
+    setNote(null);
     try {
       await save({ avatar: await toSquareDataUrl(file) });
     } catch {
@@ -142,7 +172,7 @@ export function SettingsView() {
             {u.username ? `@${u.username}` : "No username yet"}
           </div>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-0.5 text-[12px]">
+        <div className="relative flex shrink-0 flex-col items-end gap-0.5 text-[12px]">
           <button onClick={() => fileRef.current?.click()} disabled={busy}
             className="font-medium underline-offset-2 hover:underline disabled:opacity-50">
             {u.avatar ? "Change photo" : "Add photo"}
@@ -153,15 +183,35 @@ export function SettingsView() {
               Remove
             </button>
           )}
+          {/*
+            Off-screen, not hidden.
+            `hidden` is display:none, and iOS Safari will not open a file
+            picker for an input that is not laid out — the button did
+            nothing at all, with no error to explain it. This is invisible
+            and still part of the page, which is what Safari requires.
+            The value is cleared on every pick so choosing the same file
+            twice still fires a change event.
+          */}
           <input
             ref={fileRef}
             type="file"
             accept="image/*"
-            hidden
-            onChange={(e) => void pickPhoto(e.target.files?.[0])}
+            className="absolute h-px w-px opacity-0"
+            style={{ left: -9999 }}
+            onChange={(e) => { void pickPhoto(e.target.files?.[0]); e.target.value = ""; }}
           />
         </div>
+        {/*
+          Said where it happened.
+          The shared message lives with the fields further down, which on a
+          phone is well off-screen from this button — a photo that failed to
+          save reported it somewhere nobody was looking.
+        */}
+        {busy && <span className="shrink-0 text-[11px] text-[var(--muted)]">{t("Saving…")}</span>}
       </section>
+      {error && (
+        <p className="mt-1.5 px-1 text-[11px] leading-snug text-[var(--color-down)]">{error}</p>
+      )}
 
       {/* Editable details */}
       <section className="mt-3 rounded-2xl border hairline p-3.5 sm:p-5">

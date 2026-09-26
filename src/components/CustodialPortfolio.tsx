@@ -8,6 +8,7 @@ import { Reveal } from "./Reveal";
 import { WalletSection } from "./WalletSection";
 import { KycPrompt } from "./KycPrompt";
 import { RecurringBuys } from "./RecurringBuys";
+import { MarketRoom } from "./MarketRoom";
 import { useDse } from "@/lib/useDse";
 import { usd, costLabel } from "@/lib/format";
 import { useT } from "@/lib/i18n";
@@ -57,6 +58,16 @@ export function CustodialPortfolio() {
         * out lives in Account, where people look for it.
         */}
       <Reveal>
+        {/*
+          * The balance, inside something.
+          *
+          * It was three groups of numbers floating on the page background
+          * with only whitespace between them and the standing order below,
+          * so the eye had nothing telling it where the summary ended. A
+          * single card draws that line, and the shares/cash strip sits
+          * inside it as a panel rather than beside it as a fragment.
+          */}
+        <div className="rounded-3xl border hairline p-4 sm:p-5">
         <div className="flex items-center justify-between gap-3 text-[12px] text-[var(--muted)]">
           <span className="flex min-w-0 items-center gap-2">
             <span className="truncate">{account.user.username ? `@${account.user.username}` : account.user.email}</span>
@@ -102,7 +113,7 @@ export function CustodialPortfolio() {
             </div>
           </div>
 
-          <div className="grid w-full grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:w-auto sm:min-w-[340px]">
+          <div className="grid w-full grid-cols-2 gap-px overflow-hidden rounded-2xl border hairline bg-[var(--border)] sm:w-auto sm:min-w-[340px]">
             <Cell label={t("Shares")} value={<Counter value={equity} format={money} />} />
             <Cell
               label={t("Cash")}
@@ -114,6 +125,7 @@ export function CustodialPortfolio() {
               }
             />
           </div>
+        </div>
         </div>
       </Reveal>
 
@@ -129,7 +141,10 @@ export function CustodialPortfolio() {
         * external listing that has closed, or a suspended share, would take
         * the money and refuse the order every month.
         */}
-      {/* Anchored, so the nudge on the signed-in home can land on it. */}
+      {/* Everyone else, so the app is a market rather than a spreadsheet. */}
+      <MarketRoom />
+
+      {/* Anchored, so a link can land on the standing orders directly. */}
       <div id="recurring" className="scroll-mt-24" />
       <RecurringBuys securities={dse
         .filter((d) => d.status === "live")

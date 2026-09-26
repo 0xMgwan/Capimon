@@ -43,6 +43,19 @@ export function Comments({ symbol }: { symbol: string }) {
   const { t } = useT();
   const { account } = useCapimonAccount();
   const [open, setOpen] = useState(false);
+  /*
+   * Arriving from a mention opens the thread.
+   *
+   * The push for "@you were mentioned" lands on /markets/x#comments, and a
+   * folded section at that anchor is a notification that shows you a closed
+   * door. Read in an effect rather than during render so the server and the
+   * first client paint agree, and deferred for the usual reason.
+   */
+  useEffect(() => {
+    if (window.location.hash !== "#comments") return;
+    const id = window.setTimeout(() => setOpen(true), 0);
+    return () => window.clearTimeout(id);
+  }, []);
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);

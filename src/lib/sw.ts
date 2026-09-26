@@ -779,4 +779,5 @@ export const SW: Record<string, string> = {
   "This wallet is linked to your CAPX account. One signature signs you in — it approves nothing and cannot move funds.": "Pochi hii imeunganishwa na akaunti yako ya CAPX. Saini moja inakuingiza — haidhinishi chochote wala haiwezi kuhamisha fedha.",
   "your CAPX account": "akaunti yako ya CAPX",
   "Continue": "Endelea",
+  "That photo could not be used": "Picha hiyo haikuweza kutumika",
 };

@@ -24,34 +24,60 @@ const AVATAR_PX = 128;
 /**
  * The photograph, squared and shrunk to something a row can carry.
  *
- * Two ways in, because `createImageBitmap` refuses some of what an iPhone
- * produces — HEIC most of all, which is what the camera saves by default.
- * When it refuses, the same file goes through an <img>, which Safari decodes
- * with the system codecs and therefore accepts. Cropping and scaling are
- * identical either way; only the decoder differs.
+ * Two decoders, because an iPhone camera writes HEIC by default and
+ * `createImageBitmap` refuses it on the platform that produces it. The
+ * fallback hands the same bytes to an <img>, which Safari decodes with the
+ * system codecs and therefore accepts. Cropping and scaling are identical
+ * either way; only the decoder differs.
+ *
+ * The fallback reads the file into a data URL rather than an object URL. An
+ * object URL points back at the file the input is holding, and anything that
+ * releases the input — including the reset after a pick — can pull it out
+ * from under a decode still in progress. A data URL is a copy and outlives
+ * whatever the input does next.
+ *
+ * Every failure here says what failed. A photograph that will not save is
+ * annoying; a photograph that will not save and reports nothing is a dead
+ * end, and this is the one place in the app where the browser has more to say
+ * than the server does.
  */
+const AVATAR_MAX_BYTES = 12_000_000;
+
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(new Error("the file could not be read"));
+    r.readAsDataURL(file);
+  });
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("that format is not one this browser can open"));
+    img.src = src;
+  });
+}
+
 async function decode(file: File): Promise<{ w: number; h: number; draw: CanvasImageSource; done: () => void }> {
+  if (!file.size) throw new Error("the file came back empty");
+  if (file.size > AVATAR_MAX_BYTES) throw new Error("that picture is very large — try a smaller one");
+
   try {
     const bitmap = await createImageBitmap(file);
-    return { w: bitmap.width, h: bitmap.height, draw: bitmap, done: () => bitmap.close() };
-  } catch {
-    const url = URL.createObjectURL(file);
-    try {
-      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const el = new Image();
-        el.onload = () => resolve(el);
-        el.onerror = () => reject(new Error("decode failed"));
-        el.src = url;
-      });
-      return {
-        w: img.naturalWidth, h: img.naturalHeight, draw: img,
-        done: () => URL.revokeObjectURL(url),
-      };
-    } catch (e) {
-      URL.revokeObjectURL(url);
-      throw e;
+    if (bitmap.width && bitmap.height) {
+      return { w: bitmap.width, h: bitmap.height, draw: bitmap, done: () => bitmap.close() };
     }
+    bitmap.close();
+  } catch {
+    // Expected for HEIC, and on any browser without createImageBitmap.
   }
+
+  const img = await loadImage(await readAsDataUrl(file));
+  if (!img.naturalWidth || !img.naturalHeight) throw new Error("the image had no dimensions");
+  return { w: img.naturalWidth, h: img.naturalHeight, draw: img, done: () => {} };
 }
 
 async function toSquareDataUrl(file: File): Promise<string> {
@@ -60,10 +86,14 @@ async function toSquareDataUrl(file: File): Promise<string> {
   const canvas = document.createElement("canvas");
   canvas.width = AVATAR_PX;
   canvas.height = AVATAR_PX;
-  const ctx = canvas.getContext("2d")!;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("this browser would not give us a canvas");
   ctx.drawImage(draw, (w - side) / 2, (h - side) / 2, side, side, 0, 0, AVATAR_PX, AVATAR_PX);
   done();
-  return canvas.toDataURL("image/jpeg", 0.82);
+
+  const out = canvas.toDataURL("image/jpeg", 0.82);
+  if (!out.startsWith("data:image/")) throw new Error("the picture could not be converted");
+  return out;
 }
 
 export function SettingsView() {
@@ -148,10 +178,37 @@ export function SettingsView() {
     if (!file) return;
     setError(null);
     setNote(null);
+    setBusy(true);
     try {
-      await save({ avatar: await toSquareDataUrl(file) });
-    } catch {
-      setError("That image could not be read. Try a JPEG or PNG.");
+      const dataUrl = await toSquareDataUrl(file);
+      await save({ avatar: dataUrl });
+    } catch (e) {
+      /*
+       * Say which part failed.
+       *
+       * "That image could not be read" covered a decode that threw, a file
+       * the browser handed back empty, and a save that was refused — three
+       * different problems with three different answers, reported as one
+       * sentence that fitted none of them.
+       */
+      setError(
+        e instanceof Error && e.message
+          ? `${t("That photo could not be used")}: ${e.message}`
+          : t("That photo could not be used"),
+      );
+    } finally {
+      setBusy(false);
+      /*
+       * Cleared after the work, never during it.
+       *
+       * Resetting a file input's value releases the file it is holding, and
+       * this used to run synchronously while the decode was still reading
+       * it — the picker opened, a photo was chosen, and the read failed
+       * against a file that had just been taken away. Doing it here still
+       * lets the same photo be chosen twice, which is the only reason to do
+       * it at all.
+       */
+      if (fileRef.current) fileRef.current.value = "";
     }
   };
 
@@ -163,52 +220,52 @@ export function SettingsView() {
       {/* Identity */}
       {/* One row, as an app's account header: the photo is the button. */}
       <section className="mt-3 flex items-center gap-3 rounded-2xl border hairline p-3">
-        <button onClick={() => fileRef.current?.click()} disabled={busy} aria-label={u.avatar ? "Change photo" : "Add photo"}
-          className="shrink-0 rounded-full disabled:opacity-50">
+        {/*
+          A label, not a button calling .click() on a ref.
+          Forwarding a tap to a hidden input through JavaScript depends on the
+          browser agreeing that the synthetic click still counts as the user
+          gesture a file picker requires, and Safari does not always agree —
+          which is the version where the photo button does nothing at all,
+          silently, with nothing to catch. A <label> opens its own input
+          natively, with no gesture to forward.
+        */}
+        <label htmlFor="capx-avatar" className="shrink-0 cursor-pointer rounded-full">
           <Avatar src={u.avatar} name={u.name} email={u.email} size={48} />
-        </button>
+        </label>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[15px] font-medium">{u.name ?? u.email}</div>
           <div className="truncate text-xs text-[var(--muted)]">
             {u.username ? `@${u.username}` : "No username yet"}
           </div>
         </div>
-        <div className="relative flex shrink-0 flex-col items-end gap-0.5 text-[12px]">
-          <button onClick={() => fileRef.current?.click()} disabled={busy}
-            className="font-medium underline-offset-2 hover:underline disabled:opacity-50">
-            {u.avatar ? "Change photo" : "Add photo"}
-          </button>
-          {u.avatar && (
-            <button onClick={() => void save({ avatar: null })} disabled={busy}
-              className="text-[var(--muted)] underline-offset-2 hover:underline disabled:opacity-50">
+        <div className="flex shrink-0 flex-col items-end gap-0.5 text-[12px]">
+          <label
+            htmlFor="capx-avatar"
+            className="cursor-pointer font-medium underline-offset-2 hover:underline"
+          >
+            {busy ? t("Saving…") : u.avatar ? "Change photo" : "Add photo"}
+          </label>
+          {u.avatar && !busy && (
+            <button onClick={() => void save({ avatar: null })}
+              className="text-[var(--muted)] underline-offset-2 hover:underline">
               Remove
             </button>
           )}
           {/*
-            Off-screen, not hidden.
-            `hidden` is display:none, and iOS Safari will not open a file
-            picker for an input that is not laid out — the button did
-            nothing at all, with no error to explain it. This is invisible
-            and still part of the page, which is what Safari requires.
-            The value is cleared on every pick so choosing the same file
-            twice still fires a change event.
+            Off-screen rather than display:none, because an input that is not
+            laid out cannot be opened at all — and `sr-only` clipping is
+            enough to keep it out of the way without taking it out of the
+            layout.
           */}
           <input
+            id="capx-avatar"
             ref={fileRef}
             type="file"
             accept="image/*"
-            className="absolute h-px w-px opacity-0"
-            style={{ left: -9999 }}
-            onChange={(e) => { void pickPhoto(e.target.files?.[0]); e.target.value = ""; }}
+            className="sr-only"
+            onChange={(e) => void pickPhoto(e.target.files?.[0])}
           />
         </div>
-        {/*
-          Said where it happened.
-          The shared message lives with the fields further down, which on a
-          phone is well off-screen from this button — a photo that failed to
-          save reported it somewhere nobody was looking.
-        */}
-        {busy && <span className="shrink-0 text-[11px] text-[var(--muted)]">{t("Saving…")}</span>}
       </section>
       {error && (
         <p className="mt-1.5 px-1 text-[11px] leading-snug text-[var(--color-down)]">{error}</p>

@@ -263,7 +263,7 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
         </div>
         {(side === "buy" || sellByValue) && (
           <div className="mt-2.5 grid grid-cols-4 gap-2">
-            {(currency === "TZS" ? PRESETS_TZS : PRESETS_USDC).map((p) => (
+            {(currency === "TZS" ? PRESETS_TZS : PRESETS_USDC).slice(0, 3).map((p) => (
               <button
                 key={p}
                 onClick={() => setAmount(String(p))}
@@ -274,6 +274,30 @@ export function CustodialTradePanel({ asset, market }: { asset: AssetMeta; marke
                 {currency === "TZS" ? `${p / 1000}k` : `$${p}`}
               </button>
             ))}
+            {/*
+              * Max, in place of the largest fixed preset.
+              *
+              * The presets are guesses at what somebody wants to spend; this
+              * is the one amount the app already knows. It took the last slot
+              * rather than a fifth, because a row of five on a phone is five
+              * targets too small to hit — and $500 was the least useful of
+              * them for an account holding $0.39.
+              *
+              * Floored to the cent, or the shilling, so the figure typed in
+              * can never round up past what is actually there.
+              */}
+            <button
+              onClick={() => setAmount(String(
+                currency === "TZS" ? Math.floor(available) : Math.floor(available * 100) / 100,
+              ))}
+              disabled={!(available > 0)}
+              className={`tnum rounded-full border py-2 text-[13px] font-medium transition-all active:scale-95 disabled:opacity-40 ${
+                available > 0 && amountNum === (currency === "TZS" ? Math.floor(available) : Math.floor(available * 100) / 100)
+                  ? "border-transparent bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"
+              }`}
+            >
+              {t("Max")}
+            </button>
           </div>
         )}
       </div>

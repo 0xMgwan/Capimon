@@ -29,6 +29,38 @@ export async function PATCH(req: Request) {
     await migrate();
     const sql = db();
 
+    /*
+     * Changing a password, which is its own operation.
+     *
+     * Kept apart from the rest of the form: it needs the current password
+     * before it will do anything, and it answers on its own rather than
+     * being folded into a save that also touched a display name. Somebody
+     * who leaves a phone unlocked should not have their password changed by
+     * whoever picks it up.
+     */
+    if (body.newPassword !== undefined) {
+      const { verifyPassword, hashPassword, passwordProblem } = await import("@/lib/auth");
+      const current = String(body.currentPassword ?? "");
+      const next = String(body.newPassword ?? "");
+
+      const [row] = await sql<{ password_hash: string | null }[]>`
+        select password_hash from capx.users where id = ${user.id}`;
+      if (!row?.password_hash) {
+        return bad("This account has no password to change.", "no_password");
+      }
+      if (!(await verifyPassword(current, row.password_hash))) {
+        return bad("That is not your current password.", "wrong_password");
+      }
+      const problem = passwordProblem(next);
+      if (problem) return bad(problem, "weak_password");
+      if (await verifyPassword(next, row.password_hash)) {
+        return bad("That is the password you already have.", "same_password");
+      }
+
+      await sql`update capx.users set password_hash = ${await hashPassword(next)} where id = ${user.id}`;
+      return NextResponse.json({ ok: true, passwordChanged: true });
+    }
+
     // Only the fields actually supplied are touched, so saving one thing from
     // one screen cannot blank another that was never on it.
     const patch: Record<string, string | null> = {};

@@ -7,6 +7,7 @@ import { useRef, useState, useEffect } from "react";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { Avatar } from "./Avatar";
 import { useT } from "@/lib/i18n";
+import { passwordProblem, PASSWORD_HINT } from "@/lib/passwordRule";
 import { needsTapSound, tapSoundEnabled, setTapSound, haptic } from "@/lib/haptics";
 
 /** Shrink to this before sending; an avatar never needs more. */
@@ -252,6 +253,8 @@ export function SettingsView() {
         )}
       </section>
 
+      <PasswordChange />
+
       {/* Notifications sit with the account rather than the money: they are a
           setting for this device, and this is where somebody looks for one. */}
       <div className="mt-3"><PushToggle /></div>
@@ -308,5 +311,94 @@ function Row({ label, value }: { label: string; value: string }) {
       <span className="eyebrow">{label}</span>
       <span className="min-w-0 truncate text-sm">{value}</span>
     </div>
+  );
+}
+
+/**
+ * Changing a password.
+ *
+ * Folded away, because it is not something anybody came to this page to do —
+ * and open by default it would be three empty fields sitting under somebody's
+ * name for no reason. It asks for the current password first: a phone left
+ * unlocked on a table should not be enough to lock its owner out.
+ */
+function PasswordChange() {
+  const { t } = useT();
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const problem = next ? passwordProblem(next) : null;
+  const ready = current.length > 0 && next.length > 0 && !problem;
+
+  const submit = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fetch("/api/account/profile", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ currentPassword: current, newPassword: next }),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error ?? t("Could not change your password"));
+      setMsg({ ok: true, text: t("Password changed.") });
+      setCurrent(""); setNext(""); setOpen(false);
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : t("Could not change your password") });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="mt-3 rounded-2xl border hairline p-3.5 sm:p-4">
+      <button
+        onClick={() => { setOpen((v) => !v); setMsg(null); }}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 text-left"
+      >
+        <span>
+          <span className="block text-[14px] font-medium">{t("Password")}</span>
+          <span className="mt-0.5 block text-[12px] text-[var(--muted)]">
+            {msg?.ok ? msg.text : t("Change the password you sign in with.")}
+          </span>
+        </span>
+        <svg viewBox="0 0 24 24" className={`h-4 w-4 shrink-0 text-[var(--muted)] transition-transform ${open ? "rotate-180" : ""}`}
+          fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="mt-3 grid gap-2">
+          <input
+            type="password" autoComplete="current-password"
+            value={current} onChange={(e) => setCurrent(e.target.value)}
+            placeholder={t("Current password")}
+            className="rounded-xl border hairline bg-transparent px-3 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+          />
+          <input
+            type="password" autoComplete="new-password"
+            value={next} onChange={(e) => setNext(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && ready) void submit(); }}
+            placeholder={t("New password")}
+            className="rounded-xl border hairline bg-transparent px-3 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+          />
+          <p className={`text-[11px] ${problem ? "text-[var(--color-down)]" : "text-[var(--muted)]"}`}>
+            {problem ?? t(PASSWORD_HINT)}
+          </p>
+          <button
+            onClick={() => void submit()} disabled={busy || !ready}
+            className="rounded-full bg-[var(--fg)] py-2.5 text-[13px] font-medium text-[var(--bg)] disabled:opacity-40"
+          >
+            {busy ? t("Changing…") : t("Change password")}
+          </button>
+        </div>
+      )}
+
+      {msg && !msg.ok && <p className="mt-2 text-[12px] text-[var(--color-down)]">{msg.text}</p>}
+    </section>
   );
 }

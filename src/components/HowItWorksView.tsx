@@ -63,7 +63,7 @@ const FAQ = [
   },
   {
     q: "What happens when I sell?",
-    a: "CAPX buys the shares back from you at the current price and puts the shillings, less the 1% fee, into your balance immediately. Those shares go back into CAPX's stock, ready for the next buyer.",
+    a: "CAPX buys the shares back from you at the current price and puts the shillings, less the 2.5% fee, into your balance immediately. Those shares go back into CAPX's stock, ready for the next buyer.",
   },
   {
     q: "Where do the prices come from?",

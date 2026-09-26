@@ -563,14 +563,16 @@ export function AutoInvestBand() {
 
           <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)]">
             <div className="bg-[var(--bg)] px-4 py-3">
-              <div className="eyebrow truncate">{t("Each time, about")}</div>
+              <div className="eyebrow leading-tight">{t("Each time")}</div>
               <div className="tnum mt-1 text-lg font-medium">
                 {shares >= 1 ? shares.toFixed(2) : shares.toFixed(4)}
                 <span className="ml-1 text-[12px] font-normal text-[var(--muted)]">{share?.symbol ?? "—"}</span>
               </div>
             </div>
             <div className="bg-[var(--bg)] px-4 py-3">
-              <div className="eyebrow truncate">{t("Invested in a year")}</div>
+              {/* Not truncated: "Invested in a y…" is a label that has given
+                  up. Two short words wrap; one long one gets cut. */}
+              <div className="eyebrow leading-tight">{t("In a year")}</div>
               <div className="tnum mt-1 text-lg font-medium">{money(yearly)}</div>
             </div>
           </div>

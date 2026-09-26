@@ -298,6 +298,15 @@ export function SelfCustodyTicket({ symbol, side, initialAmount, currencySwitch 
     : !isConnected ? null            // the connect button stands in for it
     : wrongChain ? { label: t("Switch your wallet to Base") }
     : linked === null ? { label: t("Loading…") }
+    /*
+     * A fallback, not the introduction.
+     *
+     * Linking is asked for where the wallet is connected — a prompt on the
+     * markets and the portfolio catches it long before anybody reaches a
+     * ticket. This stays because somebody can always arrive here first, and a
+     * Buy button that simply refused would be worse than one that says what
+     * is missing.
+     */
     : !isLinked ? { label: t("Link this wallet"), onClick: () => { haptic(); void link(); } }
     : null;
 

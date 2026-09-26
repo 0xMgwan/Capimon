@@ -110,7 +110,7 @@ export function WalletButton() {
             <a href="/leaderboard" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">{t("Top traders")}</a>
             <a href="/how-it-works" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">{t("How it works")}</a>
             <a href="/settings" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">{t("Settings")}</a>
-            <a href="/join" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">{t("Fund with shillings")}</a>
+            <a href="/activity" className="block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">{t("Activity")}</a>
             <button
               onClick={() => { void signOut(); setOpen(false); }}
               className="w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--color-down)] transition-colors hover:surface"

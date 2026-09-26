@@ -7,6 +7,7 @@ import { Counter } from "./Counter";
 import { Reveal } from "./Reveal";
 import { WalletSection } from "./WalletSection";
 import { KycPrompt } from "./KycPrompt";
+import { WalletLinkPrompt } from "./WalletLinkPrompt";
 import { RecurringBuys } from "./RecurringBuys";
 import { useDse } from "@/lib/useDse";
 import { usd, costLabel } from "@/lib/format";
@@ -147,7 +148,7 @@ export function CustodialPortfolio() {
 
       {/* Above the money, because an unverified account is a limit on what
           they can do with it. */}
-      <div className="mt-3"><KycPrompt /></div>
+      <div className="mt-3 grid gap-2"><KycPrompt /><WalletLinkPrompt /></div>
 
       {/*
         * Under the balance, because a standing order spends it.

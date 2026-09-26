@@ -52,6 +52,19 @@ const TABS = [
     ),
   },
   {
+    href: "/activity", label: "Activity",
+    // A receipt with a fold in it: what this page is, rather than a clock,
+    // which would say "history" — and history is not what people come for.
+    icon: (
+      <>
+        <path
+          fillRule="evenodd"
+          d="M5.2 3.4A1.6 1.6 0 0 1 6.8 1.8h7.35a1.6 1.6 0 0 1 1.13.47l3.45 3.45a1.6 1.6 0 0 1 .47 1.13V20.6a1.6 1.6 0 0 1-1.6 1.6H6.8a1.6 1.6 0 0 1-1.6-1.6V3.4Zm3.3 7.5a1 1 0 0 0 0 2h7a1 1 0 1 0 0-2h-7Zm0 4a1 1 0 1 0 0 2h4.4a1 1 0 1 0 0-2H8.5Z"
+        />
+      </>
+    ),
+  },
+  {
     href: "/settings", label: "Account",
     icon: (
       <>

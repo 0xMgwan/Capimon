@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { useDse, matchesDse } from "@/lib/useDse";
 import { DseLogo } from "./DseLogo";
 import { KycPrompt } from "./KycPrompt";
+import { WalletLinkPrompt } from "./WalletLinkPrompt";
 import { useMarkets } from "@/lib/useMarkets";
 import { MarketTable } from "./MarketTable";
 import { AssetLogo } from "./AssetLogo";
@@ -92,7 +93,7 @@ export function MarketsView() {
         * prices, and costs a line — a feed with its own panel would be a
         * second thing competing with the market it is describing.
         */}
-      <div className="mt-3"><KycPrompt /></div>
+      <div className="mt-3 grid gap-2"><KycPrompt /><WalletLinkPrompt /></div>
 
       {error && (
         <div className="mt-3 rounded-xl border border-[var(--color-down)]/40 bg-[var(--color-down)]/5 px-4 py-3 text-sm text-[var(--color-down)]">

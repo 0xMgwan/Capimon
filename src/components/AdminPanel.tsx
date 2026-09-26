@@ -659,7 +659,31 @@ export function AdminPanel() {
         </div>
 
         <div className="rounded-2xl border hairline p-5">
-          <div className="eyebrow">CAPX treasury onchain</div>
+          {/*
+            The currency switch, repeated where the numbers are.
+            A CRDB share has a shilling price and a dollar one, and the
+            shilling is the price it is actually quoted at — so the desk needs
+            to read this tile either way without scrolling to a control
+            somewhere else. It sets the same state as that control rather than
+            a second one, so the page never holds two ideas of the currency.
+          */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="eyebrow">CAPX treasury onchain</div>
+            {rate > 0 && (
+              <span className="inline-flex shrink-0 overflow-hidden rounded-full border hairline text-[10px]">
+                {(["TZS", "USD"] as const).map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setCcy(c)}
+                    className={`px-2.5 py-0.5 transition-colors ${
+                      ccy === c ? "bg-[var(--fg)] text-[var(--bg)]" : "hover:surface"}`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </span>
+            )}
+          </div>
           {data.onchain ? (
             <>
               {/*
@@ -673,12 +697,15 @@ export function AdminPanel() {
                 spelled out under it.
               */}
               <div className="tnum mt-2 text-2xl font-medium">
-                {usd(data.onchain.totalUsd ?? data.onchain.usdc)}
+                {money(data.onchain.totalUsd ?? data.onchain.usdc)}
               </div>
               <div className="tnum mt-1 text-[11px] text-[var(--muted)]">
                 {data.onchain.sharesUsd === null
                   ? "USDC only — shares unpriced"
-                  : `${usd(data.onchain.sharesUsd)} in shares · ${usd(data.onchain.usdc)} USDC`}
+                  /* The USDC leg stays in dollars whichever way this is
+                     read: it is a dollar balance, and restating it in
+                     shillings would invent a conversion nobody made. */
+                  : `${money(data.onchain.sharesUsd)} in shares · ${usd(data.onchain.usdc)} USDC`}
               </div>
               <div className="tnum mt-1 truncate text-[11px] text-[var(--muted)]">{data.onchain.address}</div>
               <div className="tnum mt-3 flex flex-wrap gap-1.5 text-[11px]">
@@ -688,7 +715,7 @@ export function AdminPanel() {
                       <span key={h.asset} className="rounded-full surface px-2 py-0.5">
                         {h.asset} {h.qty.toFixed(4)}
                         {h.valueUsd !== null && h.valueUsd > 0 && (
-                          <span className="text-[var(--muted)]"> · {usd(h.valueUsd)}</span>
+                          <span className="text-[var(--muted)]"> · {money(h.valueUsd)}</span>
                         )}
                       </span>
                     ))}

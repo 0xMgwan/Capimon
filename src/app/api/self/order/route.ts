@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import { requireDb, bad, boom } from "@/lib/apiHelpers";
 import { isLinked } from "@/lib/walletLink";
-import { quote, settle, listOrders, available } from "@/lib/otc";
+import { quote, settle, listOrders, available, marks } from "@/lib/otc";
+import { FEE_BPS } from "@/lib/fees";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +24,24 @@ export async function GET(req: Request) {
     // The free-inventory figure is public: it is what is left to sell, and a
     // buyer is entitled to know before they start.
     if (symbol) {
+      /*
+       * The rate rides along with the inventory.
+       *
+       * The ticket needs it to show a dollar figure while somebody is still
+       * typing, and the alternative — asking for a quote per keystroke —
+       * would reserve inventory against numbers nobody has agreed to.
+       */
+      const [free, m] = await Promise.all([available(symbol), marks(symbol)]);
       return NextResponse.json(
-        { ok: true, security: symbol.toUpperCase(), available: await available(symbol) },
+        {
+          ok: true,
+          security: symbol.toUpperCase(),
+          available: free,
+          priceTzs: m.priceTzs,
+          usdPerTzs: m.usdPerTzs,
+          usdPerShare: m.priceTzs * m.usdPerTzs,
+          feeBps: FEE_BPS,
+        },
         { headers: { "cache-control": "no-store" } },
       );
     }

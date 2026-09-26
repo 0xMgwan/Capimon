@@ -100,6 +100,18 @@ async function security(symbol: string): Promise<DseSecurity> {
   return sec;
 }
 
+/**
+ * The DSE mark and the shilling rate, for a ticket that has not committed yet.
+ *
+ * Exported so the panel can show a USDC figure as somebody types, rather than
+ * having to create an order — which would reserve inventory for a number
+ * nobody has agreed to. Returns zeroes instead of throwing: a ticket with no
+ * conversion yet is a normal state, an exception is not.
+ */
+export async function marks(symbol: string): Promise<{ priceTzs: number; usdPerTzs: number }> {
+  return pricing(symbol).catch(() => ({ priceTzs: 0, usdPerTzs: 0 }));
+}
+
 /** The DSE mark and the shilling rate, fetched together. */
 async function pricing(symbol: string): Promise<{ priceTzs: number; usdPerTzs: number }> {
   const { getSwapRate, ntzsConfigured } = await import("./ntzs");

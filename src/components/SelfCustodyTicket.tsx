@@ -1,34 +1,39 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { useAccount, useSignMessage, useWriteContract, usePublicClient } from "wagmi";
+import { useRouter } from "next/navigation";
+import { useAccount, useSignMessage, useWriteContract, usePublicClient, useReadContract } from "wagmi";
 import { base } from "wagmi/chains";
+import { formatUnits } from "viem";
 import { b20Abi } from "@/lib/abis";
+import { USDC_BASE } from "@/lib/assets";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { useT } from "@/lib/i18n";
 import { haptic } from "@/lib/haptics";
 import { WalletButton } from "./WalletButton";
 
 /**
- * The same trade, delivered to a wallet instead of an account.
+ * The same trade, paid for in dollars and delivered to a wallet.
  *
- * Not a separate desk — this is the destination half of the shilling ticket.
- * The share, the price and the fee are identical to the custodial side; what
- * changes is where it ends up and therefore what it is paid for with. A wallet
- * pays in USDC, because that is what a wallet holds.
+ * Not a separate desk — this is the USDC half of the shilling ticket, and it
+ * is laid out to match it line for line: an amount, the same presets, the
+ * same four-row summary, the same single button. Somebody switching currency
+ * should recognise the ticket they were already looking at.
  *
- * Three things have to be true before CAPX will send a share to an address,
- * and all three are checked again on the server: there is a CAPX account, it
- * is verified, and this address has been signed for. The signature is what
- * makes the verification mean anything — anyone can type an address, and only
- * the person holding its key can sign for it.
+ * The figures are worked out here from the mark and the rate the server
+ * publishes, the same way the shilling side previews its own order, so the
+ * numbers move as you type rather than after a round trip. A quote is only
+ * asked for when the order is actually placed, because a quote reserves
+ * inventory and nobody should be holding shares against a number they are
+ * still typing.
  *
- * The order of the legs is deliberate and stated plainly on screen: the
- * customer pays first and CAPX sends against a receipt it has read itself.
- * There is no escrow contract here, so somebody has to go first, and it should
- * be the side that can see what happened.
+ * Everything that gates the trade is expressed through the button rather than
+ * through a paragraph where the ticket used to be. "Complete verification
+ * first" is an instruction; a wall of explanation where the amount field was
+ * is a dead end.
  */
+
+type Marks = { available: number; priceTzs: number; usdPerTzs: number; usdPerShare: number; feeBps: number };
 
 type Quote = {
   reference: string; security: string; side: "buy" | "sell";
@@ -38,17 +43,18 @@ type Quote = {
   payAmount: string; expiresAt: string;
 };
 
-type Step = "idle" | "quoting" | "quoted" | "paying" | "settling" | "done";
+type Step = "idle" | "quoting" | "paying" | "settling";
 
+const PRESETS = [5, 20, 50, 100];
 const usd = (n: number) => `$${n.toFixed(2)}`;
 const qtyFmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 8 });
 
-export function SelfCustodyTicket({ symbol, priceTzs, side }: {
+export function SelfCustodyTicket({ symbol, side }: {
   symbol: string;
-  priceTzs: number;
   side: "buy" | "sell";
 }) {
   const { t } = useT();
+  const router = useRouter();
   const { account } = useCapimonAccount();
   const { address, isConnected, chainId } = useAccount();
   const { signMessageAsync } = useSignMessage();
@@ -56,36 +62,100 @@ export function SelfCustodyTicket({ symbol, priceTzs, side }: {
   const client = usePublicClient();
 
   const [linked, setLinked] = useState<string[] | null>(null);
-  const [free, setFree] = useState<number | null>(null);
-  const [amount, setAmount] = useState("");
-  const [quote, setQuote] = useState<Quote | null>(null);
+  const [marks, setMarks] = useState<Marks | null>(null);
+  const [raw, setRaw] = useState("");
   const [step, setStep] = useState<Step>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [settled, setSettled] = useState<{ qty: number; tx: string } | null>(null);
+  const [settled, setSettled] = useState<{ qty: number; tx: string | null } | null>(null);
+
+  /* What the connected wallet can actually spend. */
+  const { data: usdcRaw } = useReadContract({
+    address: USDC_BASE, abi: b20Abi, functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address && chainId === base.id, refetchInterval: 20_000 },
+  });
+  const usdcBalance = usdcRaw ? Number(formatUnits(usdcRaw as bigint, 6)) : 0;
+
+  /* And what they hold of the share itself, for the sell side. */
+  const [token, setToken] = useState<{ address: `0x${string}`; decimals: number } | null>(null);
+  const { data: shareRaw } = useReadContract({
+    address: token?.address, abi: b20Abi, functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address && !!token && chainId === base.id, refetchInterval: 20_000 },
+  });
+  // Read at the token's own precision rather than an assumed eight: a listing
+  // added later with different decimals would otherwise report a balance off
+  // by orders of magnitude, which is a bad way to learn about a new security.
+  const shareHeld = shareRaw && token ? Number(formatUnits(shareRaw as bigint, token.decimals)) : 0;
 
   const loadLinks = useCallback(async () => {
     if (!account) { setLinked([]); return; }
     try {
-      const r = await fetch("/api/self/link", { cache: "no-store" });
-      const j = await r.json();
+      const j = await (await fetch("/api/self/link", { cache: "no-store" })).json();
       setLinked(j.ok ? j.wallets.map((w: { address: string }) => w.address.toLowerCase()) : []);
     } catch { setLinked([]); }
   }, [account]);
 
   useEffect(() => { void loadLinks(); }, [loadLinks]);
 
-  /* How much is left to sell into self-custody. Public, and worth knowing up front. */
   useEffect(() => {
     let alive = true;
-    fetch(`/api/self/order?security=${encodeURIComponent(symbol)}`, { cache: "no-store" })
+    const load = () => {
+      fetch(`/api/self/order?security=${encodeURIComponent(symbol)}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => { if (alive && j.ok) setMarks(j); })
+        .catch(() => { /* the button will say the price is unavailable */ });
+    };
+    load();
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") load();
+    }, 60_000);
+    return () => { alive = false; window.clearInterval(id); };
+  }, [symbol]);
+
+  /* The token's own address, so the sell side can read what is held. */
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/securities", { cache: "no-store" })
       .then((r) => r.json())
-      .then((j) => { if (alive && j.ok) setFree(j.available); })
-      .catch(() => { /* the figure is a courtesy, not a gate */ });
+      .then((j) => {
+        if (!alive || !j.ok) return;
+        const s = j.securities?.find((x: { symbol: string }) => x.symbol === symbol);
+        if (s?.token_address) {
+          setToken({ address: s.token_address as `0x${string}`, decimals: Number(s.decimals) || 8 });
+        }
+      })
+      .catch(() => { /* the sell side falls back to typing a number */ });
     return () => { alive = false; };
   }, [symbol]);
 
   const isLinked = !!address && !!linked?.includes(address.toLowerCase());
   const wrongChain = isConnected && chainId !== base.id;
+  const verified = account?.user.kycStatus === "approved";
+  const n = Number(raw.replace(/,/g, "")) || 0;
+
+  /*
+   * The order as it stands, worked out the way the server will work it out.
+   *
+   * A preview that rounds differently from the thing it previews is worse
+   * than no preview, so the arithmetic mirrors `quote()` exactly: on a buy
+   * the fee comes out of what is sent, on a sell it comes off the proceeds.
+   */
+  const preview = (() => {
+    const perShare = marks?.usdPerShare ?? 0;
+    if (!(perShare > 0) || !(n > 0)) return null;
+    const feeRate = (marks?.feeBps ?? 250) / 10_000;
+    const r6 = (x: number) => Math.round(x * 1e6) / 1e6;
+    const floor8 = (x: number) => Math.floor(x * 1e8) / 1e8;
+    if (side === "buy") {
+      const fee = r6(n * feeRate);
+      return { qty: floor8(r6(n - fee) / perShare), fee, total: r6(n), perShare };
+    }
+    const qty = floor8(n);
+    const gross = r6(qty * perShare);
+    const fee = r6(gross * feeRate);
+    return { qty, fee, total: r6(gross - fee), perShare };
+  })();
 
   const link = async () => {
     if (!address) return;
@@ -96,9 +166,7 @@ export function SelfCustodyTicket({ symbol, priceTzs, side }: {
         body: JSON.stringify({ address }),
       })).json();
       if (!start.ok) throw new Error(start.error);
-
       const signature = await signMessageAsync({ message: start.message });
-
       const done = await (await fetch("/api/self/link", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ address, signature }),
@@ -107,168 +175,176 @@ export function SelfCustodyTicket({ symbol, priceTzs, side }: {
       haptic("success");
       await loadLinks();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("Could not link that wallet"));
-    }
-  };
-
-  const getQuote = async () => {
-    setStep("quoting"); setError(null); setSettled(null);
-    try {
-      const r = await fetch("/api/self/order", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ address, security: symbol, side, amount: Number(amount) }),
-      });
-      const j = await r.json();
-      if (!j.ok) throw new Error(j.error);
-      setQuote(j.quote);
-      setStep("quoted");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t("Could not price that"));
-      setStep("idle");
+      const msg = e instanceof Error ? e.message : t("Could not link that wallet");
+      setError(/user rejected|denied/i.test(msg) ? t("You cancelled that in your wallet.") : msg);
     }
   };
 
   /**
-   * Pay, then present the receipt.
+   * Quote, pay, present the receipt.
    *
-   * The hash is all the client sends: the server re-reads which token moved,
-   * from whom, to whom and how much out of the receipt itself, because a page
-   * that can name its own payment can name a larger one.
+   * One tap for all three: the price was on screen before it was pressed, so
+   * a second confirmation step would only be asking about a number that has
+   * not changed. The hash is all the client sends — which token moved, from
+   * whom, to whom and how much all come out of the receipt on the server,
+   * because a page that can name its own payment can name a larger one.
    */
-  const payAndSettle = async () => {
-    if (!quote) return;
-    setStep("paying"); setError(null);
+  const trade = async () => {
+    setStep("quoting"); setError(null); setSettled(null);
+    let q: Quote;
     try {
+      const j = await (await fetch("/api/self/order", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ address, security: symbol, side, amount: n }),
+      })).json();
+      if (!j.ok) throw new Error(j.error);
+      q = j.quote;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("Could not price that"));
+      setStep("idle");
+      return;
+    }
+
+    try {
+      setStep("paying");
       const txHash = await writeContractAsync({
-        address: quote.payToken,
-        abi: b20Abi,
-        functionName: "transfer",
-        args: [quote.payTo, BigInt(quote.payAmount)],
+        address: q.payToken, abi: b20Abi, functionName: "transfer",
+        args: [q.payTo, BigInt(q.payAmount)],
       });
       setStep("settling");
       await client?.waitForTransactionReceipt({ hash: txHash });
-
-      const r = await fetch("/api/self/order", {
+      const j = await (await fetch("/api/self/order", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ address, reference: quote.reference, txHash }),
-      });
-      const j = await r.json();
+        body: JSON.stringify({ address, reference: q.reference, txHash }),
+      })).json();
       if (!j.ok) throw new Error(j.error);
       haptic("success");
       setSettled({ qty: j.order.qty, tx: j.order.settleTx });
-      setStep("done");
-      setQuote(null);
-      setAmount("");
+      setRaw("");
     } catch (e) {
       haptic("error");
       const msg = e instanceof Error ? e.message : t("That did not go through");
-      // A wallet's own rejection is not an error worth dressing up.
       setError(/user rejected|denied/i.test(msg) ? t("You cancelled that in your wallet.") : msg);
-      setStep(quote ? "quoted" : "idle");
+    } finally {
+      setStep("idle");
     }
   };
 
-  /* ------------------------------------------------------------- gates -- */
+  /* ------------------------------------------------------------- button -- */
 
-  if (!account) {
-    return (
-      <Gate>
-        {t("Delivering to your own wallet needs a verified CAPX account. Sign in, or open one — it takes a few minutes.")}
-      </Gate>
-    );
-  }
-  if (account.user.kycStatus !== "approved") {
-    return (
-      <Gate>
-        {account.user.kycStatus === "pending"
-          ? t("Your verification is under review. You can trade into your own wallet once it is approved.")
-          : t("Verify your identity to trade into your own wallet.")}{" "}
-        <Link href="/verify" className="underline underline-offset-2">{t("Verify")}</Link>
-      </Gate>
-    );
-  }
-  if (!isConnected) {
-    return (
-      <div className="mt-4 rounded-2xl surface p-4">
-        <p className="text-[12.5px] leading-relaxed text-[var(--muted)]">
-          {t("Connect the wallet you want the shares delivered to.")}
-        </p>
-        <div className="mt-3"><WalletButton /></div>
-      </div>
-    );
-  }
-  if (wrongChain) {
-    return <Gate>{t("Switch your wallet to Base to continue.")}</Gate>;
-  }
-  if (linked === null) {
-    return <div className="mt-4 h-24 animate-pulse rounded-2xl surface" />;
-  }
-  if (!isLinked) {
-    return (
-      <div className="mt-4 rounded-2xl surface p-4">
-        <p className="text-[12.5px] leading-relaxed text-[var(--muted)]">
-          {t("Sign a message to prove this wallet is yours. It approves nothing and cannot move funds — it is how CAPX knows which verified customer this address belongs to.")}
-        </p>
-        <p className="tnum mt-2 truncate text-[11px] text-[var(--muted)]">{address}</p>
-        <button
-          onClick={() => { haptic(); void link(); }}
-          className="mt-3 w-full rounded-full bg-[var(--fg)] py-3 text-[13px] font-medium text-[var(--bg)] active:scale-95"
-        >
-          {t("Link this wallet")}
-        </button>
-        {error && <p className="mt-2 text-[12px] text-[var(--color-down)]">{error}</p>}
-      </div>
-    );
-  }
+  const busy = step !== "idle";
+  const tooMany = side === "buy" && !!preview && !!marks && preview.qty > marks.available;
+  const tooPoor = side === "buy" && !!preview && preview.total > usdcBalance;
+  const tooFew = side === "sell" && !!preview && !!token && preview.qty > shareHeld;
 
-  /* -------------------------------------------------------------- form -- */
+  /*
+   * One button, carrying whatever is in the way.
+   *
+   * Each of these was a paragraph that replaced the ticket, which is the
+   * wrong shape for a thing you can act on — somebody who needs to verify
+   * should be told on the control they just reached for, and taken there.
+   */
+  const gate: { label: string; onClick?: () => void } | null =
+    !account ? { label: t("Sign in to continue") }
+    : !verified ? {
+        label: account.user.kycStatus === "pending" ? t("Verification under review") : t("Complete verification first"),
+        onClick: account.user.kycStatus === "pending" ? undefined : () => router.push("/verify"),
+      }
+    : !isConnected ? null            // the connect button stands in for it
+    : wrongChain ? { label: t("Switch your wallet to Base") }
+    : linked === null ? { label: t("Loading…") }
+    : !isLinked ? { label: t("Link this wallet"), onClick: () => { haptic(); void link(); } }
+    : null;
 
-  const label = side === "buy" ? t("You pay, in USDC") : t("Shares to sell");
-  const n = Number(amount) || 0;
+  const label =
+    step === "quoting" ? t("Pricing…")
+    : step === "paying" ? t("Confirm in your wallet…")
+    : step === "settling" ? t("Settling…")
+    : `${t(side === "buy" ? "Buy" : "Sell")} ${symbol}`;
 
   return (
     <div className="mt-4">
-      <div className="rounded-2xl surface px-3.5 py-3 text-[12px] leading-relaxed text-[var(--muted)]">
-        {side === "buy"
-          ? t("The shares are sent to your wallet on Base. CAPX is the counterparty — the price is the same published DSE mark, converted at the nTZS rate.")
-          : t("Send the shares back to CAPX and USDC comes to your wallet, at the same published mark.")}
-        {side === "buy" && free !== null && (
-          <span className="mt-1 block text-[var(--fg)]">
-            {qtyFmt(free)} {symbol} {t("available to self-custody")}
-          </span>
-        )}
-      </div>
-
-      <label className="mt-3 block">
-        <span className="eyebrow">{label}</span>
+      <label className="block">
+        <span className="eyebrow">
+          {side === "buy" ? t("Spend (USDC)") : `${t("Sell")} (${symbol})`}
+        </span>
         <input
           inputMode="decimal"
-          value={amount}
-          onChange={(e) => { setAmount(e.target.value.replace(/[^\d.]/g, "")); setQuote(null); setStep("idle"); }}
-          placeholder={side === "buy" ? "50" : "1"}
-          className="tnum mt-1.5 w-full rounded-xl border hairline bg-transparent px-4 py-3 text-lg outline-none focus:border-[var(--color-accent)]"
+          value={raw}
+          onChange={(e) => { setRaw(e.target.value.replace(/[^\d.]/g, "")); setSettled(null); }}
+          placeholder={side === "buy" ? "20" : "1"}
+          className="tnum mt-1.5 w-full rounded-xl border hairline bg-transparent px-3.5 py-3 text-lg outline-none focus:border-[var(--color-accent)]"
         />
       </label>
 
-      {/* What it comes to, before anything is signed. */}
-      {quote && (
-        <div className="mt-3 grid gap-1.5 rounded-2xl border hairline p-3.5 text-[12.5px]">
-          <Row label={t("Shares")} value={`${qtyFmt(quote.qty)} ${symbol}`} />
-          <Row label={t("Price")} value={`${quote.priceTzs.toLocaleString()} TZS`} />
-          <Row label={t("Fee")} value={usd(quote.feeUsdc)} />
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {side === "buy" ? (
+          <>
+            {PRESETS.map((p) => (
+              <button key={p} onClick={() => setRaw(String(p))}
+                className="rounded-full border hairline px-3 py-1 text-[11px] hover:surface">
+                ${p}
+              </button>
+            ))}
+            <button
+              onClick={() => setRaw(String(Math.floor(usdcBalance * 100) / 100))}
+              disabled={!(usdcBalance > 0)}
+              className="rounded-full border hairline px-3 py-1 text-[11px] hover:surface disabled:opacity-40"
+            >
+              {t("All")}
+            </button>
+          </>
+        ) : (
+          [0.25, 0.5, 1].map((f) => (
+            <button key={f}
+              onClick={() => setRaw(String(Math.floor(shareHeld * f * 1e8) / 1e8))}
+              disabled={!(shareHeld > 0)}
+              className="rounded-full border hairline px-3 py-1 text-[11px] hover:surface disabled:opacity-40"
+            >
+              {f === 1 ? t("All") : `${f * 100}%`}
+            </button>
+          ))
+        )}
+      </div>
+
+      {/* The same four rows the shilling ticket shows, in dollars. */}
+      {preview && (
+        <dl className="mt-3 grid gap-1.5 rounded-xl surface px-3.5 py-3 text-[12.5px]">
+          <Row label={t("Shares")} value={`${qtyFmt(preview.qty)} ${symbol}`} />
+          <Row label={t("Price")} value={`${usd(preview.perShare)} · ${marks?.priceTzs.toLocaleString()} TZS`} />
+          <Row label={`${t("Fee")} (${((marks?.feeBps ?? 250) / 100).toFixed(2)}%)`} value={usd(preview.fee)} />
           <Row
-            label={side === "buy" ? t("You send") : t("You receive")}
-            value={usd(quote.netUsdc)}
+            label={side === "buy" ? t("Total cost") : t("You receive")}
+            value={usd(preview.total)}
             strong
           />
-          <p className="mt-1 text-[11px] leading-snug text-[var(--muted)]">
-            {t("You pay first, then CAPX sends. Both legs are on Base and you will see each one in your wallet.")}
-          </p>
-        </div>
+        </dl>
       )}
 
+      {/* What is in the wallet, and what is left to sell. */}
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] text-[var(--muted)]">
+        {isConnected && !wrongChain ? (
+          <span className="tnum">
+            {side === "buy"
+              ? `${t("In your wallet")}: ${usd(usdcBalance)} USDC`
+              : `${t("In your wallet")}: ${qtyFmt(shareHeld)} ${symbol}`}
+          </span>
+        ) : <span />}
+        {side === "buy" && marks && (
+          <span className="tnum">{qtyFmt(marks.available)} {symbol} {t("available")}</span>
+        )}
+      </div>
+
+      {tooMany && <Warn>{t("More than CAPX can deliver to a wallet right now.")}</Warn>}
+      {tooPoor && (
+        <Warn>
+          {t("Your wallet holds")} {usd(usdcBalance)} USDC. {t("You need")} {usd(preview!.total - usdcBalance)} {t("more")}.
+        </Warn>
+      )}
+      {tooFew && <Warn>{t("More than this wallet holds.")}</Warn>}
+
       {settled && (
-        <div className="mt-3 rounded-2xl border border-[var(--color-up)]/40 bg-[var(--color-up)]/[0.06] p-3.5 text-[12.5px]">
+        <div className="mt-3 rounded-xl border border-[var(--color-up)]/40 bg-[var(--color-up)]/[0.06] p-3 text-[12.5px]">
           <p className="font-medium">
             {side === "buy"
               ? `${qtyFmt(settled.qty)} ${symbol} ${t("is in your wallet.")}`
@@ -283,19 +359,38 @@ export function SelfCustodyTicket({ symbol, priceTzs, side }: {
         </div>
       )}
 
-      <button
-        onClick={() => { haptic(); void (quote ? payAndSettle() : getQuote()); }}
-        disabled={!(n > 0) || step === "quoting" || step === "paying" || step === "settling"}
-        className="mt-3 w-full rounded-full bg-[var(--fg)] py-3.5 text-[13px] font-medium text-[var(--bg)] transition-transform active:scale-95 disabled:opacity-40"
-      >
-        {step === "quoting" ? t("Pricing…")
-          : step === "paying" ? t("Confirm in your wallet…")
-          : step === "settling" ? t("Settling…")
-          : quote ? (side === "buy" ? `${t("Pay")} ${usd(quote.netUsdc)}` : `${t("Send")} ${qtyFmt(quote.qty)} ${symbol}`)
-          : t("Get a price")}
-      </button>
+      {/*
+        The connect button stands in for the trade button when there is no
+        wallet yet: connecting is the action, and a disabled "Buy" above it
+        would be two controls for one step.
+      */}
+      {account && verified && !isConnected ? (
+        <div className="mt-4"><WalletButton /></div>
+      ) : gate ? (
+        <button
+          onClick={gate.onClick}
+          disabled={!gate.onClick}
+          className="mt-4 w-full rounded-full bg-[var(--fg)] py-3 text-[14px] font-medium text-[var(--bg)] disabled:opacity-40"
+        >
+          {gate.label}
+        </button>
+      ) : (
+        <button
+          onClick={() => { haptic(); void trade(); }}
+          disabled={busy || !preview || !(preview.qty > 0) || tooMany || tooPoor || tooFew}
+          className="mt-4 w-full rounded-full bg-[var(--fg)] py-3 text-[14px] font-medium text-[var(--bg)] disabled:opacity-40"
+        >
+          {label}
+        </button>
+      )}
 
-      {error && <p className="mt-2 text-[12px] leading-snug text-[var(--color-down)]">{error}</p>}
+      {error && <p className="mt-3 text-[12px] leading-snug text-[var(--color-down)]">{error}</p>}
+
+      <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
+        {side === "buy"
+          ? t("The shares go to your own wallet on Base. CAPX is the counterparty at the published DSE mark, converted at the nTZS rate. You pay first, then CAPX sends — you will see both in your wallet.")
+          : t("Send the shares back to CAPX and USDC comes to your wallet, at the same published mark.")}
+      </p>
     </div>
   );
 }
@@ -303,16 +398,12 @@ export function SelfCustodyTicket({ symbol, priceTzs, side }: {
 function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <span className="text-[var(--muted)]">{label}</span>
-      <span className={`tnum ${strong ? "text-[14px] font-medium" : ""}`}>{value}</span>
+      <dt className="text-[var(--muted)]">{label}</dt>
+      <dd className={`tnum ${strong ? "font-medium text-[var(--fg)]" : ""}`}>{value}</dd>
     </div>
   );
 }
 
-function Gate({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="mt-4 rounded-2xl surface px-3.5 py-3 text-[12.5px] leading-relaxed text-[var(--muted)]">
-      {children}
-    </p>
-  );
+function Warn({ children }: { children: React.ReactNode }) {
+  return <p className="mt-3 text-[12px] text-[var(--color-down)]">{children}</p>;
 }

@@ -709,4 +709,19 @@ export const SW: Record<string, string> = {
      the passive "zimenunuliwa" that "bought" maps to elsewhere. */
   "has bought": "amenunua",
   "has sold": "ameuza",
+  /* The USDC side of the ticket. */
+  "Settles into your CAPX balance.": "Inaingia kwenye salio lako la CAPX.",
+  "Sent to your own wallet on Base.": "Inatumwa kwenye pochi yako mwenyewe kwenye Base.",
+  "Spend (USDC)": "Tumia (USDC)",
+  "Sign in to continue": "Ingia ili kuendelea",
+  "Complete verification first": "Kamilisha uhakiki kwanza",
+  "Verification under review": "Uhakiki unapitiwa",
+  "Switch your wallet to Base": "Badilisha pochi yako kwenda Base",
+  "In your wallet": "Kwenye pochi yako",
+  "available": "zinapatikana",
+  "More than CAPX can deliver to a wallet right now.": "Zaidi ya CAPX inavyoweza kupeleka kwenye pochi kwa sasa.",
+  "Your wallet holds": "Pochi yako ina",
+  "more": "zaidi",
+  "More than this wallet holds.": "Zaidi ya pochi hii ilivyo nayo.",
+  "The shares go to your own wallet on Base. CAPX is the counterparty at the published DSE mark, converted at the nTZS rate. You pay first, then CAPX sends — you will see both in your wallet.": "Hisa zinakwenda kwenye pochi yako mwenyewe kwenye Base. CAPX ndiye upande wa pili kwa bei ya DSE iliyochapishwa, ikibadilishwa kwa kiwango cha nTZS. Unalipa kwanza, kisha CAPX inatuma — utaziona zote mbili kwenye pochi yako.",
 };

@@ -7,6 +7,7 @@ import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { useT } from "@/lib/i18n";
 import { haptic } from "@/lib/haptics";
 import { NtzsIcon } from "./icons/Ntzs";
+import { UsdcIcon } from "./icons/Usdc";
 import { DseLogo } from "./DseLogo";
 import { AssetPicker } from "./AssetPicker";
 import { SelfCustodyTicket } from "./SelfCustodyTicket";
@@ -287,30 +288,44 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
       )}
 
       {/*
-        * Delivery, chosen once and shown plainly.
+        * Which currency, which is also which destination.
+        *
+        * The two are the same choice today — shillings settle into a CAPX
+        * balance, dollars settle into the customer's own wallet — and
+        * currency is the half people actually perceive, so that is the half
+        * the control names. The line underneath says where the shares end up,
+        * because inferring it from a currency would be asking too much.
         *
         * Buried behind an "advanced" disclosure this would be a feature
-        * nobody finds; given its own page it would be a second desk. One row
-        * of two words, under the side tabs, where the next decision belongs.
+        * nobody finds; given its own page it would be a second desk. One row,
+        * under the side tabs, where the next decision belongs.
         */}
-      <div className="mt-3 flex items-center gap-2">
-        <span className="eyebrow shrink-0">{t("Deliver to")}</span>
-        <span className="inline-flex overflow-hidden rounded-full border hairline text-[11px]">
-          {([["account", t("CAPX account")], ["wallet", t("My wallet")]] as const).map(([k, label]) => (
+      <div className="mt-3">
+        <div className="grid grid-cols-2 gap-1 rounded-full surface p-1">
+          {([
+            ["account", "TZS", <NtzsIcon key="n" className="h-4 w-4 rounded-full" />],
+            ["wallet", "USDC", <UsdcIcon key="u" className="h-4 w-4" />],
+          ] as const).map(([k, label, icon]) => (
             <button
               key={k}
-              onClick={() => { haptic(); setDest(k); setMsg(null); }}
-              className={`px-3 py-1 transition-colors ${
-                dest === k ? "bg-[var(--fg)] text-[var(--bg)]" : "text-[var(--muted)] hover:surface"}`}
+              onClick={() => { haptic(); setDest(k); setMsg(null); setRaw(""); }}
+              className={`flex items-center justify-center gap-1.5 rounded-full py-1.5 text-[12px] font-medium transition-colors ${
+                dest === k ? "bg-[var(--bg)] shadow-sm" : "text-[var(--muted)]"}`}
             >
+              {icon}
               {label}
             </button>
           ))}
-        </span>
+        </div>
+        <p className="mt-1.5 text-center text-[11px] text-[var(--muted)]">
+          {dest === "account"
+            ? t("Settles into your CAPX balance.")
+            : t("Sent to your own wallet on Base.")}
+        </p>
       </div>
 
       {dest === "wallet" ? (
-        <SelfCustodyTicket symbol={symbol} priceTzs={price} side={side} />
+        <SelfCustodyTicket symbol={symbol} side={side} />
       ) : (
       <>
       {side === "sell" && (

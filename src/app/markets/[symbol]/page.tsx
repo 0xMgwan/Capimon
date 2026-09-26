@@ -7,6 +7,7 @@ import { dseSecurity } from "@/lib/dseSecurities";
 import { CrdbPanel } from "@/components/CrdbPanel";
 import { CrdbChart } from "@/components/CrdbChart";
 import { CrdbIntro } from "@/components/CrdbIntro";
+import { Comments } from "@/components/Comments";
 
 /*
  * US tickers are generated at build time; a DSE listing registered on the desk
@@ -52,6 +53,7 @@ export default async function AssetPage({ params }: { params: Promise<{ symbol: 
         <CrdbChart symbol={d.symbol} external={d.kind === "external"} />
         <div className="mt-3" />
         <CrdbPanel symbol={d.symbol} showHeader={false} />
+        <Comments symbol={d.symbol} />
       </main>
     );
   }

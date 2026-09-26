@@ -652,7 +652,7 @@ export function AdminPanel() {
         </div>
 
         <div className="rounded-2xl border hairline p-5">
-          <div className="eyebrow">Held onchain</div>
+          <div className="eyebrow">CAPX treasury onchain</div>
           {data.onchain ? (
             <>
               <div className="tnum mt-2 text-2xl font-medium">{usd(data.onchain.usdc)}</div>

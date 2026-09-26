@@ -47,6 +47,8 @@ export type SessionUser = {
   ntzsUserId: string | null;
   kycStatus: string;
   nidaNumber: string | null;
+  /** Whether this account's trading is visible to other customers. */
+  shareActivity?: boolean;
 };
 
 export async function createSession(userId: string) {
@@ -89,7 +91,7 @@ export async function currentUser(): Promise<SessionUser | null> {
     const rows = await db()<SessionUser[]>`
       select u.id, u.email, u.username, u.name, u.phone, u.country, u.avatar,
              u.ntzs_user_id as "ntzsUserId", u.kyc_status as "kycStatus",
-             u.nida_number as "nidaNumber"
+             u.nida_number as "nidaNumber", u.share_activity as "shareActivity"
         from capx.sessions s
         join capx.users u on u.id = s.user_id
        where s.token = ${token} and s.expires_at > now()

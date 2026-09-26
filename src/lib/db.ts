@@ -350,6 +350,28 @@ export async function migrate() {
          * row per job, overwritten each run, so the desk can say "last ran at
          * 09:00, bought two" instead of leaving somebody to guess.
          */
+        /*
+         * What customers say to each other on a market page.
+         *
+         * Kept per security rather than globally: a conversation about CRDB
+         * belongs beside CRDB's price, and a single firehose would be a
+         * different product. Deletion is a timestamp, not a removal — a
+         * comment somebody replied to cannot simply vanish, and a moderator
+         * needs to see what was said.
+         */
+        create table if not exists capx.comments (
+          id         uuid primary key default gen_random_uuid(),
+          symbol     text not null,
+          user_id    uuid not null references capx.users(id) on delete cascade,
+          body       text not null,
+          /* Handles named with @, stored so a mention survives a later
+             username change and can be highlighted without re-parsing. */
+          mentions   jsonb not null default '[]'::jsonb,
+          deleted_at timestamptz,
+          created_at timestamptz not null default now()
+        )`;
+
+      await sql`
         create table if not exists capx.job_runs (
           job        text primary key,
           ran_at     timestamptz not null default now(),
@@ -455,6 +477,14 @@ export async function migrate() {
        */
       const lateColumns: Record<string, string[]> = {
         users: [
+          /*
+           * Whether this account's trading is public.
+           *
+           * Off until somebody turns it on. A customer's positions and
+           * returns are among the most sensitive things here, and nobody who
+           * signed up before there was a leaderboard agreed to appear on one.
+           */
+          "share_activity boolean not null default false",
           /* When the account holder agreed to the terms. Null for accounts
              opened before there were any, which is a fact worth keeping rather
              than back-filling with a date nobody chose. */
@@ -535,6 +565,9 @@ export async function migrate() {
       await sql`create index if not exists kyc_status_idx on capx.kyc_submissions(status, created_at desc)`;
       await sql`create index if not exists orders_user_idx on capx.orders(user_id, created_at desc)`;
       await sql`create index if not exists deposits_user_idx on capx.deposits(user_id, created_at desc)`;
+      await sql`create index if not exists comments_symbol_idx
+                  on capx.comments(symbol, created_at desc)`;
+      await sql`create index if not exists comments_user_idx on capx.comments(user_id)`;
       await sql`create index if not exists deposits_status_idx on capx.deposits(status)`;
       /* The duplicate check reads this on every settlement pass. */
       await sql`create index if not exists deposits_ntzs_ref_idx

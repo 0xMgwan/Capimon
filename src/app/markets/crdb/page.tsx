@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { CrdbPanel } from "@/components/CrdbPanel";
 import { CrdbChart } from "@/components/CrdbChart";
 import { CrdbIntro } from "@/components/CrdbIntro";
+import { Comments } from "@/components/Comments";
 
 export const metadata: Metadata = {
   title: "CRDB Bank Plc",
@@ -22,6 +23,7 @@ export default function CrdbPage() {
       <CrdbChart />
       <div className="mt-3" />
       <CrdbPanel showHeader={false} />
+      <Comments symbol="CRDB" />
     </main>
   );
 }

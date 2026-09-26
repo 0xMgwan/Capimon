@@ -82,7 +82,7 @@ export function SettingsView() {
   // Uncontrolled until touched, so an unedited field is never sent.
   const val = (edited: string | null, saved: string | null) => edited ?? saved ?? "";
 
-  const save = async (patch: Record<string, string | null>) => {
+  const save = async (patch: Record<string, string | boolean | null>) => {
     setBusy(true); setError(null); setNote(null);
     try {
       const r = await fetch("/api/account/profile", {
@@ -251,6 +251,37 @@ export function SettingsView() {
             {error ?? note}
           </p>
         )}
+      </section>
+
+      {/*
+        * Publishing this account's trading.
+        *
+        * Off until somebody turns it on, and the copy says what turning it on
+        * actually exposes rather than calling it "social features". Nobody
+        * should learn what they agreed to from a leaderboard.
+        */}
+      <section className="mt-3 rounded-2xl border hairline p-3.5 sm:p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[14px] font-medium">{t("Show my trading to others")}</div>
+            <p className="mt-0.5 text-[12px] leading-relaxed text-[var(--muted)]">
+              {t("Puts your handle on the leaderboard and lets anyone who taps it see how many trades you have made, how much you have traded, what you have made or lost, and which shares you hold. Off unless you turn it on, and you can turn it off again whenever you like.")}
+            </p>
+          </div>
+          <button
+            onClick={() => { haptic(); void save({ shareActivity: !u.shareActivity }); }}
+            disabled={busy}
+            role="switch"
+            aria-checked={!!u.shareActivity}
+            className={`mt-0.5 h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors disabled:opacity-50 ${
+              u.shareActivity ? "bg-[var(--color-up)]" : "surface"
+            }`}
+          >
+            <span className={`block h-5 w-5 rounded-full bg-[var(--bg)] shadow transition-transform ${
+              u.shareActivity ? "translate-x-5" : ""
+            }`} />
+          </button>
+        </div>
       </section>
 
       <PasswordChange />

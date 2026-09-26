@@ -90,6 +90,18 @@ export async function PATCH(req: Request) {
       patch.username = username || null;
     }
 
+    /*
+     * Publishing this account's trading.
+     *
+     * Its own field rather than part of the profile blob, because it decides
+     * whether a stranger can see what somebody owns and what they have made.
+     * Off unless explicitly set true — a missing value must never be read as
+     * consent.
+     */
+    if (body.shareActivity !== undefined) {
+      await sql`update capx.users set share_activity = ${body.shareActivity === true} where id = ${user.id}`;
+    }
+
     if (body.name !== undefined) patch.name = String(body.name ?? "").trim().slice(0, 80) || null;
     if (body.phone !== undefined) patch.phone = String(body.phone ?? "").replace(/[^\d]/g, "").slice(0, 15) || null;
 

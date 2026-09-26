@@ -133,6 +133,38 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
   const n = Number(raw.replace(/,/g, "")) || 0;
 
   /*
+   * The currency switch, on the amount's own label row.
+   *
+   * It had a full-width bar of its own under the side tabs, which read as a
+   * decision of the same weight as buy-or-sell and cost two rows plus a
+   * caption. This is the shape the dollar ticket already uses — a small
+   * segmented control at the end of the "you spend" line — so the two
+   * tickets stop looking like different products.
+   *
+   * Rendered here and handed to whichever ticket is showing, because the
+   * amount field belongs to one of them and the switch has to sit beside it
+   * either way.
+   */
+  const currencySwitch = (
+    <span className="flex shrink-0 rounded-full surface p-0.5 normal-case tracking-normal">
+      {([
+        ["account", "TZS", <NtzsIcon key="n" className="h-3 w-3 rounded-full" />],
+        ["wallet", "USDC", <UsdcIcon key="u" className="h-3 w-3" />],
+      ] as const).map(([k, label, icon]) => (
+        <button
+          key={k}
+          onClick={() => { haptic(); setDest(k); setMsg(null); setRaw(""); }}
+          className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
+            dest === k ? "bg-[var(--bg)] shadow-sm" : "text-[var(--muted)]"}`}
+        >
+          {icon}
+          {label}
+        </button>
+      ))}
+    </span>
+  );
+
+  /*
    * What the order will do, worked out the same way the server will.
    *
    * The fee comes off the cash leg and the share count is floored, so the
@@ -313,39 +345,13 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
         * nobody finds; given its own page it would be a second desk. One row,
         * under the side tabs, where the next decision belongs.
         */}
-      {/*
-        * One row, not two bars and a caption.
-        *
-        * A second full-width segmented control under the side tabs read as
-        * another decision of the same weight as buy-or-sell, which it is not,
-        * and the centred line under it cost a third row to say something that
-        * fits beside the control. Small pills on the left, the consequence on
-        * the right, one line.
-        */}
-      <div className="mt-2.5 flex items-center gap-2">
-        <span className="inline-flex shrink-0 rounded-full surface p-0.5">
-          {([
-            ["account", "TZS", <NtzsIcon key="n" className="h-3.5 w-3.5 rounded-full" />],
-            ["wallet", "USDC", <UsdcIcon key="u" className="h-3.5 w-3.5" />],
-          ] as const).map(([k, label, icon]) => (
-            <button
-              key={k}
-              onClick={() => { haptic(); setDest(k); setMsg(null); setRaw(""); }}
-              className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-medium transition-colors ${
-                dest === k ? "bg-[var(--bg)] shadow-sm" : "text-[var(--muted)]"}`}
-            >
-              {icon}
-              {label}
-            </button>
-          ))}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-right text-[11px] text-[var(--muted)]">
-          {dest === "account" ? t("To your CAPX balance") : t("To your own wallet")}
-        </span>
-      </div>
-
       {dest === "wallet" ? (
-        <SelfCustodyTicket symbol={symbol} side={side} initialAmount={handoff} />
+        <SelfCustodyTicket
+          symbol={symbol}
+          side={side}
+          initialAmount={handoff}
+          currencySwitch={currencySwitch}
+        />
       ) : (
       <>
       {side === "sell" && (
@@ -377,17 +383,18 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
           */}
         <span className="eyebrow flex items-center justify-between gap-2">
           <span>{t(side === "buy" ? "Spend (TZS)" : sellIn === "tzs" ? "Receive about (TZS)" : "Shares to sell")}</span>
-          {side === "sell" && held > 0 && (
-            <span className="tnum normal-case tracking-normal text-[var(--muted)]">
-              {t("You hold")}{" "}
-              <span className="text-[var(--fg)]">
-                {sellIn === "tzs"
-                  ? `${Math.floor(held * price).toLocaleString()} TZS`
-                  : `${fmtQty(held)} ${symbol}`}
-              </span>
-            </span>
-          )}
+          {currencySwitch}
         </span>
+        {side === "sell" && held > 0 && (
+          <span className="tnum mt-1 block text-right text-[11px] text-[var(--muted)]">
+            {t("You hold")}{" "}
+            <span className="text-[var(--fg)]">
+              {sellIn === "tzs"
+                ? `${Math.floor(held * price).toLocaleString()} TZS`
+                : `${fmtQty(held)} ${symbol}`}
+            </span>
+          </span>
+        )}
         <input
           inputMode="decimal"
           value={raw}

@@ -49,11 +49,19 @@ const PRESETS = [5, 20, 50, 100];
 const usd = (n: number) => `$${n.toFixed(2)}`;
 const qtyFmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 8 });
 
-export function SelfCustodyTicket({ symbol, side, initialAmount }: {
+export function SelfCustodyTicket({ symbol, side, initialAmount, currencySwitch }: {
   symbol: string;
   side: "buy" | "sell";
   /** An amount chosen in the hero ticket before this one was reached. */
   initialAmount?: string | null;
+  /**
+   * The TZS/USDC control, owned by the panel above.
+   *
+   * It sits on this ticket's own label row, so switching currency does not
+   * mean looking somewhere else on the page — but the state behind it decides
+   * which ticket exists, which makes it the panel's to hold.
+   */
+  currencySwitch?: React.ReactNode;
 }) {
   const { t } = useT();
   const router = useRouter();
@@ -302,8 +310,9 @@ export function SelfCustodyTicket({ symbol, side, initialAmount }: {
   return (
     <div className="mt-4">
       <label className="block">
-        <span className="eyebrow">
-          {side === "buy" ? t("Spend (USDC)") : `${t("Sell")} (${symbol})`}
+        <span className="eyebrow flex items-center justify-between gap-2">
+          <span>{side === "buy" ? t("Spend (USDC)") : `${t("Sell")} (${symbol})`}</span>
+          {currencySwitch}
         </span>
         <input
           inputMode="decimal"
@@ -312,6 +321,15 @@ export function SelfCustodyTicket({ symbol, side, initialAmount }: {
           placeholder={side === "buy" ? "20" : "1"}
           className="tnum mt-1.5 w-full rounded-xl border hairline bg-transparent px-3.5 py-3 text-lg outline-none focus:border-[var(--color-accent)]"
         />
+        {/* Where the shilling ticket shows a balance, so the two agree. */}
+        {isConnected && !wrongChain && (
+          <span className="tnum mt-1 block text-right text-[11px] text-[var(--muted)]">
+            {t("In your wallet")}{" "}
+            <span className="text-[var(--fg)]">
+              {side === "buy" ? `${usd(usdcBalance)} USDC` : `${qtyFmt(shareHeld)} ${symbol}`}
+            </span>
+          </span>
+        )}
       </label>
 
       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -358,19 +376,12 @@ export function SelfCustodyTicket({ symbol, side, initialAmount }: {
         </dl>
       )}
 
-      {/* What is in the wallet, and what is left to sell. */}
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] text-[var(--muted)]">
-        {isConnected && !wrongChain ? (
-          <span className="tnum">
-            {side === "buy"
-              ? `${t("In your wallet")}: ${usd(usdcBalance)} USDC`
-              : `${t("In your wallet")}: ${qtyFmt(shareHeld)} ${symbol}`}
-          </span>
-        ) : <span />}
-        {side === "buy" && marks && (
+      {/* What is left to sell. What is in the wallet sits under the label. */}
+      {side === "buy" && marks && (
+        <div className="mt-2 text-right text-[11px] text-[var(--muted)]">
           <span className="tnum">{qtyFmt(marks.available)} {symbol} {t("available")}</span>
-        )}
-      </div>
+        </div>
+      )}
 
       {tooMany && <Warn>{t("More than CAPX can deliver to a wallet right now.")}</Warn>}
       {tooPoor && (

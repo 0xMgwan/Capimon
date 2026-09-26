@@ -38,6 +38,8 @@ async function toSquareDataUrl(file: File): Promise<string> {
 
 export function SettingsView() {
   const { account, refresh, signOut } = useCapimonAccount();
+  /** The position the switch was just dragged to, before the server agrees. */
+  const [pendingShare, setPendingShare] = useState<boolean | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { t, lang, setLang } = useT();
   const [username, setUsername] = useState<string | null>(null);
@@ -79,6 +81,16 @@ export function SettingsView() {
   }
 
   const u = account.user;
+  /*
+   * The switch moves first, and the save catches up.
+   *
+   * It used to wait for the PATCH and then a full account refetch before the
+   * knob slid, which is most of a second of nothing happening after a
+   * deliberate tap — long enough to tap again. The server is still the
+   * authority: this only holds the intended position until the refetch
+   * confirms it, and a failure puts it straight back where it was.
+   */
+  const shareActivity = pendingShare ?? !!u.shareActivity;
   // Uncontrolled until touched, so an unedited field is never sent.
   const val = (edited: string | null, saved: string | null) => edited ?? saved ?? "";
 
@@ -269,16 +281,27 @@ export function SettingsView() {
             </p>
           </div>
           <button
-            onClick={() => { haptic(); void save({ shareActivity: !u.shareActivity }); }}
-            disabled={busy}
+            onClick={async () => {
+              const next = !shareActivity;
+              haptic();
+              setPendingShare(next);
+              await save({ shareActivity: next });
+              /*
+               * Released either way. `save` refetches the account before it
+               * returns, so by here the server's answer is in hand — and on
+               * a failure that answer is the old position, which is exactly
+               * where the switch should snap back to.
+               */
+              setPendingShare(null);
+            }}
             role="switch"
-            aria-checked={!!u.shareActivity}
-            className={`mt-0.5 h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors disabled:opacity-50 ${
-              u.shareActivity ? "bg-[var(--color-up)]" : "surface"
+            aria-checked={shareActivity}
+            className={`mt-0.5 h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors ${
+              shareActivity ? "bg-[var(--color-up)]" : "surface"
             }`}
           >
             <span className={`block h-5 w-5 rounded-full bg-[var(--bg)] shadow transition-transform ${
-              u.shareActivity ? "translate-x-5" : ""
+              shareActivity ? "translate-x-5" : ""
             }`} />
           </button>
         </div>

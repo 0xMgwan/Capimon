@@ -255,3 +255,31 @@ a, button, input, select, textarea, label, [role="button"] {
    movement would pull the eye off the prices it sits above. */
 @keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
 .fade-in { animation: fade-in 420ms ease-out; }
+
+/*
+ * The trade strip changing line.
+ *
+ * It lifts a couple of pixels as it fades, which reads as one thing
+ * replacing another rather than text being rewritten in place. Two pixels,
+ * not ten: past that it stops being a transition and starts being motion
+ * competing with the prices.
+ */
+@keyframes feed-in {
+  from { opacity: 0; transform: translateY(3px) }
+  to   { opacity: 1; transform: translateY(0) }
+}
+.feed-in { animation: feed-in 460ms cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* A ring that breathes under the live dot. Slow, because it is weather. */
+@keyframes pulse-ring {
+  0%   { transform: scale(1);   opacity: 0.55 }
+  70%  { transform: scale(2.4); opacity: 0 }
+  100% { transform: scale(2.4); opacity: 0 }
+}
+.pulse-ring { animation: pulse-ring 2.4s cubic-bezier(0, 0, 0.2, 1) infinite; }
+
+/* Somebody who asked for less movement gets none of this. */
+@media (prefers-reduced-motion: reduce) {
+  .feed-in { animation: fade-in 200ms ease-out; }
+  .pulse-ring { animation: none; opacity: 0.35; }
+}

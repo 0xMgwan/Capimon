@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Comments } from "./Comments";
+import { TradeFeed } from "./TradeFeed";
 import { useEffect, useState } from "react";
 import type { AssetMeta } from "@/lib/assets";
 import { useMarket, useMarkets } from "@/lib/useMarkets";
@@ -169,6 +170,7 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
       */}
       {/* Below everything, including the peers: somebody who came to buy
           should reach the ticket long before they reach an argument. */}
+      <div className="mt-3"><TradeFeed symbol={asset.symbol} /></div>
       <Comments symbol={asset.symbol} />
 
       <div className="safe-b fixed inset-x-0 bottom-[4.25rem] z-40 px-4 lg:hidden">

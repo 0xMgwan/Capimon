@@ -703,4 +703,10 @@ export const SW: Record<string, string> = {
   "Get a price": "Pata bei",
   "Pay": "Lipa",
   "Send": "Tuma",
+  /* The trade strip. */
+  "Someone": "Mtu fulani",
+  /* A person as the subject, so the verb carries them: "amenunua", not
+     the passive "zimenunuliwa" that "bought" maps to elsewhere. */
+  "has bought": "amenunua",
+  "has sold": "ameuza",
 };

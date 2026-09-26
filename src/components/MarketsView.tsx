@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { useDse, matchesDse } from "@/lib/useDse";
 import { DseLogo } from "./DseLogo";
 import { KycPrompt } from "./KycPrompt";
-import { TradeFeed } from "./TradeFeed";
 import { useMarkets } from "@/lib/useMarkets";
 import { MarketTable } from "./MarketTable";
 import { AssetLogo } from "./AssetLogo";
@@ -93,8 +92,6 @@ export function MarketsView() {
         * prices, and costs a line — a feed with its own panel would be a
         * second thing competing with the market it is describing.
         */}
-      <div className="mt-3"><TradeFeed /></div>
-
       <div className="mt-3"><KycPrompt /></div>
 
       {error && (

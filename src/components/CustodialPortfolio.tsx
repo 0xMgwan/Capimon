@@ -8,7 +8,6 @@ import { Reveal } from "./Reveal";
 import { WalletSection } from "./WalletSection";
 import { KycPrompt } from "./KycPrompt";
 import { RecurringBuys } from "./RecurringBuys";
-import { MarketRoom } from "./MarketRoom";
 import { useDse } from "@/lib/useDse";
 import { usd, costLabel } from "@/lib/format";
 import { useT } from "@/lib/i18n";
@@ -210,8 +209,6 @@ export function CustodialPortfolio() {
         ) : null}
       />
 
-      {/* Everyone else, once you have finished reading your own numbers. */}
-      <MarketRoom />
     </div>
   );
 }

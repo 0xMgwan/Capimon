@@ -8,7 +8,6 @@ import { CrdbPanel } from "@/components/CrdbPanel";
 import { CrdbChart } from "@/components/CrdbChart";
 import { CrdbIntro } from "@/components/CrdbIntro";
 import { Comments } from "@/components/Comments";
-import { TradeFeed } from "@/components/TradeFeed";
 
 /*
  * US tickers are generated at build time; a DSE listing registered on the desk
@@ -54,7 +53,6 @@ export default async function AssetPage({ params }: { params: Promise<{ symbol: 
         <CrdbChart symbol={d.symbol} external={d.kind === "external"} />
         <div className="mt-3" />
         <CrdbPanel symbol={d.symbol} showHeader={false} />
-        <div className="mt-3"><TradeFeed symbol={d.symbol} /></div>
         <Comments symbol={d.symbol} />
       </main>
     );

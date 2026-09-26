@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
@@ -78,6 +79,59 @@ export function MobileTabs() {
   const { isConnected } = useAccount();
   const { account } = useCapimonAccount();
 
+  /*
+   * Pinned to what you can actually see.
+   *
+   * `position: fixed; bottom: 0` anchors to the *layout* viewport, and on iOS
+   * that is not the strip of screen you are looking at: Safari's toolbar
+   * animates in and out over it, and the two viewports disagree for the
+   * length of every animation. The bar is told to sit at the bottom the whole
+   * time and obeys — of a rectangle that is not where the bottom appears to
+   * be — so it slides as you scroll and settles when you stop.
+   *
+   * The visual viewport reports the difference. Correcting for it puts the
+   * bar on the edge of the visible area rather than the edge of the document,
+   * which is the one the thumb is aiming at. On a device where the two never
+   * diverge — Android, a desktop, an installed app with no toolbar — the gap
+   * is zero and this does nothing at all.
+   *
+   * A keyboard collapses the visual viewport by several hundred pixels. That
+   * is not a toolbar and the bar should stay where it is rather than climbing
+   * the screen over the field being typed into, so corrections are capped.
+   */
+  const barRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    const el = barRef.current;
+    if (!vv || !el) return;
+
+    let frame = 0;
+    const apply = () => {
+      frame = 0;
+      const gap = document.documentElement.clientHeight - (vv.height + vv.offsetTop);
+      el.style.transform = gap > 0.5 && gap < 160
+        ? `translate3d(0, ${-gap}px, 0)`
+        : "translateZ(0)";
+    };
+    // Coalesced: these fire continuously through a scroll, and moving the bar
+    // more than once a frame is work nobody can see.
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(apply); };
+
+    apply();
+    vv.addEventListener("resize", schedule);
+    vv.addEventListener("scroll", schedule);
+    window.addEventListener("scroll", schedule, { passive: true });
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      vv.removeEventListener("resize", schedule);
+      vv.removeEventListener("scroll", schedule);
+      window.removeEventListener("scroll", schedule);
+    };
+    // Re-run once the bar actually exists: on the first render of a session
+    // there is no account yet and therefore no <nav> to hold, so an effect
+    // with no dependencies would attach to nothing and never try again.
+  }, [isConnected, account]);
+
   if (!isConnected && !account) return null;
 
   /*
@@ -112,6 +166,7 @@ export function MobileTabs() {
       * ticker, and this needs promoting only while it exists.
       */}
     <nav
+      ref={barRef}
       style={{ transform: "translateZ(0)" }}
       className="safe-b fixed inset-x-0 bottom-0 z-50 border-t hairline bg-[var(--bg)] md:hidden"
     >

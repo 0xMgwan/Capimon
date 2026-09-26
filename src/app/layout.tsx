@@ -8,6 +8,7 @@ import { Footer } from "@/components/Footer";
 import { TickerTape } from "@/components/TickerTape";
 import { DseTape } from "@/components/DseTape";
 import { MobileTabs } from "@/components/MobileTabs";
+import { TradeFeed } from "@/components/TradeFeed";
 import { SafeArea } from "@/components/SafeArea";
 import { ThemeColor } from "@/components/ThemeColor";
 import { AppLaunch } from "@/components/AppLaunch";
@@ -127,6 +128,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             * element that has to stay pinned to the viewport.
             */}
           <div className="page-clip">
+            {/*
+              * The live strip, once, above everything.
+              *
+              * It was mounted per page, which meant it appeared on four of
+              * them and was cut off on the markets list where it sat inside a
+              * container that had already spent its width. One instance here
+              * puts it on every page at a width it controls, and there is
+              * only ever one of it to reason about.
+              *
+              * Outside the sticky header on purpose: a third row pinned to
+              * the top of a phone is a third row of chrome, and this is
+              * weather rather than navigation.
+              */}
+            <div className="safe-x mx-auto w-full max-w-[1400px] px-4 pt-2.5 sm:px-8">
+              <TradeFeed />
+            </div>
             <main className="safe-x">{children}</main>
             <Footer />
           </div>

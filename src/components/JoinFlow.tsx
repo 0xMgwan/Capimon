@@ -129,9 +129,23 @@ export function JoinFlow() {
                 {t("Your identity has been confirmed. Nothing more to do here.")}
               </p>
             ) : submitted ? (
-              <p className="text-sm leading-relaxed text-[var(--muted)]">
-                {t("Your verification is being reviewed. You can keep going below while we look at it.")}
-              </p>
+              <>
+                <p className="text-sm leading-relaxed text-[var(--muted)]">
+                  {t("Your verification is being reviewed. You can keep going below while we look at it.")}
+                </p>
+                {/*
+                  Somewhere to go while waiting.
+                  A screen that says "we are looking at it" and offers nothing
+                  is a dead end, and the person reading it came here to trade.
+                  The markets are readable unverified; only buying is not.
+                */}
+                <Link
+                  href="/markets"
+                  className="mt-3 inline-block rounded-full border hairline px-4 py-2 text-[13px] font-medium transition-colors hover:surface"
+                >
+                  {t("Explore markets")} →
+                </Link>
+              </>
             ) : signedIn ? (
               <KycFlow onDone={() => void load()} />
             ) : (

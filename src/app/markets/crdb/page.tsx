@@ -3,7 +3,6 @@ import { CrdbPanel } from "@/components/CrdbPanel";
 import { CrdbChart } from "@/components/CrdbChart";
 import { CrdbIntro } from "@/components/CrdbIntro";
 import { Comments } from "@/components/Comments";
-import { TradeFeed } from "@/components/TradeFeed";
 
 export const metadata: Metadata = {
   title: "CRDB Bank Plc",
@@ -24,8 +23,6 @@ export default function CrdbPage() {
       <CrdbChart />
       <div className="mt-3" />
       <CrdbPanel showHeader={false} />
-      {/* Who has been trading this one, under the ticket rather than over it. */}
-      <div className="mt-3"><TradeFeed symbol="CRDB" /></div>
       <Comments symbol="CRDB" />
     </main>
   );

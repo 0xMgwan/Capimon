@@ -10,6 +10,7 @@ import { DseTape } from "@/components/DseTape";
 import { MobileTabs } from "@/components/MobileTabs";
 import { TradeFeed } from "@/components/TradeFeed";
 import { SafeArea } from "@/components/SafeArea";
+import { WalletSession } from "@/components/WalletSession";
 import { ThemeColor } from "@/components/ThemeColor";
 import { AppLaunch } from "@/components/AppLaunch";
 import { Haptics } from "@/components/Haptics";
@@ -149,6 +150,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
           <MobileTabs />
           <SafeArea />
+          <WalletSession />
           <Haptics />
           <ThemeColor />
           <MarqueeKeeper />

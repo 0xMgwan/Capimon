@@ -49,14 +49,26 @@ export type SessionUser = {
   nidaNumber: string | null;
   /** Whether this account's trading is visible to other customers. */
   shareActivity?: boolean;
+  /**
+   * How this session was opened.
+   *
+   * "wallet" means the only thing proving who this is was a signature from an
+   * address. Disconnecting that address therefore ends the session — leaving
+   * somebody signed in on evidence they have just withdrawn would be a
+   * strange thing for a broker to do. "password" sessions are untouched by
+   * what any wallet does.
+   */
+  via?: "password" | "wallet";
 };
 
-export async function createSession(userId: string) {
+export async function createSession(userId: string, via: "password" | "wallet" = "password") {
   await migrate();
   const sql = db();
   const token = randomBytes(32).toString("base64url");
   const expires = new Date(Date.now() + SESSION_DAYS * 864e5);
-  await sql`insert into capx.sessions (token, user_id, expires_at) values (${token}, ${userId}, ${expires})`;
+  await sql`
+    insert into capx.sessions (token, user_id, via, expires_at)
+    values (${token}, ${userId}, ${via}, ${expires})`;
 
   const jar = await cookies();
   jar.set(SESSION_COOKIE, token, {
@@ -91,7 +103,8 @@ export async function currentUser(): Promise<SessionUser | null> {
     const rows = await db()<SessionUser[]>`
       select u.id, u.email, u.username, u.name, u.phone, u.country, u.avatar,
              u.ntzs_user_id as "ntzsUserId", u.kyc_status as "kycStatus",
-             u.nida_number as "nidaNumber", u.share_activity as "shareActivity"
+             u.nida_number as "nidaNumber", u.share_activity as "shareActivity",
+             s.via as "via"
         from capx.sessions s
         join capx.users u on u.id = s.user_id
        where s.token = ${token} and s.expires_at > now()

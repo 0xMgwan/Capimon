@@ -257,6 +257,14 @@ export function SelfCustodyTicket({ symbol, side, initialAmount, currencySwitch 
       haptic("success");
       setSettled({ qty: j.order.qty, tx: j.order.settleTx });
       setRaw("");
+      /*
+       * Tell the rest of the app the chain has moved.
+       *
+       * The portfolio reads balances off Base on a twenty-second poll, so
+       * without this somebody who watched the transfer confirm in their
+       * wallet came back to a page still saying they held nothing.
+       */
+      window.dispatchEvent(new CustomEvent("capx:settled", { detail: { symbol, side } }));
     } catch (e) {
       haptic("error");
       const msg = e instanceof Error ? e.message : t("That did not go through");

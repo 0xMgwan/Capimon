@@ -76,6 +76,10 @@ export async function migrate() {
         create table if not exists capx.sessions (
           token       text primary key,
           user_id     uuid not null references capx.users(id) on delete cascade,
+          /* password | wallet — how this session was opened. A session opened
+             by signing from a wallet ends when that wallet disconnects; one
+             opened with a password is unaffected by any of that. */
+          via         text not null default 'password',
           created_at  timestamptz not null default now(),
           expires_at  timestamptz not null
         )`;
@@ -625,6 +629,10 @@ export async function migrate() {
              the listing queries: it is hundreds of kilobytes and is served on
              its own route. */
           "document text", "document_name text",
+        ],
+        sessions: [
+          /* Added once a wallet could open one. */
+          "via text not null default 'password'",
         ],
         comments: [
           /* Replies arrived after the table did. */

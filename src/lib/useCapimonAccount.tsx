@@ -15,7 +15,9 @@ export type CustodialPosition = {
 export type CustodialAccount = {
   user: { id: string; email: string; username: string | null; name: string | null; phone: string | null; avatar: string | null; ntzsUserId: string | null; kycStatus: string; nidaNumber: string | null;
     /** Whether this account's trading is visible to other customers. */
-    shareActivity?: boolean };
+    shareActivity?: boolean;
+    /** How this session was opened: a password, or a signature from a wallet. */
+    via?: "password" | "wallet" };
   cash: number;
   /** Cost and return, derived from the prices every fill already recorded. */
   pnl?: { invested: number; unrealised: number; realised: number; unrealisedPct: number };

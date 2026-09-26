@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { KycPrompt } from "./KycPrompt";
+import { LinkedWallets } from "./LinkedWallets";
 import { PushToggle } from "./PushToggle";
 import { useRef, useState, useEffect } from "react";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
@@ -356,6 +357,8 @@ export function SettingsView() {
           </button>
         </div>
       </section>
+
+      <LinkedWallets />
 
       <PasswordChange />
 

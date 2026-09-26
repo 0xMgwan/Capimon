@@ -22,6 +22,9 @@ import { useT } from "@/lib/i18n";
 type Position = {
   symbol: string; ticker: string; name: string; color: string; token: string;
   qty: number; price: number; change: number; value: number;
+  /** Where the mark is quoted. A DSE listing is priced in shillings. */
+  currency?: "USD" | "TZS";
+  priceTzs?: number | null;
 };
 type Portfolio = { ok: boolean; positions: Position[]; equity: number; cash: number; total: number; gas: number; error?: string };
 
@@ -62,7 +65,29 @@ export function PortfolioView() {
     // Deferred so the first read does not set state inside the effect body.
     const first = setTimeout(load, 0);
     const stop = pollWhileVisible(load, 20_000);
-    return () => { alive = false; clearTimeout(first); stop(); };
+    /*
+     * A trade the customer just made should not wait out the poll.
+     *
+     * The ticket announces its own settlement, and this listens — otherwise
+     * somebody who has watched the transaction confirm in their wallet comes
+     * back to a page that still says they hold nothing, for up to twenty
+     * seconds, which reads as the trade not having worked.
+     *
+     * Twice, a moment apart: the send is mined before this fires, but a
+     * public RPC can still be serving the pre-trade balance for a second or
+     * two afterwards.
+     */
+    const onSettled = () => {
+      load();
+      window.setTimeout(load, 2500);
+    };
+    window.addEventListener("capx:settled", onSettled);
+    return () => {
+      alive = false;
+      clearTimeout(first);
+      stop();
+      window.removeEventListener("capx:settled", onSettled);
+    };
   }, [address]);
 
   // Signed into a custodial account and no wallet connected: that book is the
@@ -159,7 +184,9 @@ export function PortfolioView() {
                     <span className="min-w-0 flex-1">
                       <span className="block text-[15px] font-medium">{p.ticker}</span>
                       <span className="tnum block truncate text-xs text-[var(--muted)]">
-                        {p.qty.toFixed(6)} @ {usd(p.price)}
+                        {p.qty.toFixed(6)} @ {p.currency === "TZS" && p.priceTzs
+                          ? `${Math.round(p.priceTzs).toLocaleString()} TZS`
+                          : usd(p.price)}
                       </span>
                     </span>
                     <Sparkline data={(m?.history ?? []).slice(-30)}
@@ -207,7 +234,11 @@ export function PortfolioView() {
                         </Link>
                       </td>
                       <td className="tnum px-3 py-3.5 text-right text-sm">{p.qty.toFixed(6)}</td>
-                      <td className="tnum px-3 py-3.5 text-right text-sm">{usd(p.price)}</td>
+                      <td className="tnum px-3 py-3.5 text-right text-sm">
+                        {p.currency === "TZS" && p.priceTzs
+                          ? `${Math.round(p.priceTzs).toLocaleString()} TZS`
+                          : usd(p.price)}
+                      </td>
                       <td className={`tnum px-3 py-3.5 text-right text-sm ${p.change >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
                         {p.change >= 0 ? "+" : ""}{p.change.toFixed(2)}%
                       </td>

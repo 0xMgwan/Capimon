@@ -23,9 +23,31 @@ import { useEffect } from "react";
  */
 export function MarqueeKeeper() {
   useEffect(() => {
+    /*
+     * Only the strips that are actually on screen.
+     *
+     * The full DSE board is `hidden sm:block`. On a phone its track is still
+     * in the document and is the first one in it, and an element inside
+     * display:none has no running animation at all — measured on a 375px
+     * viewport, track 0 reports offsetParent null, zero width and no
+     * animations, while the real ticker is track 1.
+     *
+     * The watchdog sampled `querySelector('.marquee-track')`, which is that
+     * first one, found no animation on it and returned. Every eight seconds,
+     * forever. So the check that exists to catch a silently stalled ticker
+     * was inert on exactly the device where the ticker silently stalls — the
+     * visible strip was never watched at all, and a blanked one stayed blank
+     * until something else happened to fire a revive.
+     *
+     * Everything here now works on the strips that have a layout box.
+     */
+    const visibleTracks = () =>
+      [...document.querySelectorAll<HTMLElement>(".marquee-track")]
+        .filter((el) => el.offsetParent !== null && el.getBoundingClientRect().width > 0);
+
     const revive = () => {
       if (document.visibilityState !== "visible") return;
-      for (const el of document.querySelectorAll<HTMLElement>(".marquee-track")) {
+      for (const el of visibleTracks()) {
         /*
          * Rebuilt, not just restarted.
          *
@@ -64,11 +86,14 @@ export function MarqueeKeeper() {
     let last: number | null = null;
     const watch = window.setInterval(() => {
       if (document.visibilityState !== "visible") { last = null; return; }
-      const track = document.querySelector<HTMLElement>(".marquee-track");
+      const track = visibleTracks()[0];
       const anim = track?.getAnimations?.()[0];
-      if (!anim) return;
+      if (!anim) { last = null; return; }
       const now = typeof anim.currentTime === "number" ? anim.currentTime : null;
-      if (now !== null && last !== null && now === last) revive();
+      // A missing reading resets the comparison rather than counting as
+      // "unchanged", which would rebuild the strip on no evidence.
+      if (now === null) { last = null; return; }
+      if (last !== null && now === last) revive();
       last = now;
     }, 8_000);
 

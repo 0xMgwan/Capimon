@@ -768,4 +768,15 @@ export const SW: Record<string, string> = {
   "Link this wallet to trade into it": "Unganisha pochi hii ili kufanya biashara ndani yake",
   "One signature proves the address is yours. It approves nothing and cannot move funds — CAPX will not send shares to an address it has not checked.": "Saini moja inathibitisha anwani ni yako. Haidhinishi chochote wala haiwezi kuhamisha fedha — CAPX haitatuma hisa kwenye anwani ambayo haijaikagua.",
   "Not now": "Si sasa",
+  /* Linked wallets, and a wallet that already knows who you are. */
+  "Linked wallets": "Pochi zilizounganishwa",
+  "Addresses CAPX will send tokenised shares to. Only you can add one, by signing from it.": "Anwani ambazo CAPX itatuma hisa zilizotokenishwa. Wewe tu unaweza kuongeza moja, kwa kusaini kutoka kwayo.",
+  "Connected now": "Imeunganishwa sasa",
+  "Linked": "Imeunganishwa",
+  "Unlink": "Tenganisha",
+  "Link": "Unganisha",
+  "Could not unlink that wallet": "Imeshindwa kutenganisha pochi hiyo",
+  "This wallet is linked to your CAPX account. One signature signs you in — it approves nothing and cannot move funds.": "Pochi hii imeunganishwa na akaunti yako ya CAPX. Saini moja inakuingiza — haidhinishi chochote wala haiwezi kuhamisha fedha.",
+  "your CAPX account": "akaunti yako ya CAPX",
+  "Continue": "Endelea",
 };

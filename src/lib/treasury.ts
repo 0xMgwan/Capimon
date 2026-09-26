@@ -377,8 +377,15 @@ export async function executeSell(symbol: string, qty: number): Promise<Executio
   return { txHash, qty, usdc, price: qty > 0 ? usdc / qty : 0, venues: route.venues, impact };
 }
 
-/** What the treasury actually holds onchain, for the solvency comparison. */
-export async function treasuryHoldings() {
+/**
+ * What the treasury actually holds onchain, for the solvency comparison.
+ *
+ * `prices: true` also values it. That costs an oracle read per local security
+ * and one rate lookup, which is worth paying on the desk and not worth paying
+ * on a public list that only needs quantities — so it is asked for rather
+ * than assumed, and the value fields are null when it was not.
+ */
+export async function treasuryHoldings(opts: { prices?: boolean } = {}) {
   const address = treasuryAddress();
   if (!address) return null;
 
@@ -396,7 +403,11 @@ export async function treasuryHoldings() {
   const holdings = ASSETS.map((a, i) => {
     const m = markets.find((x) => x.symbol === a.symbol)!;
     const raw = shares[i].status === "success" ? (shares[i].result as bigint) : 0n;
-    return { asset: a.symbol, qty: Number(formatUnits(raw, m.decimals)) };
+    const qty = Number(formatUnits(raw, m.decimals));
+    // A US mark is already in hand from `getMarkets` above, so it costs
+    // nothing; it is still withheld unless asked for, so every holding in
+    // this list is priced on the same terms.
+    return { asset: a.symbol, qty, valueUsd: opts.prices ? qty * m.price : null as number | null };
   }).filter((h) => h.qty > 0);
 
   /*
@@ -413,20 +424,59 @@ export async function treasuryHoldings() {
   // to count here the moment its first tokens are minted.
   const { dseSecurities } = await import("./dseSecurities");
   const dse = await dseSecurities().catch(() => []);
+  /*
+   * Shilling marks for the local shares, and the rate to price them in
+   * dollars. Both are best-effort: a share whose oracle or rate is unreachable
+   * is reported at its true quantity and a zero value, never dropped, because
+   * the quantity is the thing custody is judged on and a missing price is not
+   * a missing holding.
+   */
+  const { readOraclePrice } = await import("./oracle");
+  const { getSwapRate, ntzsConfigured } = await import("./ntzs");
+  const usdPerTzs = opts.prices && ntzsConfigured && dse.length
+    ? await getSwapRate("NTZS", "USDC", 100_000)
+        .then((r) => { const out = Number(r.expectedOutput ?? 0); return out > 0 ? out / 100_000 : 0; })
+        .catch(() => 0)
+    : 0;
+
   await Promise.all(dse.map(async (sec) => {
     try {
       const raw = await publicClient.readContract({
         address: sec.token, abi: b20Abi, functionName: "balanceOf", args: [address],
       });
       const qty = Number(formatUnits(raw as bigint, sec.decimals));
-      if (qty > 0) holdings.push({ asset: sec.symbol, qty });
+      if (qty <= 0) return;
+      const tzs = opts.prices
+        ? await readOraclePrice(sec.symbol).then((p) => p?.price ?? 0).catch(() => 0)
+        : 0;
+      holdings.push({ asset: sec.symbol, qty, valueUsd: opts.prices ? qty * tzs * usdPerTzs : null });
     } catch {
       // A token that cannot be read is omitted rather than reported as zero:
       // zero is a claim about the balance, and an unreadable one is not.
     }
   }));
 
-  return { address, usdc: Number(formatUnits(usdc as bigint, 6)), holdings };
+  /*
+   * What the whole address is worth, not just its loose change.
+   *
+   * `usdc` alone was being read as the treasury's value, which made a wallet
+   * holding eleven dollars of shares and a few cents of USDC look like it
+   * held a few cents — the shares were listed beside it as bare quantities,
+   * with no price to add up. Both are reported now, and so is their sum,
+   * which is the number a block explorer shows for the same address.
+   */
+  const usdcHeld = Number(formatUnits(usdc as bigint, 6));
+  const sharesUsd = opts.prices
+    ? holdings.reduce((sum, h) => sum + (h.valueUsd ?? 0), 0)
+    : null;
+
+  return {
+    address,
+    usdc: usdcHeld,
+    holdings,
+    sharesUsd,
+    totalUsd: sharesUsd === null ? null : usdcHeld + sharesUsd,
+  };
 }
 
 /* --------------------------------------------------------------- funding -- */

@@ -106,7 +106,7 @@ export async function GET(req: Request) {
     const [solvency, ntzs, onchain, caps, route, feePos, sweeps] = await Promise.all([
       treasuryConfigured ? checkSolvency().catch(() => null) : null,
       ntzsConfigured ? ntzsTreasury().catch(() => null) : null,
-      treasuryConfigured ? treasuryHoldings().catch(() => null) : null,
+      treasuryConfigured ? treasuryHoldings({ prices: true }).catch(() => null) : null,
       ntzsConfigured ? capabilities().catch(() => null) : null,
       ntzsConfigured ? collectionRoute().catch(() => null) : null,
       import("@/lib/feeSweep").then((m) => m.feePosition()).catch(() => null),

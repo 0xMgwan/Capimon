@@ -75,7 +75,40 @@ export function AccountForm({
    * the form offers it as a single tap.
    */
   const [suggestion, setSuggestion] = useState<string | null>(null);
+  /*
+   * The forgotten-password detour.
+   *
+   * Opened inside the same box rather than on another page: somebody who has
+   * just failed to sign in is already where they need to be, and sending them
+   * away to a separate screen is how a two-field task becomes an abandoned
+   * one. `sent` is set whether or not an account matched — the form must not
+   * become a way to find out who has one.
+   */
+  const [forgot, setForgot] = useState(false);
+  const [sent, setSent] = useState(false);
   const { t } = useT();
+
+  const requestReset = async () => {
+    setBusy(true); setError(null);
+    try {
+      await fetch("/api/account/reset", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: form.email }),
+      });
+      setSent(true);
+    } catch {
+      /*
+       * A request that never arrived is a different thing from one that found
+       * no account, and saying "check your inbox" when nothing was sent is
+       * simply untrue. Reporting it leaks nothing: the failure happened
+       * before any account was looked at.
+       */
+      setError(t("Could not reach CAPX. Check your connection and try again."));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const submit = async () => {
     setBusy(true); setError(null);
@@ -164,6 +197,56 @@ export function AccountForm({
       </label>
     );
   };
+
+  /*
+   * The reset panel, shown in place of the form.
+   *
+   * It keeps whatever was typed in the email box, because the person who
+   * needs it has almost always just typed their email into it.
+   */
+  if (forgot) {
+    return (
+      <div>
+        {sent ? (
+          <>
+            <p className="text-[15px] font-medium">{t("Check your email.")}</p>
+            <p className="mt-2 text-[13px] leading-relaxed text-[var(--muted)]">
+              {t("If there is a CAPX account for that email or username, a link to set a new password is on its way. It works once and expires in an hour.")}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-[15px] font-medium">{t("Forgot your password?")}</p>
+            <p className="mt-2 text-[13px] leading-relaxed text-[var(--muted)]">
+              {t("Enter the email or username on the account and we will send a link to set a new one.")}
+            </p>
+            <input
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              onKeyDown={(e) => { if (e.key === "Enter" && form.email) void requestReset(); }}
+              autoComplete="username"
+              placeholder={t("you@example.com or @handle")}
+              className="mt-4 w-full rounded-xl border hairline bg-transparent px-4 py-3 text-sm outline-none placeholder:text-[var(--muted)] focus:border-[var(--color-accent)]"
+            />
+            <button
+              onClick={() => void requestReset()}
+              disabled={busy || !form.email}
+              className="mt-3 w-full rounded-full bg-[var(--fg)] py-3.5 text-sm font-medium text-[var(--bg)] transition-transform active:scale-95 disabled:opacity-50"
+            >
+              {busy ? t("Working…") : t("Send the link")}
+            </button>
+            {error && <p className="mt-3 text-xs leading-snug text-[var(--color-down)]">{error}</p>}
+          </>
+        )}
+        <button
+          onClick={() => { setForgot(false); setSent(false); setError(null); }}
+          className="mt-4 w-full rounded-full border hairline py-2.5 text-[13px] font-medium hover:surface"
+        >
+          {t("Back to sign in")}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -286,6 +369,15 @@ export function AccountForm({
       </button>
 
       {error && <p className="mt-3 text-xs leading-snug text-[var(--color-down)]">{error}</p>}
+
+      {mode === "signin" && (
+        <button
+          onClick={() => { setForgot(true); setError(null); }}
+          className="mt-3 w-full text-center text-[12.5px] text-[var(--muted)] underline underline-offset-2 hover:text-[var(--fg)]"
+        >
+          {t("Forgot your password?")}
+        </button>
+      )}
     </div>
   );
 }

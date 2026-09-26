@@ -372,6 +372,26 @@ export async function migrate() {
         )`;
 
       await sql`
+        /*
+         * A one-time ticket to set a new password.
+         *
+         * The token itself is never stored — only its SHA-256 — so a leaked
+         * copy of this table cannot be used to take an account. It is spent
+         * on first use and dies an hour after it was issued, whichever comes
+         * first, and setting a password ends every other session on the
+         * account: if somebody reset it because they were locked out by
+         * another person, leaving that person signed in defeats the point.
+         */
+        create table if not exists capx.password_resets (
+          id         uuid primary key default gen_random_uuid(),
+          user_id    uuid not null references capx.users(id) on delete cascade,
+          token_hash text not null,
+          expires_at timestamptz not null,
+          used_at    timestamptz,
+          created_at timestamptz not null default now()
+        )`;
+
+      await sql`
         create table if not exists capx.job_runs (
           job        text primary key,
           ran_at     timestamptz not null default now(),
@@ -568,6 +588,10 @@ export async function migrate() {
       await sql`create index if not exists comments_symbol_idx
                   on capx.comments(symbol, created_at desc)`;
       await sql`create index if not exists comments_user_idx on capx.comments(user_id)`;
+      await sql`create unique index if not exists password_resets_token_idx
+                  on capx.password_resets(token_hash)`;
+      await sql`create index if not exists password_resets_user_idx
+                  on capx.password_resets(user_id, created_at desc)`;
       await sql`create index if not exists deposits_status_idx on capx.deposits(status)`;
       /* The duplicate check reads this on every settlement pass. */
       await sql`create index if not exists deposits_ntzs_ref_idx

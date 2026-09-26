@@ -55,7 +55,14 @@ type Admin = {
   };
   ntzs: { available: true; source: string; tzs: number; usdc: number; walletAddress: string | null }
       | { available: false; reason: string } | null;
-  onchain: { address: string; usdc: number; holdings: { asset: string; qty: number }[] } | null;
+  onchain: {
+    address: string;
+    usdc: number;
+    holdings: { asset: string; qty: number; valueUsd: number | null }[];
+    /* Null when the read did not ask for prices; the desk always does. */
+    sharesUsd: number | null;
+    totalUsd: number | null;
+  } | null;
   capabilities: Record<string, { available: boolean; detail?: string }> | null;
   collectionRoute: string | null;
   holdingsByAsset: { asset: string; qty: string; holders: number }[];
@@ -655,7 +662,24 @@ export function AdminPanel() {
           <div className="eyebrow">CAPX treasury onchain</div>
           {data.onchain ? (
             <>
-              <div className="tnum mt-2 text-2xl font-medium">{usd(data.onchain.usdc)}</div>
+              {/*
+                What the address is worth, not what it has in loose change.
+
+                This read the USDC balance alone, with the shares listed
+                beneath as bare quantities — so a wallet holding eleven
+                dollars of stock and sixteen cents of USDC reported sixteen
+                cents, and disagreed with every block explorer showing the
+                same address. The headline is now the sum, with the two parts
+                spelled out under it.
+              */}
+              <div className="tnum mt-2 text-2xl font-medium">
+                {usd(data.onchain.totalUsd ?? data.onchain.usdc)}
+              </div>
+              <div className="tnum mt-1 text-[11px] text-[var(--muted)]">
+                {data.onchain.sharesUsd === null
+                  ? "USDC only — shares unpriced"
+                  : `${usd(data.onchain.sharesUsd)} in shares · ${usd(data.onchain.usdc)} USDC`}
+              </div>
               <div className="tnum mt-1 truncate text-[11px] text-[var(--muted)]">{data.onchain.address}</div>
               <div className="tnum mt-3 flex flex-wrap gap-1.5 text-[11px]">
                 {data.onchain.holdings.length === 0
@@ -663,6 +687,9 @@ export function AdminPanel() {
                   : data.onchain.holdings.map((h) => (
                       <span key={h.asset} className="rounded-full surface px-2 py-0.5">
                         {h.asset} {h.qty.toFixed(4)}
+                        {h.valueUsd !== null && h.valueUsd > 0 && (
+                          <span className="text-[var(--muted)]"> · {usd(h.valueUsd)}</span>
+                        )}
                       </span>
                     ))}
               </div>

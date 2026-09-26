@@ -1,11 +1,12 @@
 import { Hero } from "@/components/Hero";
+import { HomeGate } from "@/components/HomeGate";
 import {
   StackStrip, DseSection, ProductsSection, AutoInvestBand, LiveBoard, StatsBand, BeliefSection, PillarsSection, ClosingCTA,
 } from "@/components/HomeSections";
 
 export default function Home() {
   return (
-    <>
+    <HomeGate>
       {/*
        * The phone gets the short version: arrive, see it is real, buy, leave.
        * The ticket is inside the hero now, so buying is the first screen
@@ -31,6 +32,6 @@ export default function Home() {
       </div>
 
       <ClosingCTA />
-    </>
+    </HomeGate>
   );
 }

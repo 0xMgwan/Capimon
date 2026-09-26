@@ -64,6 +64,8 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
    * point of keeping it here.
    */
   const [dest, setDest] = useState<"account" | "wallet">("account");
+  /** An amount carried over from the hero ticket, for the dollar side. */
+  const [handoff, setHandoff] = useState<string | null>(null);
   const { account, refresh } = useCapimonAccount();
   const router = useRouter();
   const { venues } = useVenues();
@@ -101,6 +103,17 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
     // tab, and the prefill would silently not happen.
     const id = setTimeout(() => {
       if (q.get("side") === "sell") setSide("sell");
+      /* The hero ticket can hand over a currency as well as an amount, and
+         the currency decides which half of this panel opens. */
+      if (q.get("pay") === "usdc") {
+        setDest("wallet");
+        // The dollar ticket keeps its own field, so the amount has to be
+        // handed across rather than left in this one — otherwise choosing
+        // USDC in the hero arrived here with the currency set and the number
+        // silently dropped.
+        if (amt > 0) setHandoff(String(amt));
+        return;
+      }
       if (amt > 0) setRaw(String(Math.round(amt)));
     }, 0);
     return () => clearTimeout(id);
@@ -300,32 +313,39 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
         * nobody finds; given its own page it would be a second desk. One row,
         * under the side tabs, where the next decision belongs.
         */}
-      <div className="mt-3">
-        <div className="grid grid-cols-2 gap-1 rounded-full surface p-1">
+      {/*
+        * One row, not two bars and a caption.
+        *
+        * A second full-width segmented control under the side tabs read as
+        * another decision of the same weight as buy-or-sell, which it is not,
+        * and the centred line under it cost a third row to say something that
+        * fits beside the control. Small pills on the left, the consequence on
+        * the right, one line.
+        */}
+      <div className="mt-2.5 flex items-center gap-2">
+        <span className="inline-flex shrink-0 rounded-full surface p-0.5">
           {([
-            ["account", "TZS", <NtzsIcon key="n" className="h-4 w-4 rounded-full" />],
-            ["wallet", "USDC", <UsdcIcon key="u" className="h-4 w-4" />],
+            ["account", "TZS", <NtzsIcon key="n" className="h-3.5 w-3.5 rounded-full" />],
+            ["wallet", "USDC", <UsdcIcon key="u" className="h-3.5 w-3.5" />],
           ] as const).map(([k, label, icon]) => (
             <button
               key={k}
               onClick={() => { haptic(); setDest(k); setMsg(null); setRaw(""); }}
-              className={`flex items-center justify-center gap-1.5 rounded-full py-1.5 text-[12px] font-medium transition-colors ${
+              className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-medium transition-colors ${
                 dest === k ? "bg-[var(--bg)] shadow-sm" : "text-[var(--muted)]"}`}
             >
               {icon}
               {label}
             </button>
           ))}
-        </div>
-        <p className="mt-1.5 text-center text-[11px] text-[var(--muted)]">
-          {dest === "account"
-            ? t("Settles into your CAPX balance.")
-            : t("Sent to your own wallet on Base.")}
-        </p>
+        </span>
+        <span className="min-w-0 flex-1 truncate text-right text-[11px] text-[var(--muted)]">
+          {dest === "account" ? t("To your CAPX balance") : t("To your own wallet")}
+        </span>
       </div>
 
       {dest === "wallet" ? (
-        <SelfCustodyTicket symbol={symbol} side={side} />
+        <SelfCustodyTicket symbol={symbol} side={side} initialAmount={handoff} />
       ) : (
       <>
       {side === "sell" && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAccount, useSignMessage, useWriteContract, usePublicClient, useReadContract } from "wagmi";
 import { base } from "wagmi/chains";
@@ -49,9 +49,11 @@ const PRESETS = [5, 20, 50, 100];
 const usd = (n: number) => `$${n.toFixed(2)}`;
 const qtyFmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 8 });
 
-export function SelfCustodyTicket({ symbol, side }: {
+export function SelfCustodyTicket({ symbol, side, initialAmount }: {
   symbol: string;
   side: "buy" | "sell";
+  /** An amount chosen in the hero ticket before this one was reached. */
+  initialAmount?: string | null;
 }) {
   const { t } = useT();
   const router = useRouter();
@@ -64,6 +66,32 @@ export function SelfCustodyTicket({ symbol, side }: {
   const [linked, setLinked] = useState<string[] | null>(null);
   const [marks, setMarks] = useState<Marks | null>(null);
   const [raw, setRaw] = useState("");
+
+  /*
+   * Taken once, and only into an untouched field.
+   *
+   * The handoff arrives a beat after mount, and overwriting whatever somebody
+   * has started typing in the meantime would be worse than losing it.
+   */
+  const took = useRef(false);
+  useEffect(() => {
+    if (took.current || !initialAmount) return;
+    /*
+     * The ref is claimed inside the callback, not before scheduling it.
+     *
+     * Claiming it first looks equivalent and is not: StrictMode runs an
+     * effect, tears it down and runs it again, so the first pass marked the
+     * handoff taken, the cleanup cancelled the timeout that would have
+     * applied it, and the second pass saw the mark and did nothing. The
+     * amount arrived in development and vanished — the worst version, since
+     * production would have been fine and nobody would have known why.
+     */
+    const id = window.setTimeout(() => {
+      took.current = true;
+      setRaw((v) => (v ? v : initialAmount));
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [initialAmount]);
   const [step, setStep] = useState<Step>("idle");
   const [error, setError] = useState<string | null>(null);
   const [settled, setSettled] = useState<{ qty: number; tx: string | null } | null>(null);
@@ -245,7 +273,16 @@ export function SelfCustodyTicket({ symbol, side }: {
    * should be told on the control they just reached for, and taken there.
    */
   const gate: { label: string; onClick?: () => void } | null =
-    !account ? { label: t("Sign in to continue") }
+    /*
+     * A connected wallet with no CAPX account behind it.
+     *
+     * "Sign in to continue" was a statement, and the wrong one: somebody who
+     * has just connected a wallet has no account to sign in to, and what they
+     * actually need is to open one and be verified. The button says that and
+     * goes there — /join carries both, so a returning customer signs in from
+     * the same screen.
+     */
+    !account ? { label: t("Verify your identity to trade"), onClick: () => router.push("/join") }
     : !verified ? {
         label: account.user.kycStatus === "pending" ? t("Verification under review") : t("Complete verification first"),
         onClick: account.user.kycStatus === "pending" ? undefined : () => router.push("/verify"),

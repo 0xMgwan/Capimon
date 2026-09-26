@@ -724,4 +724,16 @@ export const SW: Record<string, string> = {
   "more": "zaidi",
   "More than this wallet holds.": "Zaidi ya pochi hii ilivyo nayo.",
   "The shares go to your own wallet on Base. CAPX is the counterparty at the published DSE mark, converted at the nTZS rate. You pay first, then CAPX sends — you will see both in your wallet.": "Hisa zinakwenda kwenye pochi yako mwenyewe kwenye Base. CAPX ndiye upande wa pili kwa bei ya DSE iliyochapishwa, ikibadilishwa kwa kiwango cha nTZS. Unalipa kwanza, kisha CAPX inatuma — utaziona zote mbili kwenye pochi yako.",
+  /* Home, for somebody who already has an account. */
+  "Welcome back": "Karibu tena",
+  "Happening now": "Yanayoendelea sasa",
+  "See all": "Ona yote",
+  "Add money and make your first buy": "Weka pesa na ununue mara yako ya kwanza",
+  "Set an amount and a day. CAPX buys for you, from what is already in your account, and you can pause it whenever you like.": "Weka kiasi na siku. CAPX inanunua kwa niaba yako, kutoka kile kilichopo kwenye akaunti yako, na unaweza kusitisha wakati wowote.",
+  "Set one up": "Weka moja",
+  /* The compact currency row on the ticket. */
+  "To your CAPX balance": "Kwenye salio lako la CAPX",
+  "To your own wallet": "Kwenye pochi yako mwenyewe",
+  "Verify your identity to trade": "Thibitisha utambulisho wako ili kufanya biashara",
+  "sent to your own wallet": "inatumwa kwenye pochi yako mwenyewe",
 };

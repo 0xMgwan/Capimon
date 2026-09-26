@@ -99,7 +99,13 @@ export function QuickBuy() {
   const dse = dsePick ? dseList.find((d) => d.symbol === dsePick) ?? null : null;
   const isCrdb = !!dsePick;
   const canShowTzs = !!rate && rate > 0;
-  const inTzs = (currency === "TZS" && !!rate && rate > 0) || isCrdb;
+  /*
+   * A DSE share used to force shillings, because shillings were the only way
+   * to buy one. Since the ticket can deliver to a wallet against USDC, that
+   * is no longer true — so the toggle applies here too, and the choice is
+   * carried through to the panel rather than reset on arrival.
+   */
+  const inTzs = currency === "TZS" && !!rate && rate > 0;
   const amountUsd = inTzs && rate ? amount * rate : amount;
 
   const markets = useMemo(() => {
@@ -114,7 +120,11 @@ export function QuickBuy() {
   /* CRDB settles in shillings at the DSE mark, fee off the cash leg and the
      share count floored — the same arithmetic the order itself runs. */
   const crdbUnits = dse && dse.price > 0
-    ? Math.floor(((amount * (1 - dse.feeBps / 10_000)) / dse.price) * 1e8) / 1e8
+    ? Math.floor(
+        // In shillings the mark is the price. In dollars it is the mark
+        // through the same rate the panel will use, so the two agree.
+        ((inTzs ? amount : rate && rate > 0 ? amount / rate : 0) * (1 - dse.feeBps / 10_000)) / dse.price * 1e8,
+      ) / 1e8
     : 0;
   const units = isCrdb ? crdbUnits : selected && selected.price > 0 ? amountUsd / selected.price : 0;
   const tick = selected ? ticks[selected.symbol] : undefined;
@@ -128,7 +138,11 @@ export function QuickBuy() {
   };
 
   const go = () => {
-    if (dsePick) { router.push(`/markets/${dsePick.toLowerCase()}?side=buy&amount=${Math.round(amount)}`); return; }
+    if (dsePick) {
+      const pay = inTzs ? "" : "&pay=usdc";
+      router.push(`/markets/${dsePick.toLowerCase()}?side=buy&amount=${inTzs ? Math.round(amount) : amount}${pay}`);
+      return;
+    }
     if (!selected) return;
     router.push(`/markets/${selected.ticker.toLowerCase()}?side=buy&amount=${amountUsd}`);
   };
@@ -141,7 +155,7 @@ export function QuickBuy() {
                   {inTzs ? <NtzsIcon className="h-3.5 w-3.5" /> : <UsdcIcon className="h-3.5 w-3.5" />}
                   {t("You pay")} · {inTzs ? "TZS" : "USDC"}
                 </div>
-                {canShowTzs && !isCrdb && (
+                {canShowTzs && (
                   <div className="flex rounded-full surface p-0.5">
                     {(["TZS", "USDC"] as const).map((c) => (
                       <button
@@ -232,8 +246,13 @@ export function QuickBuy() {
                 <div className="tnum mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
                   {isCrdb ? (
                     <>
-                      TSh {tzsFmt.format(amount)} at {dse && dse.price > 0 ? `TSh ${tzsFmt.format(dse.price)}` : "—"}
-                      {dse && dse.feeBps > 0 ? ` · ${dse.feeBps / 100}% ${t("fee")}` : ""} · {t("settles same day in nTZS")}
+                      {inTzs
+                        ? `TSh ${tzsFmt.format(amount)}`
+                        : `${usd(amount)} ≈ TSh ${tzsFmt.format(rate && rate > 0 ? amount / rate : 0)}`}
+                      {" "}at {dse && dse.price > 0 ? `TSh ${tzsFmt.format(dse.price)}` : "—"}
+                      {dse && dse.feeBps > 0 ? ` · ${dse.feeBps / 100}% ${t("fee")}` : ""} ·{" "}
+                      {/* Where it lands, which is what the currency decides. */}
+                      {inTzs ? t("settles same day in nTZS") : t("sent to your own wallet")}
                     </>
                   ) : (<>
                   {inTzs ? `TSh ${tzsFmt.format(amount)} ≈ ${usd(amountUsd)}` : usd(amount)} at {selected ? usd(selected.price) : "—"} ·{" "}

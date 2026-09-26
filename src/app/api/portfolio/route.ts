@@ -45,6 +45,15 @@ export async function GET(req: Request) {
       currency: "USD" | "TZS";
       /** The shilling mark, for a listing that has one. */
       priceTzs: number | null;
+      /**
+       * The company's artwork.
+       *
+       * The page used to find this by matching the symbol against the US
+       * market list, which a DSE listing is not in — so CRDB, whose logo the
+       * app has had all along, drew a grey monogram. The registry knows it;
+       * it just was not being passed on.
+       */
+      logo: string | null;
     };
 
     const positions: Pos[] = ASSETS.map((a, i) => {
@@ -53,7 +62,7 @@ export async function GET(req: Request) {
       const qty = Number(formatUnits(raw, m.decimals));
       return { symbol: a.symbol, ticker: a.ticker, name: a.name, color: a.color, token: a.token,
         qty, price: m.price, change: m.change, value: qty * m.price,
-        currency: "USD" as const, priceTzs: null };
+        currency: "USD" as const, priceTzs: null, logo: m.logo ?? null };
     }).filter((p) => p.qty > 0);
 
     /*
@@ -63,7 +72,7 @@ export async function GET(req: Request) {
      * own tokens and carry no multiplier, and asking one for a function it
      * does not implement would fail the whole multicall.
      */
-    const { dseSecurities, logoUrl } = await import("@/lib/dseSecurities");
+    const { dseSecurities } = await import("@/lib/dseSecurities");
     const dse = await dseSecurities().catch(() => []);
     if (dse.length) {
       const { readOraclePrice } = await import("@/lib/oracle");
@@ -89,9 +98,8 @@ export async function GET(req: Request) {
             qty, price: tzs * usdPerTzs, change: 0, value: qty * tzs * usdPerTzs,
             // Carried so the page can show the shilling price it was bought
             // at rather than a dollar figure nobody quoted.
-            currency: "TZS", priceTzs: tzs,
+            currency: "TZS", priceTzs: tzs, logo: sec.logo,
           });
-          void logoUrl;
         } catch {
           // A token that cannot be read is omitted, not reported as zero:
           // zero is a claim about the balance and an unreadable one is not.

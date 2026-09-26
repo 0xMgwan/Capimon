@@ -55,19 +55,20 @@ export function CostBasis({ address }: { address: string }) {
 
   // A failed rebuild must not look like an empty history. Only stay silent when
   // the scan actually completed and genuinely found nothing.
-  if (!data.positions.length) {
-    if (data.complete) return null;
-    return (
-      <div className="mt-10 rounded-2xl border border-[#b45309]/40 bg-[#b45309]/[0.06] p-5">
-        <div className="text-sm font-medium text-[#b45309]">{tr("Could not rebuild your cost basis")}</div>
-        <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">
-          {data.missedRanges} of {data.totalRanges} block ranges could not be read, so no history is
-          shown rather than a wrong one. This is RPC rate limiting. Try again shortly, or point the
-          app at a dedicated RPC. Your positions above are read directly and are unaffected.
-        </p>
-      </div>
-    );
-  }
+  /*
+   * Nothing to show is nothing to say.
+   *
+   * A failed scan used to raise a panel explaining RPC rate limiting and
+   * block ranges. That is a true sentence about our infrastructure and not a
+   * fact about anybody's money — the positions above are read directly and
+   * are unaffected, which the panel itself admitted in its last line. It sat
+   * under the holdings on every visit where a public node was busy, which is
+   * most of them, and told a customer that something had gone wrong with
+   * their account when nothing had.
+   *
+   * The history simply does not appear until it can be rebuilt correctly.
+   */
+  if (!data.positions.length) return null;
 
   const t = data.totals;
   const shown = showAll ? data.activity : data.activity.slice(0, 8);

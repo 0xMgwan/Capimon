@@ -14,6 +14,7 @@ import { Counter } from "./Counter";
 import { Reveal } from "./Reveal";
 import { UsdcIcon } from "./icons/Usdc";
 import { CostBasis } from "./CostBasis";
+import { SelfCustodyOrders } from "./SelfCustodyOrders";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { CustodialPortfolio } from "./CustodialPortfolio";
 import { usd, compactUsd, short } from "@/lib/format";
@@ -25,6 +26,8 @@ type Position = {
   /** Where the mark is quoted. A DSE listing is priced in shillings. */
   currency?: "USD" | "TZS";
   priceTzs?: number | null;
+  /** The company's artwork, where the registry has one. */
+  logo?: string | null;
 };
 type Portfolio = { ok: boolean; positions: Position[]; equity: number; cash: number; total: number; gas: number; error?: string };
 
@@ -44,6 +47,24 @@ export function PortfolioView() {
   const pf = fetched && fetched.address === address ? fetched.pf : null;
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  /*
+   * The shilling rate, so a DSE mark is legible to somebody reading in
+   * dollars and a dollar total is legible to somebody who thinks in
+   * shillings. One number, at the foot, rather than a second column.
+   */
+  const [rate, setRate] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/ntzs/rate", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        const out = Number(j?.expectedOutput ?? 0);
+        if (alive && j?.ok && out > 0) setRate(out / 100_000);
+      })
+      .catch(() => { /* the line is simply not shown */ });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     if (!address) return;
@@ -180,7 +201,7 @@ export function PortfolioView() {
                 <Link key={p.symbol} href={`/markets/${p.ticker.toLowerCase()}`}
                   className="block rounded-2xl border hairline p-4 transition-colors active:surface">
                   <div className="flex items-center gap-3">
-                    <AssetLogo logo={markets?.markets.find((x) => x.symbol === p.symbol)?.logo} ticker={p.ticker} color={p.color} size={40} />
+                    <AssetLogo logo={p.logo ?? markets?.markets.find((x) => x.symbol === p.symbol)?.logo} ticker={p.ticker} color={p.color} size={40} />
                     <span className="min-w-0 flex-1">
                       <span className="block text-[15px] font-medium">{p.ticker}</span>
                       <span className="tnum block truncate text-xs text-[var(--muted)]">
@@ -211,7 +232,7 @@ export function PortfolioView() {
             <table className="w-full min-w-[720px] border-collapse">
               <thead className="border-b hairline">
                 <tr>
-                  {["Position", "Quantity", "Mark", "Change", "Trend", "Value", "Weight"].map((h, i) => (
+                  {["Position", "Quantity", "Mark", "Change", "Trend", "Value", "Weight", "Trade"].map((h, i) => (
                     <th key={h} className={`px-3 py-3 text-[11px] font-medium uppercase tracking-wider text-[var(--muted)] ${i === 0 ? "text-left" : "text-right"}`}>
                       {h}
                     </th>
@@ -226,7 +247,7 @@ export function PortfolioView() {
                     <tr key={p.symbol} className="border-b hairline transition-colors last:border-0 hover:surface">
                       <td className="px-3 py-3.5">
                         <Link href={`/markets/${p.ticker.toLowerCase()}`} className="flex items-center gap-3">
-                          <AssetLogo logo={m?.logo} ticker={p.ticker} color={p.color} size={36} />
+                          <AssetLogo logo={p.logo ?? m?.logo} ticker={p.ticker} color={p.color} size={36} />
                           <span>
                             <span className="block text-sm font-medium">{p.ticker}</span>
                             <span className="block text-xs text-[var(--muted)]">{p.name}</span>
@@ -249,6 +270,30 @@ export function PortfolioView() {
                       </td>
                       <td className="tnum px-3 py-3.5 text-right text-sm font-medium">{usd(p.value)}</td>
                       <td className="tnum px-3 py-3.5 text-right text-sm text-[var(--muted)]">{weight.toFixed(1)}%</td>
+                      {/*
+                        A book you can read should be a book you can act on.
+                        Every row was a link to the company's page and nothing
+                        else, so selling something meant finding it again
+                        through the markets list. Both sides go straight to
+                        the ticket, on the USDC side because that is the
+                        currency a wallet holds.
+                      */}
+                      <td className="px-3 py-3.5">
+                        <div className="flex justify-end gap-1.5">
+                          {(["buy", "sell"] as const).map((side) => (
+                            <Link
+                              key={side}
+                              href={`/markets/${p.ticker.toLowerCase()}?side=${side}&pay=usdc`}
+                              className={`rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                                side === "buy"
+                                  ? "bg-[var(--fg)] text-[var(--bg)]"
+                                  : "border hairline hover:surface"}`}
+                            >
+                              {t(side === "buy" ? "Buy" : "Sell")}
+                            </Link>
+                          ))}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -261,10 +306,13 @@ export function PortfolioView() {
 
       {address && positions.length > 0 && <CostBasis address={address} />}
 
+      {address && <SelfCustodyOrders />}
+
       {pf && (
         <p className="tnum mt-6 text-xs text-[var(--muted)]">
           {pf.gas.toFixed(5)} ETH available for gas · balances read via scaledBalanceOf, so quantities
           already include the current B20 multiplier · marked at the live Chainlink price
+          {rate > 0 ? ` · 1 USDC ≈ ${Math.round(1 / rate).toLocaleString()} TZS` : ""}
           {pf.equity > 0 ? ` · ${compactUsd(pf.equity)} of equity exposure` : ""}
         </p>
       )}

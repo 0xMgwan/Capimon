@@ -35,6 +35,7 @@ export function WalletSession() {
 
   const [offer, setOffer] = useState<{ address: string; label: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   /** Addresses already asked about, so a decline is not asked again. */
   const asked = useRef<Set<string>>(new Set());
   const wasConnected = useRef(false);
@@ -71,16 +72,59 @@ export function WalletSession() {
     if (account?.user.via === "wallet") void signOut();
   }, [isConnected, account, signOut]);
 
+  /*
+   * Re-opened on request.
+   *
+   * The prompt appears once per address and can be dismissed; the wallet
+   * menu offers the same thing afterwards, and asks for it through this.
+   */
+  useEffect(() => {
+    const reopen = () => {
+      if (account || !address) return;
+      fetch("/api/self/signin", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ address }),
+      })
+        .then((r) => r.json())
+        .then((j) => {
+          if (!j.ok) return;
+          setError(null);
+          setOffer({
+            address,
+            label: j.account?.username ? `@${j.account.username}` : j.account?.name ?? t("your CAPX account"),
+          });
+        })
+        .catch(() => { /* nothing to offer */ });
+    };
+    window.addEventListener("capx:wallet-signin", reopen);
+    return () => window.removeEventListener("capx:wallet-signin", reopen);
+  }, [account, address, t]);
+
   const continueAs = async () => {
     if (!offer) return;
-    setBusy(true);
+    setBusy(true); setError(null);
     try {
       const start = await (await fetch("/api/self/signin", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ address: offer.address }),
       })).json();
       if (!start.ok) throw new Error(start.error);
-      const signature = await signMessageAsync({ message: start.message });
+
+      /*
+       * Bounded, because a wallet that never answers is a real outcome.
+       *
+       * MetaMask does not always raise its window — a tab in the background,
+       * an extension that has gone to sleep, a request queued behind another
+       * one — and `signMessageAsync` simply never settles. With no timeout
+       * the button said "Working…" for the rest of the session, with no
+       * error and no way back, which is precisely what it should never do.
+       */
+      const signature = await Promise.race([
+        signMessageAsync({ message: start.message }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 90_000)),
+      ]);
+
       const done = await (await fetch("/api/self/signin", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ address: offer.address, signature }),
@@ -89,9 +133,20 @@ export function WalletSession() {
       haptic("success");
       setOffer(null);
       await refresh();
-    } catch {
-      // Declining in the wallet is the common outcome and is not an error.
-      setOffer(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      /*
+       * Declining is a decision, not a failure: it closes the prompt without
+       * complaint. Everything else is said out loud — a silent close after a
+       * signature that did not work is indistinguishable from one that did.
+       */
+      if (/user rejected|denied|user cancel/i.test(msg)) {
+        setOffer(null);
+      } else if (msg === "timeout") {
+        setError(t("Your wallet did not answer. Open it and try again."));
+      } else {
+        setError(msg || t("That did not go through"));
+      }
     } finally { setBusy(false); }
   };
 
@@ -114,12 +169,13 @@ export function WalletSession() {
           {busy ? t("Working…") : t("Continue")}
         </button>
         <button
-          onClick={() => setOffer(null)}
+          onClick={() => { setOffer(null); setError(null); }}
           className="rounded-full border hairline px-4 py-2.5 text-[13px] font-medium hover:surface"
         >
           {t("Not now")}
         </button>
       </div>
+      {error && <p className="mt-2 text-[12px] leading-snug text-[var(--color-down)]">{error}</p>}
     </div>
   );
 }

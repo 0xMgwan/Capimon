@@ -780,4 +780,9 @@ export const SW: Record<string, string> = {
   "your CAPX account": "akaunti yako ya CAPX",
   "Continue": "Endelea",
   "That photo could not be used": "Picha hiyo haikuweza kutumika",
+  /* The onchain book, and a wallet that can sign you in. */
+  "Sign in as": "Ingia kama",
+  "Your wallet did not answer. Open it and try again.": "Pochi yako haikujibu. Ifungue kisha jaribu tena.",
+  "Trades into this wallet": "Biashara kwenye pochi hii",
+  "All activity": "Shughuli zote",
 };

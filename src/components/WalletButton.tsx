@@ -27,6 +27,30 @@ export function WalletButton() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
+  /*
+   * The handle this address belongs to, when nobody is signed in.
+   *
+   * Asked for once per address, and only in the state where it matters: a
+   * connected wallet with no session. The reply is a handle or a 404, and a
+   * 404 is the ordinary case for a wallet nobody has linked.
+   */
+  const [linkedTo, setLinkedTo] = useState<string | null>(null);
+  useEffect(() => {
+    if (account || !isConnected || !address) { setLinkedTo(null); return; }
+    let alive = true;
+    fetch("/api/self/signin", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ address }),
+    })
+      .then((r) => r.json())
+      .then((j) => {
+        if (!alive || !j.ok) return;
+        setLinkedTo(j.account?.username ? `@${j.account.username}` : j.account?.name ?? null);
+      })
+      .catch(() => { /* an unlinked wallet is the normal case */ });
+    return () => { alive = false; };
+  }, [account, address, isConnected]);
+
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -62,6 +86,25 @@ export function WalletButton() {
                 {bal ? `${Number(formatUnits(bal.value, bal.decimals)).toFixed(5)} ${bal.symbol}` : "—"} for gas
               </div>
             </div>
+            {/*
+              A way back into the account this wallet belongs to.
+              The prompt that offers this appears once and can be dismissed,
+              and after that a customer whose wallet is linked had no route
+              to their own profile except signing in with a password they may
+              never have used. The menu attached to the wallet is where they
+              look, so it is offered here too.
+            */}
+            {linkedTo && (
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  window.dispatchEvent(new CustomEvent("capx:wallet-signin"));
+                }}
+                className="mt-1 w-full rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors hover:surface"
+              >
+                {t("Sign in as")} {linkedTo}
+              </button>
+            )}
             <a href={`https://basescan.org/address/${address}`} target="_blank" rel="noreferrer"
               className="mt-1 block rounded-xl px-3 py-2 text-sm transition-colors hover:surface">
               View wallet onchain ↗

@@ -828,6 +828,31 @@ export function AdminPanel() {
         </div>
       </div>
 
+      {/*
+        * One number for the whole business, marked as an estimate.
+        *
+        * The cells above are exact and in the currencies the trades happened
+        * in. This is all of it at today's rate, which is the figure anybody
+        * asks for out loud and the one that should never sit unlabelled
+        * beside exact ones: converting a lifetime total through this
+        * morning's price restates last month's trades, so it moves a little
+        * every day while nobody trades. Said plainly, it is useful; said
+        * silently, it is wrong.
+        */}
+      {rate > 0 && (
+        <p className="mt-2 text-[11px] text-[var(--muted)]">
+          <span className="tnum text-[var(--fg)]">
+            ≈ {Math.round(
+              data.totals.volumeTzs
+              + (data.totals.volumeUsdc + data.totals.volumeOtcUsdc) / rate,
+            ).toLocaleString()} TZS
+          </span>{" "}
+          traded in total — both currencies at today&rsquo;s rate of{" "}
+          <span className="tnum">{Math.round(1 / rate).toLocaleString()}</span> TZS to the dollar.
+          An estimate: it moves with the rate.
+        </p>
+      )}
+
       {rate > 0 && (
         <div className="mt-3 flex justify-end">
           <span className="inline-flex overflow-hidden rounded-full border hairline text-[11px]">

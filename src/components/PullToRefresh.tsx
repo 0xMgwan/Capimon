@@ -28,6 +28,16 @@ import { haptic } from "@/lib/haptics";
 const TRIGGER_PX = 72;
 const MAX_PULL = 110;
 
+/*
+ * How far below the top the mark sits when it first appears.
+ *
+ * Pinned at zero it emerged from behind the sticky header — the ticker and
+ * the nav are up there, so the one thing the gesture has to show for itself
+ * spent the first half of the pull hidden underneath them. It starts clear of
+ * the header and travels from there.
+ */
+const REST_OFFSET = 64;
+
 export function PullToRefresh() {
   const router = useRouter();
   const { refresh: refreshAccount } = useCapimonAccount();
@@ -57,9 +67,19 @@ export function PullToRefresh() {
       // Resisted, so it feels attached to something rather than free.
       const eased = Math.min(MAX_PULL, dy * 0.45);
       setPull(eased);
+      /*
+       * The tap that says "let go now".
+       *
+       * Fired once, on crossing, and never on the way back — a gesture that
+       * buzzes every time it wobbles across a threshold is worse than one
+       * that is silent. Disarming when they pull back up below it means the
+       * tap is available again if they commit properly.
+       */
       if (eased >= TRIGGER_PX && !armed.current) {
         armed.current = true;
-        haptic();
+        haptic("medium");
+      } else if (eased < TRIGGER_PX * 0.8 && armed.current) {
+        armed.current = false;
       }
     };
 
@@ -71,6 +91,9 @@ export function PullToRefresh() {
 
       setBusy(true);
       setPull(TRIGGER_PX * 0.6);
+      // A second, lighter tap on release: the first said it would go, this
+      // says it has.
+      haptic("light");
       void (async () => {
         try {
           /*
@@ -84,6 +107,7 @@ export function PullToRefresh() {
             Promise.resolve(refreshMarkets()),
           ]);
           router.refresh();
+          haptic("success");
         } finally {
           // A beat, so a refresh that returns instantly still reads as having
           // happened rather than as a flicker.
@@ -112,21 +136,44 @@ export function PullToRefresh() {
     <div
       aria-hidden
       className="pointer-events-none fixed inset-x-0 top-0 z-[60] flex justify-center md:hidden"
-      style={{ transform: `translateY(${Math.max(0, pull - 28)}px)`, transition: busy ? "transform 200ms" : "none" }}
+      style={{
+        transform: `translateY(${REST_OFFSET + pull * 0.55}px)`,
+        transition: busy ? "transform 220ms ease-out" : "none",
+        opacity: Math.min(1, 0.25 + progress),
+      }}
     >
-      <span className="grid h-8 w-8 place-items-center rounded-full border hairline bg-[var(--bg)] shadow-lg">
-        {/*
-          The mark turns as it is pulled and spins once it is working, so the
-          gesture has a state rather than only a before and an after.
+      {/*
+        * The wordmark, filling up.
+        *
+        * A circular arrow is the icon every app uses for this, which is
+        * precisely why it says nothing about this one — and it had the same
+        * problem as the green dot it replaced. CAPX is three rising bars, so
+        * the bars rise as the page is pulled: at rest they are stubs, at the
+        * trigger point they are the logo, and while it works they run. The
+        * gesture is the mark drawing itself.
         */}
-        <svg
-          viewBox="0 0 24 24" className={`h-4 w-4 ${busy ? "animate-spin" : ""}`}
-          style={{ transform: busy ? undefined : `rotate(${progress * 270}deg)`, opacity: 0.35 + progress * 0.65 }}
-          fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
-        >
-          <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-          <path d="M21 4v5h-5" />
-        </svg>
+      <span className="grid h-9 w-9 place-items-center rounded-full border hairline bg-[var(--bg)] shadow-lg shadow-black/10">
+        <span className="flex h-[13px] items-end gap-[2.5px]">
+          {[0, 1, 2].map((i) => {
+            const full = [58, 100, 76][i];
+            // Each bar fills in turn, so the mark builds left to right
+            // instead of three things growing at once.
+            const share = Math.max(0, Math.min(1, progress * 3 - i));
+            return (
+              <span
+                key={i}
+                className={`w-[2.5px] rounded-full bg-[var(--fg)] ${busy ? "live-bar" : ""}`}
+                style={{
+                  height: `${full}%`,
+                  transformOrigin: "bottom",
+                  transform: busy ? undefined : `scaleY(${0.18 + share * 0.82})`,
+                  animationDelay: busy ? `${i * 0.28}s` : undefined,
+                  transition: "transform 90ms linear",
+                }}
+              />
+            );
+          })}
+        </span>
       </span>
     </div>
   );

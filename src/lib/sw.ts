@@ -809,4 +809,8 @@ export const SW: Record<string, string> = {
   "Converted from dollars": "Zimebadilishwa kutoka dola",
   "A US share needs dollars, so your shillings were converted first. The trade then failed, so the money stayed as dollars — see the line below. Nothing was lost, and you can convert it back to shillings from your wallet.": "Hisa ya Marekani inahitaji dola, hivyo shilingi zako zilibadilishwa kwanza. Kisha biashara ilishindikana, hivyo fedha zilibaki kama dola — angalia mstari hapa chini. Hakuna kilichopotea, na unaweza kuzirudisha kuwa shilingi kutoka kwenye pochi yako.",
   "This is the other half of the line above: the shillings that were converted, now held as dollars in your balance.": "Hii ni nusu nyingine ya mstari hapo juu: shilingi zilizobadilishwa, sasa zinashikiliwa kama dola kwenye salio lako.",
+  /* The dollar ticket on a shilling-priced share. */
+  "Connect a wallet": "Unganisha pochi",
+  "Pay in shillings instead — CRDB is priced in TZS and settles from your CAPX balance.": "Lipa kwa shilingi badala yake — CRDB inapangwa bei kwa TZS na inakamilika kutoka salio lako la CAPX.",
+  "Switch to TZS": "Badilisha kwenda TZS",
 };

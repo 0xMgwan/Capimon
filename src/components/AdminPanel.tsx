@@ -57,7 +57,8 @@ type KycRow = {
 };
 
 type Admin = {
-  totals: { users: number; pendingDeposits: number; settledTzs: number; creditedUsdc: number };
+  totals: { users: number; pendingDeposits: number; settledTzs: number; creditedUsdc: number;
+            volumeTzs: number; volumeUsdc: number; volumeOtcUsdc: number; otcOrders: number };
   solvency: { ok: boolean; usdPerTzs: number; totals: { owedUsd: number; heldUsd: number; shortfallUsd: number; inventoryUsd: number };
               usdc?: { treasury: number; rampFloat: number };
               assets: { asset: string; owed: number; held: number; covered: boolean }[];
@@ -844,11 +845,35 @@ export function AdminPanel() {
         </div>
       )}
 
-      <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-4 lg:grid-cols-7">
+      <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--border)] sm:grid-cols-3 lg:grid-cols-5">
         <Cell label="Users" value={String(data.totals.users)} />
         <Cell label="Pending" value={String(data.totals.pendingDeposits)} />
         <Cell label="Collected" value={TZS(data.totals.settledTzs)} />
         <Cell label="Credited" value={money(data.totals.creditedUsdc)} />
+        {/*
+          * Everything CAPX has traded, both sides.
+          *
+          * Deposits say what came in and holdings say what is held; neither
+          * says how much business the desk has actually done, which is the
+          * figure anybody asks for first. A sell counts as much as a buy —
+          * netting them would report a customer who bought and sold the same
+          * share as having done nothing.
+          *
+          * The two currencies are kept apart rather than summed through
+          * today's rate, which would restate last month's trades at this
+          * morning's price and produce a lifetime total that moves while
+          * nobody trades.
+          */}
+        <Cell
+          label="Volume traded"
+          value={`${Math.round(data.totals.volumeTzs).toLocaleString()} TZS`}
+          note={`+ ${usd(data.totals.volumeUsdc)} in dollar trades`}
+        />
+        <Cell
+          label="To wallets"
+          value={usd(data.totals.volumeOtcUsdc)}
+          note={`${data.totals.otcOrders} self-custody order${data.totals.otcOrders === 1 ? "" : "s"}`}
+        />
         <Cell label="Orders" value={String(data.totalsExtra?.settledOrders ?? 0)} />
         <Cell label="Failed" value={String(data.totalsExtra?.failedOrders ?? 0)} />
         {/* Shilling trade fees. They are not swept anywhere — they stay in the
@@ -1473,11 +1498,16 @@ function MailCheck({ token }: { token: string }) {
   );
 }
 
-function Cell({ label, value }: { label: string; value: string }) {
+function Cell({ label, value, note }: {
+  label: string; value: string;
+  /** A second figure the headline needs to be read honestly. */
+  note?: string;
+}) {
   return (
     <div className="bg-[var(--bg)] px-3 py-3 sm:px-5 sm:py-4">
       <div className="eyebrow truncate">{label}</div>
       <div className="tnum mt-1.5 text-base font-medium sm:text-lg">{value}</div>
+      {note && <div className="tnum mt-0.5 truncate text-[10px] text-[var(--muted)]">{note}</div>}
     </div>
   );
 }

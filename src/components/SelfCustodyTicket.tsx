@@ -11,7 +11,7 @@ import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { useT } from "@/lib/i18n";
 import { haptic } from "@/lib/haptics";
 import { friendlyError } from "@/lib/friendlyError";
-import { WalletButton } from "./WalletButton";
+import { AuthModal } from "./AuthModal";
 
 /**
  * The same trade, paid for in dollars and delivered to a wallet.
@@ -50,7 +50,9 @@ const PRESETS = [5, 20, 50, 100];
 const usd = (n: number) => `$${n.toFixed(2)}`;
 const qtyFmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 8 });
 
-export function SelfCustodyTicket({ symbol, side, initialAmount, currencySwitch }: {
+export function SelfCustodyTicket({
+  symbol, side, initialAmount, currencySwitch, isLocal, onUseTzs,
+}: {
   symbol: string;
   side: "buy" | "sell";
   /** An amount chosen in the hero ticket before this one was reached. */
@@ -63,6 +65,15 @@ export function SelfCustodyTicket({ symbol, side, initialAmount, currencySwitch 
    * which ticket exists, which makes it the panel's to hold.
    */
   currencySwitch?: React.ReactNode;
+  /**
+   * Whether this is a shilling-priced listing.
+   *
+   * It changes what "not enough USDC" means: for a DSE share the answer is
+   * the other currency, not more dollars.
+   */
+  isLocal?: boolean;
+  /** Switches the panel back to the shilling ticket. */
+  onUseTzs?: () => void;
 }) {
   const { t } = useT();
   const router = useRouter();
@@ -104,6 +115,8 @@ export function SelfCustodyTicket({ symbol, side, initialAmount, currencySwitch 
   const [step, setStep] = useState<Step>("idle");
   const [error, setError] = useState<string | null>(null);
   const [settled, setSettled] = useState<{ qty: number; tx: string | null } | null>(null);
+  /** The connect sheet, opened from this ticket rather than the header. */
+  const [connectOpen, setConnectOpen] = useState(false);
 
   /* What the connected wallet can actually spend. */
   const { data: usdcRaw } = useReadContract({
@@ -403,8 +416,34 @@ export function SelfCustodyTicket({ symbol, side, initialAmount, currencySwitch 
 
       {tooMany && <Warn>{t("More than CAPX can deliver to a wallet right now.")}</Warn>}
       {tooPoor && (
+        /*
+          * Two different problems wearing one message.
+          *
+          * "Your wallet holds $0.00 USDC, you need $20.00 more" is the right
+          * thing to say to somebody buying NVIDIA who is short of dollars.
+          * Said to a Tanzanian buying CRDB it is an instruction to go and
+          * find dollars in order to buy a shilling-priced share they could
+          * pay for from the balance they already have — the answer is not
+          * more USDC, it is the other tab.
+          */
         <Warn>
-          {t("Your wallet holds")} {usd(usdcBalance)} USDC. {t("You need")} {usd(preview!.total - usdcBalance)} {t("more")}.
+          {isLocal && account ? (
+            <>
+              {t("Pay in shillings instead — CRDB is priced in TZS and settles from your CAPX balance.")
+                .replace("CRDB", symbol)}{" "}
+              <button
+                onClick={() => { haptic(); onUseTzs?.(); }}
+                className="font-medium underline underline-offset-2"
+              >
+                {t("Switch to TZS")}
+              </button>
+            </>
+          ) : (
+            <>
+              {t("Your wallet holds")} {usd(usdcBalance)} USDC. {t("You need")}{" "}
+              {usd(preview!.total - usdcBalance)} {t("more")}.
+            </>
+          )}
         </Warn>
       )}
       {tooFew && <Warn>{t("More than this wallet holds.")}</Warn>}
@@ -426,12 +465,22 @@ export function SelfCustodyTicket({ symbol, side, initialAmount, currencySwitch 
       )}
 
       {/*
-        The connect button stands in for the trade button when there is no
-        wallet yet: connecting is the action, and a disabled "Buy" above it
-        would be two controls for one step.
-      */}
+        * Connecting is the action, so it is the button.
+        *
+        * This used to render <WalletButton />, which has a branch for exactly
+        * this state — signed in, no wallet — and in it shows the customer's
+        * own account chip and menu. So the ticket for "send these shares to
+        * your wallet" answered "you have no wallet" with an avatar and a list
+        * containing Portfolio and How it works. A control that opens the
+        * connect sheet is what the sentence above it is asking for.
+        */}
       {account && verified && !isConnected ? (
-        <div className="mt-4"><WalletButton /></div>
+        <button
+          onClick={() => { haptic(); setConnectOpen(true); }}
+          className="mt-4 w-full rounded-full bg-[var(--fg)] py-3 text-[14px] font-medium text-[var(--bg)] active:scale-95"
+        >
+          {t("Connect a wallet")}
+        </button>
       ) : gate ? (
         <button
           onClick={gate.onClick}
@@ -451,6 +500,8 @@ export function SelfCustodyTicket({ symbol, side, initialAmount, currencySwitch 
       )}
 
       {error && <p className="mt-3 text-[12px] leading-snug text-[var(--color-down)]">{error}</p>}
+
+      <AuthModal open={connectOpen} onClose={() => setConnectOpen(false)} />
 
       <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
         {side === "buy"

@@ -352,6 +352,11 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
           side={side}
           initialAmount={handoff}
           currencySwitch={currencySwitch}
+          /* This panel only ever draws DSE listings, which are priced in
+             shillings — so a dollar shortfall here has a better answer than
+             "find more dollars". */
+          isLocal
+          onUseTzs={() => { setDest("account"); setRaw(""); }}
         />
       ) : (
       <>

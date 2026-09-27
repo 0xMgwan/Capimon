@@ -71,7 +71,9 @@ export async function GET(req: Request) {
             from capx.orders o join capx.users u on u.id = o.user_id
            order by o.created_at desc limit 50`,
       sql<{ users: number; pending: number; settled_tzs: string | null; credited_usdc: string | null;
-            settled_orders: number; failed_orders: number; fees_tzs: string | null }[]>`
+            settled_orders: number; failed_orders: number; fees_tzs: string | null;
+            volume_tzs: string | null; volume_usdc: string | null;
+            volume_otc_usdc: string | null; otc_orders: number }[]>`
         select (select count(*) from capx.users)::int as users,
                (select count(*) from capx.deposits where status in ('pending','uncertain'))::int as pending,
                (select coalesce(sum(amount_tzs),0) from capx.deposits where status = 'settled')::text as settled_tzs,
@@ -90,7 +92,32 @@ export async function GET(req: Request) {
                 */
                (select coalesce(sum((metadata->>'fee')::numeric), 0)
                   from capx.ledger_entries
-                 where asset = 'TZS' and metadata ? 'fee')::text as fees_tzs`,
+                 where asset = 'TZS' and metadata ? 'fee')::text as fees_tzs,
+               /*
+                * Everything CAPX has actually traded, both sides.
+                *
+                * Volume is the cash leg of every settled order, and a sell
+                * counts as much as a buy — it is business done either way,
+                * and netting them would report a customer who bought and
+                * sold the same share as having done nothing.
+                *
+                * Kept in the two currencies the trades happened in rather
+                * than converted into one. A shilling total run through
+                * today's rate would restate last month's trades at this
+                * morning's price, which is a number that changes while
+                * nobody trades.
+                */
+               (select coalesce(sum(abs(amount)), 0)
+                  from capx.ledger_entries
+                 where asset = 'TZS' and kind in ('buy','sell'))::text as volume_tzs,
+               (select coalesce(sum(abs(amount)), 0)
+                  from capx.ledger_entries
+                 where asset = 'USDC' and kind in ('buy','sell'))::text as volume_usdc,
+               /* Self-custody sales sit in their own table and are trades
+                  like any other. */
+               (select coalesce(sum(net_usdc), 0)
+                  from capx.otc_orders where status = 'settled')::text as volume_otc_usdc,
+               (select count(*) from capx.otc_orders where status = 'settled')::int as otc_orders`,
 
       // Shares owed to clients, aggregated per asset.
       sql`select asset, sum(amount)::text as qty, count(distinct user_id)::int as holders
@@ -144,6 +171,10 @@ export async function GET(req: Request) {
         pendingDeposits: totals[0]?.pending ?? 0,
         settledTzs: Number(totals[0]?.settled_tzs ?? 0),
         creditedUsdc: Number(totals[0]?.credited_usdc ?? 0),
+        volumeTzs: Number(totals[0]?.volume_tzs ?? 0),
+        volumeUsdc: Number(totals[0]?.volume_usdc ?? 0),
+        volumeOtcUsdc: Number(totals[0]?.volume_otc_usdc ?? 0),
+        otcOrders: totals[0]?.otc_orders ?? 0,
       },
       totalsExtra: {
         settledOrders: totals[0]?.settled_orders ?? 0,

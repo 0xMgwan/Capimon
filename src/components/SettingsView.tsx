@@ -319,7 +319,9 @@ export function SettingsView() {
                 const next = !tapSound;
                 setTapSoundOn(next);
                 setTapSound(next);
-                if (next) haptic("light");
+                // Play it as a gesture would, so switching it on demonstrates the thing
+                // being switched on rather than the Taptic Engine beside it.
+                if (next) haptic("medium", { gesture: true });
               }}
               className={`w-full rounded-xl border px-3.5 py-2.5 text-sm font-medium transition-colors ${
                 tapSound ? "border-[var(--fg)] bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"

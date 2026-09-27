@@ -116,7 +116,7 @@ export function haptic(feel: Feel = "light", opts: {
       return;
     }
     if (isIosSafari() && opts.gesture) {
-      if (tapSoundEnabled()) tick();
+      if (tapSoundEnabled()) tick(feel);
       return;
     }
     if (isIosSafari()) {
@@ -131,7 +131,7 @@ export function haptic(feel: Feel = "light", opts: {
        * it is a real answer where there was none.
        */
       const played = iosHaptic();
-      if ((!played || needsTapSound()) && tapSoundEnabled()) tick();
+      if ((!played || needsTapSound()) && tapSoundEnabled()) tick(feel);
     }
   } catch {
     /* feedback is a courtesy; never let it interrupt the thing it accompanies */
@@ -213,24 +213,64 @@ export function needsTapSound() {
 
 let audio: AudioContext | null = null;
 
-function tick() {
+/**
+ * The pitch and weight of each click.
+ *
+ * The first version of this ran at 170Hz, which is a reasonable frequency for
+ * something you feel and a poor one for something a phone plays. A handset
+ * speaker is a few millimetres across and rolls off steeply below roughly
+ * 500Hz — so the click was being reproduced at a fraction of its intended
+ * level no matter what the gain said, which is why it was barely audible
+ * rather than merely quiet. Raising the volume alone would have pushed a
+ * frequency the speaker cannot move.
+ *
+ * These sit where a small speaker is efficient and the ear is most sensitive,
+ * kept under 40ms so they read as a click rather than a tone. The three
+ * weights differ in pitch rather than length, so "armed" and "done" are
+ * distinguishable without either becoming a noise.
+ */
+const CLICK: Record<Feel, { hz: number; peak: number; ms: number }> = {
+  light:   { hz: 780,  peak: 0.16, ms: 26 },
+  medium:  { hz: 920,  peak: 0.24, ms: 30 },
+  heavy:   { hz: 1040, peak: 0.30, ms: 34 },
+  success: { hz: 1180, peak: 0.24, ms: 30 },
+  warning: { hz: 640,  peak: 0.26, ms: 34 },
+  error:   { hz: 420,  peak: 0.30, ms: 42 },
+};
+
+function tick(feel: Feel = "light") {
   try {
     const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Ctx) return;
     audio ??= new Ctx();
+    // Safari suspends the context between gestures; a click that arrives
+    // while it is asleep is silent no matter how loud it was asked to be.
     if (audio.state === "suspended") void audio.resume();
 
+    const { hz, peak, ms } = CLICK[feel];
     const now = audio.currentTime;
     const osc = audio.createOscillator();
     const gain = audio.createGain();
-    // Short and low, so it reads as a click rather than a beep.
-    osc.frequency.value = 170;
+
+    /*
+     * Triangle rather than sine: it carries odd harmonics above the
+     * fundamental, which a small speaker reproduces far better than the
+     * fundamental itself. The click keeps its pitch and gains the edge that
+     * makes it audible over a room.
+     */
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(hz, now);
+    // A short downward slide, which is what makes a click sound struck
+    // rather than switched on.
+    osc.frequency.exponentialRampToValueAtTime(hz * 0.72, now + ms / 1000);
+
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.05, now + 0.004);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.035);
+    gain.gain.exponentialRampToValueAtTime(peak, now + 0.003);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + ms / 1000);
+
     osc.connect(gain).connect(audio.destination);
     osc.start(now);
-    osc.stop(now + 0.04);
+    osc.stop(now + ms / 1000 + 0.01);
   } catch {
     /* a courtesy, never a failure */
   }

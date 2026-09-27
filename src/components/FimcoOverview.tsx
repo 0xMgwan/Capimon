@@ -42,6 +42,13 @@ type Account = {
   daily: { day: string; earned: number; trades: number }[];
   bySecurity: { security: string; earned: number; trades: number }[];
   split: { totalBps: number; brokerBps: number; capxBps: number };
+  /** What CAPX would owe in shillings if every holder sold at today's marks. */
+  redemption?: {
+    securities: { symbol: string; clientHeld: number; markTzs: number;
+                  valueTzs: number; unrealisedTzs: number }[];
+    totalValueTzs: number; unrealisedTzs: number;
+    cashTzs: number; owedCashTzs: number; shortfallTzs: number;
+  } | null;
 };
 
 const TZS = (n: number) => `${Math.round(n).toLocaleString()} TZS`;
@@ -208,6 +215,75 @@ export function FimcoOverview({ token, isAdmin }: { token: string; isAdmin: bool
             </>
           )}
         </div>
+
+        {/*
+          * What CAPX may have to call on FIMCO for.
+          *
+          * Customers hold shares that FIMCO custodies, and they redeem in
+          * shillings at the published mark. What they paid is already in the
+          * omnibus; what the price has added since is not, and cannot be —
+          * nobody paid it in. If enough holders sell, the difference has to
+          * come from selling the underlying on the exchange, which is
+          * FIMCO's to sell.
+          *
+          * Shown here because a call nobody could see coming is a call
+          * nobody can be ready for, and this page already exists on the
+          * principle that a statement only one side can check is not a
+          * statement. Totals only: who holds what is not a broker's record.
+          */}
+        {acct.redemption && acct.redemption.totalValueTzs > 0 && (
+          <div className="rounded-3xl border hairline p-5 lg:col-span-2">
+            <div className="eyebrow">If every holder sold today</div>
+            <div className="mt-1 text-[12px] text-[var(--muted)]">
+              What CAPX would owe in shillings, and where it would come from
+            </div>
+
+            <div className="mt-4 grid gap-px overflow-hidden rounded-2xl border hairline bg-[var(--border)] sm:grid-cols-3">
+              <div className="bg-[var(--bg)] px-4 py-3">
+                <div className="eyebrow truncate">Owed on redemption</div>
+                <div className="tnum mt-1 text-lg font-medium">
+                  {TZS(acct.redemption.totalValueTzs + acct.redemption.owedCashTzs)}
+                </div>
+              </div>
+              <div className="bg-[var(--bg)] px-4 py-3">
+                <div className="eyebrow truncate">Shillings on hand</div>
+                <div className="tnum mt-1 text-lg font-medium">{TZS(acct.redemption.cashTzs)}</div>
+              </div>
+              <div className="bg-[var(--bg)] px-4 py-3">
+                <div className="eyebrow truncate">From selling shares</div>
+                <div className={`tnum mt-1 text-lg font-medium ${
+                  acct.redemption.shortfallTzs > 0 ? "text-[#b45309]" : "text-[var(--color-up)]"}`}>
+                  {TZS(acct.redemption.shortfallTzs)}
+                </div>
+              </div>
+            </div>
+
+            <p className="mt-3 text-[12px] leading-relaxed text-[var(--muted)]">
+              Of the amount owed, <span className="tnum text-[var(--fg)]">
+                {TZS(acct.redemption.unrealisedTzs)}
+              </span> is gain nobody paid in — it exists as shares in custody rather than as
+              cash, so meeting it means selling the underlying. The shares themselves are
+              fully held; this is about timing, not backing.
+            </p>
+
+            <div className="mt-4 grid gap-1.5">
+              {acct.redemption.securities.map((r) => (
+                <div key={r.symbol} className="flex items-center gap-3 rounded-xl surface px-3.5 py-2 text-[12px]">
+                  <span className="w-14 shrink-0 font-medium">{r.symbol}</span>
+                  <span className="tnum shrink-0 text-[var(--muted)]">
+                    {r.clientHeld.toLocaleString(undefined, { maximumFractionDigits: 4 })} @{" "}
+                    {r.markTzs > 0 ? TZS(r.markTzs) : "no mark"}
+                  </span>
+                  <span className="tnum ml-auto shrink-0">{TZS(r.valueTzs)}</span>
+                  <span className={`tnum w-24 shrink-0 text-right ${
+                    r.unrealisedTzs >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                    {r.unrealisedTzs >= 0 ? "+" : ""}{Math.round(r.unrealisedTzs).toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Where the volume is. */}
         <div className="rounded-3xl border hairline p-5">

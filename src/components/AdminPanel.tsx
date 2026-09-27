@@ -59,6 +59,12 @@ type KycRow = {
 type Admin = {
   totals: { users: number; pendingDeposits: number; settledTzs: number; creditedUsdc: number;
             volumeTzs: number; volumeUsdc: number; volumeOtcUsdc: number; otcOrders: number };
+  redemption: {
+    securities: { symbol: string; clientHeld: number; markTzs: number;
+                  valueTzs: number; paidTzs: number; unrealisedTzs: number }[];
+    totalValueTzs: number; totalPaidTzs: number; unrealisedTzs: number;
+    cashTzs: number; owedCashTzs: number; coverPct: number | null; shortfallTzs: number;
+  } | null;
   solvency: { ok: boolean; usdPerTzs: number; totals: { owedUsd: number; heldUsd: number; shortfallUsd: number; inventoryUsd: number };
               usdc?: { treasury: number; rampFloat: number };
               assets: { asset: string; owed: number; held: number; covered: boolean }[];
@@ -741,6 +747,83 @@ export function AdminPanel() {
           </div>
         );
       })()}
+
+      {/*
+        * What a redemption would cost, which solvency does not answer.
+        *
+        * Solvency asks whether the shares customers hold are actually held,
+        * and answers in shares — the only honest unit for that question,
+        * since a price move cannot leave a share position unbacked.
+        *
+        * This asks the cash question. A customer's gain is money nobody paid
+        * in: they deposited what they spent, and the rest appeared because
+        * the price rose. When they sell, the ledger owes shillings at today's
+        * mark. The value exists — the custodian's shares rose by the same
+        * amount — but it exists on the exchange, and turning it into
+        * shillings takes days and a buyer. So this is a liquidity figure and
+        * is labelled as one; reading it as insolvency would be wrong.
+        */}
+      {data.redemption && data.redemption.totalValueTzs > 0 && (
+        <div id="redemption" className="mt-4 scroll-mt-24 rounded-2xl border hairline p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <div>
+              <div className="eyebrow">If everyone sold today</div>
+              <div className="tnum mt-1.5 text-2xl font-medium">
+                {Math.round(data.redemption.totalValueTzs + data.redemption.owedCashTzs).toLocaleString()} TZS
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="eyebrow">Shillings on hand</div>
+              <div className={`tnum mt-1.5 text-2xl font-medium ${
+                data.redemption.shortfallTzs > 0 ? "text-[#b45309]" : "text-[var(--color-up)]"}`}>
+                {Math.round(data.redemption.cashTzs).toLocaleString()} TZS
+              </div>
+            </div>
+          </div>
+
+          <p className="mt-3 text-[12px] leading-relaxed text-[var(--muted)]">
+            {data.redemption.shortfallTzs > 0 ? (
+              <>
+                <span className="tnum text-[#b45309]">
+                  {Math.round(data.redemption.shortfallTzs).toLocaleString()} TZS
+                </span>{" "}
+                of that would have to come from selling the underlying shares. Of it,{" "}
+                <span className="tnum text-[var(--fg)]">
+                  {Math.round(data.redemption.unrealisedTzs).toLocaleString()} TZS
+                </span>{" "}
+                is gain nobody paid in — it exists as shares on the exchange, not as cash.
+                This is a liquidity figure, not a shortfall in backing: solvency above
+                answers whether the shares are held.
+              </>
+            ) : (
+              <>Every position could be redeemed in shillings from the omnibus today, with{" "}
+                <span className="tnum text-[var(--fg)]">
+                  {Math.round(data.redemption.unrealisedTzs).toLocaleString()} TZS
+                </span>{" "}
+                of it unrealised gain.</>
+            )}
+          </p>
+
+          <div className="mt-4 grid gap-1.5">
+            {data.redemption.securities.map((r) => (
+              <div key={r.symbol} className="flex items-center gap-3 rounded-xl surface px-3.5 py-2 text-[12px]">
+                <span className="w-14 shrink-0 font-medium">{r.symbol}</span>
+                <span className="tnum shrink-0 text-[var(--muted)]">
+                  {r.clientHeld.toLocaleString(undefined, { maximumFractionDigits: 4 })} @{" "}
+                  {r.markTzs > 0 ? `${Math.round(r.markTzs).toLocaleString()} TZS` : "no mark"}
+                </span>
+                <span className="tnum ml-auto shrink-0">
+                  {Math.round(r.valueTzs).toLocaleString()} TZS
+                </span>
+                <span className={`tnum w-24 shrink-0 text-right ${
+                  r.unrealisedTzs >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+                  {r.unrealisedTzs >= 0 ? "+" : ""}{Math.round(r.unrealisedTzs).toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div id="custody" className="mt-4 grid gap-4 scroll-mt-24 lg:grid-cols-2">
         {/* Shillings sit at nTZS; shares and USDC sit onchain. */}

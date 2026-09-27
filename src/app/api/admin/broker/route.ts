@@ -22,7 +22,7 @@ export async function GET(req: Request) {
   if (!role) return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
 
   try {
-    const [balance, entries, daily, bySecurity, payout, account] = await Promise.all([
+    const [balance, entries, daily, bySecurity, payout, account, redemption] = await Promise.all([
       brokerBalance(),
       brokerEntries(undefined, 60),
       brokerDaily(undefined, 30),
@@ -41,6 +41,19 @@ export async function GET(req: Request) {
         balance: await m.brokerNtzsBalance().catch(() => null),
         status: m.brokerAccountStatus(),
       })).catch(() => null),
+      /*
+       * What a full redemption would ask for, shown to the broker as well.
+       *
+       * It is the one figure that says what CAPX may have to call on them
+       * for. A customer's gain is money nobody paid in, and when it is
+       * redeemed the shillings have to come from selling the underlying —
+       * which is FIMCO's to sell. A number only CAPX can see is a call FIMCO
+       * cannot be ready for, and this page exists precisely because a
+       * statement only one side can check is not a statement.
+       *
+       * Totals only. Who holds what is not a broker's record.
+       */
+      import("@/lib/redemption").then((m) => m.redemptionExposure()).catch(() => null),
     ]);
 
     /*
@@ -58,6 +71,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       ok: true, role, balance, available, entries, daily, bySecurity, payout, split: FEE_SPLIT,
+      redemption,
       wallet: role === "admin"
         ? {
             address: account?.balance?.walletAddress ?? null,

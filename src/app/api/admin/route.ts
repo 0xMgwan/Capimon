@@ -140,14 +140,28 @@ export async function GET(req: Request) {
      * deposit reconciliation and nTZS capabilities are not a broker's records.
      */
     if (role === "fimco") {
+      /*
+       * The broker sees the redemption figure too, and should.
+       *
+       * It is the one number that says what CAPX may have to ask them for:
+       * if every holder sold at today's marks, this is the shilling bill,
+       * and the part of it that is unrealised gain is the part that can only
+       * be met by selling the underlying on the exchange. FIMCO is who does
+       * that selling, so a figure they cannot see is a call they cannot be
+       * ready for. It carries no customer's position — only the totals.
+       */
       return NextResponse.json(
-        { ok: true, role, users, orders, withdrawals },
+        {
+          ok: true, role, users, orders, withdrawals,
+          redemption: await import("@/lib/redemption")
+            .then((m) => m.redemptionExposure()).catch(() => null),
+        },
         { headers: { "cache-control": "no-store" } },
       );
     }
 
     // Reported separately: an unreachable dependency is not a shortfall.
-    const [solvency, ntzs, onchain, caps, route, feePos, sweeps] = await Promise.all([
+    const [solvency, ntzs, onchain, caps, route, feePos, sweeps, redemption] = await Promise.all([
       treasuryConfigured ? checkSolvency().catch(() => null) : null,
       ntzsConfigured ? ntzsTreasury().catch(() => null) : null,
       treasuryConfigured ? treasuryHoldings({ prices: true }).catch(() => null) : null,
@@ -155,6 +169,10 @@ export async function GET(req: Request) {
       ntzsConfigured ? collectionRoute().catch(() => null) : null,
       import("@/lib/feeSweep").then((m) => m.feePosition()).catch(() => null),
       import("@/lib/feeSweep").then((m) => m.recentSweeps(10)).catch(() => []),
+      /* What a full redemption would ask for in shillings, against what is
+         on hand to pay it. Solvency answers the share question; this is the
+         cash one. */
+      import("@/lib/redemption").then((m) => m.redemptionExposure()).catch(() => null),
     ]);
     const fees = { position: feePos, sweeps };
 
@@ -166,6 +184,7 @@ export async function GET(req: Request) {
                (select coalesce(sum(amount),0)::text from capx.ledger_entries
                  where asset = 'USDC' and kind = 'deposit') as ledger,
                (select count(*)::int from capx.deposits where status = 'settled') as deposits`,
+      redemption,
       totals: {
         users: totals[0]?.users ?? 0,
         pendingDeposits: totals[0]?.pending ?? 0,

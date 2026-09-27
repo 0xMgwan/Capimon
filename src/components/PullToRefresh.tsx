@@ -68,16 +68,21 @@ export function PullToRefresh() {
       const eased = Math.min(MAX_PULL, dy * 0.45);
       setPull(eased);
       /*
-       * The tap that says "let go now".
+       * Armed, but not felt yet.
        *
-       * Fired once, on crossing, and never on the way back — a gesture that
-       * buzzes every time it wobbles across a threshold is worse than one
-       * that is silent. Disarming when they pull back up below it means the
-       * tap is available again if they commit properly.
+       * The tap belongs here — "let go now" is the thing worth feeling — and
+       * it cannot be delivered here. Both mechanisms need user activation:
+       * `navigator.vibrate` is blocked without it on Android, and the iOS
+       * switch-control haptic plays only inside a `click`. `touchmove` grants
+       * neither, so a haptic fired from this handler is silently dropped on
+       * every phone, which is exactly what happened.
+       *
+       * `touchend` does grant activation, so the feedback moves there. The
+       * threshold still matters — it decides what is felt on release and
+       * whether anything refreshes — it just no longer pretends to buzz.
        */
       if (eased >= TRIGGER_PX && !armed.current) {
         armed.current = true;
-        haptic("medium");
       } else if (eased < TRIGGER_PX * 0.8 && armed.current) {
         armed.current = false;
       }
@@ -85,15 +90,29 @@ export function PullToRefresh() {
 
     const onEnd = () => {
       const shouldRun = armed.current;
+      const wasPulling = startY.current !== null;
       startY.current = null;
       armed.current = false;
-      if (!shouldRun) { setPull(0); return; }
+
+      /*
+       * Felt here, synchronously, because this is the only moment that can.
+       *
+       * `touchend` is an activation-triggering event, so both mechanisms are
+       * available for the length of this handler and no longer. Anything
+       * awaited first — the refresh, a timeout — has already lost it, which
+       * is why this fires before the work rather than after it.
+       *
+       * A pull that fell short gets nothing: feedback for "that did not
+       * count" is worse than silence, because the hand already knows.
+       */
+      if (!shouldRun) {
+        if (wasPulling) setPull(0);
+        return;
+      }
+      haptic("medium");
 
       setBusy(true);
       setPull(TRIGGER_PX * 0.6);
-      // A second, lighter tap on release: the first said it would go, this
-      // says it has.
-      haptic("light");
       void (async () => {
         try {
           /*
@@ -107,7 +126,18 @@ export function PullToRefresh() {
             Promise.resolve(refreshMarkets()),
           ]);
           router.refresh();
-          haptic("success");
+          /*
+           * Only where it can still be felt.
+           *
+           * By now the gesture's activation has expired, so the iOS switch
+           * plays nothing. Android's vibrate keeps working, and a device that
+           * can buzz on completion should — it is the difference between
+           * "refreshing" and "refreshed". The call is simply a no-op
+           * everywhere else rather than a promise that is not kept.
+           */
+          if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+            haptic("success");
+          }
         } finally {
           // A beat, so a refresh that returns instantly still reads as having
           // happened rather than as a flicker.

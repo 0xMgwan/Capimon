@@ -795,4 +795,7 @@ export const SW: Record<string, string> = {
   "The price for this security is not available right now, so nothing was traded. Try again shortly.": "Bei ya hisa hii haipatikani sasa hivi, hivyo hakuna kilichofanyika. Jaribu tena hivi karibuni.",
   "Buying is paused while CAPX reconciles its holdings. Selling is unaffected, and this will reopen shortly.": "Kununua kumesitishwa wakati CAPX inalinganisha mali zake. Kuuza hakuathiriki, na hili litafunguliwa hivi karibuni.",
   "Your account needs to be verified before this can go through.": "Akaunti yako inahitaji kuthibitishwa kabla hili halijapita.",
+  /* Dividends, which arrive as shares. */
+  "Dividend": "Gawio",
+  "Paid in shares, not cash: the company's dividend raised what each token is worth, so your holding grew. Nothing to do.": "Imelipwa kwa hisa, si fedha: gawio la kampuni limeongeza thamani ya kila tokeni, hivyo kiasi unachoshikilia kimeongezeka. Hakuna la kufanya.",
 };

@@ -26,7 +26,9 @@ export type ActivityKind =
   | "buy" | "sell"
   | "deposit" | "withdrawal"
   | "self-buy" | "self-sell"
-  | "adjustment";
+  | "adjustment"
+  /** A dividend or split, paid in shares rather than cash. */
+  | "dividend";
 
 /** pending | settled | failed — normalised across tables that spell it differently. */
 export type ActivityStatus = "pending" | "settled" | "failed";
@@ -216,23 +218,46 @@ export async function userActivity(userId: string, limit = 120): Promise<Activit
     if (typeof meta.quoteId === "string") refs.push({ label: "Quote", value: meta.quoteId });
     if (e.ref) refs.push({ label: "Reference", value: e.ref });
     if (typeof meta.destination === "string") refs.push({ label: "Sent to", value: meta.destination });
+
+    /*
+     * A dividend is not a cash movement and must not be drawn as one.
+     *
+     * It is written as an adjustment in the share's own asset, because that
+     * is what it is: more shares. Fed through the generic ledger mapping it
+     * came out as an "Adjustment" of 0.00377 *shillings* — a share count
+     * relabelled as money and then rounded to zero, which is a receipt for
+     * something that did not happen. It gets its own kind, its quantity in
+     * the quantity field, and no cash leg at all.
+     */
+    const isDividend = meta.reason === "corporate action";
+    const isCash = e.asset === "TZS" || e.asset === "USDC";
+    if (isDividend) {
+      refs.push({
+        label: "Multiplier",
+        value: `${meta.fromMultiplier ?? "?"} → ${meta.toMultiplier ?? "?"}`,
+      });
+    }
+
     items.push({
       id: `ledger:${e.id}`,
-      kind: e.kind === "adjustment" ? "adjustment" : "withdrawal",
+      kind: isDividend ? "dividend" : e.kind === "adjustment" ? "adjustment" : "withdrawal",
       // A ledger entry is written once the movement has happened, so there is
       // nothing pending about one.
       status: "settled",
       at: e.created_at,
       settledAt: e.created_at,
-      asset: e.asset === "TZS" || e.asset === "USDC" ? null : e.asset,
-      qty: null,
-      amount: Math.abs(amount),
-      currency: e.asset === "USDC" ? "USDC" : "TZS",
+      asset: isCash ? null : e.asset,
+      qty: isDividend || !isCash ? Math.abs(amount) : null,
+      amount: isDividend || !isCash ? null : Math.abs(amount),
+      currency: isDividend || !isCash ? null : e.asset === "USDC" ? "USDC" : "TZS",
       price: null,
       fee: null,
       error: null,
       refs,
-      note: typeof meta.reason === "string" ? meta.reason
+      note: isDividend
+        ? "Paid in shares, not cash: the company's dividend raised what each token is worth, "
+          + "so your holding grew. Nothing to do."
+        : typeof meta.reason === "string" ? meta.reason
         : typeof meta.note === "string" ? meta.note
         : e.kind === "adjustment"
           ? `${amount >= 0 ? "Added to" : "Taken from"} your balance by the CAPX desk.`

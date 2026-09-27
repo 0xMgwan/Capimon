@@ -35,7 +35,7 @@ import { friendlyError, wasRewritten } from "@/lib/friendlyError";
 
 type Item = {
   id: string;
-  kind: "buy" | "sell" | "deposit" | "withdrawal" | "self-buy" | "self-sell" | "adjustment";
+  kind: "buy" | "sell" | "deposit" | "withdrawal" | "self-buy" | "self-sell" | "adjustment" | "dividend";
   status: "pending" | "settled" | "failed";
   at: string;
   settledAt: string | null;
@@ -55,7 +55,8 @@ type Filter = "all" | "trades" | "money" | "issues";
 const MATCH: Record<Filter, (i: Item) => boolean> = {
   all: () => true,
   trades: (i) => ["buy", "sell", "self-buy", "self-sell"].includes(i.kind),
-  money: (i) => ["deposit", "withdrawal", "adjustment"].includes(i.kind),
+  // A dividend is money in, even though it arrives as shares.
+  money: (i) => ["deposit", "withdrawal", "adjustment", "dividend"].includes(i.kind),
   issues: (i) => i.status !== "settled",
 };
 
@@ -191,7 +192,8 @@ function Row({ item, open, onToggle, t }: {
     : `${Math.round(n).toLocaleString()} TZS`;
 
   const title =
-    item.kind === "deposit" ? t("Deposit")
+    item.kind === "dividend" ? `${t("Dividend")} · ${item.asset}`
+    : item.kind === "deposit" ? t("Deposit")
     : item.kind === "withdrawal" ? t("Withdrawal")
     : item.kind === "adjustment" ? t("Adjustment")
     : item.kind === "self-buy" ? `${t("Bought")} ${item.asset} → ${t("wallet")}`
@@ -229,11 +231,20 @@ function Row({ item, open, onToggle, t }: {
         </span>
 
         <span className="shrink-0 text-right">
-          <span className="tnum block text-[13.5px]">{money(item.amount, item.currency)}</span>
-          {item.qty !== null && (
-            <span className="tnum block text-[11px] text-[var(--muted)]">
-              {qtyFmt(item.qty)} {item.asset}
+          {/* A dividend has no cash leg, so the quantity is the headline. */}
+          {item.amount === null && item.qty !== null ? (
+            <span className="tnum block text-[13.5px] text-[var(--color-up)]">
+              +{qtyFmt(item.qty)} {item.asset}
             </span>
+          ) : (
+            <>
+              <span className="tnum block text-[13.5px]">{money(item.amount, item.currency)}</span>
+              {item.qty !== null && (
+                <span className="tnum block text-[11px] text-[var(--muted)]">
+                  {qtyFmt(item.qty)} {item.asset}
+                </span>
+              )}
+            </>
           )}
         </span>
 

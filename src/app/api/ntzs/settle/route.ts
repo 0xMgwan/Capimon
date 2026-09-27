@@ -66,7 +66,19 @@ const BANK_STALE_AFTER_MS = 5 * 60_000;
  *
  * Safe to call from a cron, a webhook, or the user polling their own deposit.
  */
-export async function settlePending(): Promise<{ checked: number; results: Record<string, string>[] }> {
+export async function settlePending(
+  /**
+   * One customer's deposits, rather than everybody's.
+   *
+   * The sweep runs on a cron every fifteen minutes, which is the right
+   * cadence for catching everything and a poor one for somebody standing
+   * there having just paid. Scoped to a single account, the same work is
+   * cheap enough to run while they watch — and it is the same work: the
+   * money still has to have arrived at nTZS, and nothing here credits
+   * anything on a client's say-so.
+   */
+  onlyUserId?: string,
+): Promise<{ checked: number; results: Record<string, string>[] }> {
   // Settlement only needs the database and nTZS; the treasury is required for
   // the wallet route's transfer leg, not for a ramp credit.
   if (!dbConfigured || !ntzsConfigured) return { checked: 0, results: [] };
@@ -83,6 +95,7 @@ export async function settlePending(): Promise<{ checked: number; results: Recor
      -- 'expired' is still watched: it means "stop showing this as in flight",
      -- never "stop crediting it if the money arrives".
      where status in ('pending','uncertain','expired') and ntzs_deposit_id is not null
+       ${onlyUserId ? sql`and user_id = ${onlyUserId}::uuid` : sql``}
      order by created_at asc
      limit 20`;
 

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { useT } from "@/lib/i18n";
 import { haptic } from "@/lib/haptics";
+import { friendlyError } from "@/lib/friendlyError";
 import { NtzsIcon } from "./icons/Ntzs";
 import { UsdcIcon } from "./icons/Usdc";
 import { DseLogo } from "./DseLogo";
@@ -215,7 +216,7 @@ export function CrdbPanel({ symbol = "CRDB", showHeader = true }: {
       const d = await res.json();
       if (!d.ok) {
         haptic("error");
-        setMsg({ tone: "bad", text: d.error ?? "That order could not be placed." });
+        setMsg({ tone: "bad", text: friendlyError(d.error) ?? "That order could not be placed." });
       } else {
         haptic("success");
         setMsg({

@@ -785,4 +785,14 @@ export const SW: Record<string, string> = {
   "Your wallet did not answer. Open it and try again.": "Pochi yako haikujibu. Ifungue kisha jaribu tena.",
   "Trades into this wallet": "Biashara kwenye pochi hii",
   "All activity": "Shughuli zote",
+  /* Receipts, said plainly. */
+  "Technical detail": "Maelezo ya kiufundi",
+  "CAPX could not reach enough settled funds to place this trade just now. Nothing was taken from your balance. This usually clears within a few minutes — try again shortly.": "CAPX haikuweza kufikia fedha zilizokamilika za kutosha kufanya biashara hii sasa hivi. Hakuna kilichotolewa kwenye salio lako. Hili hujirekebisha ndani ya dakika chache — jaribu tena hivi karibuni.",
+  "There was not enough in your balance for this. Nothing was taken.": "Hakukuwa na kutosha kwenye salio lako kwa hili. Hakuna kilichotolewa.",
+  "The market moved while this was being placed, so it was not filled. Nothing was taken from your balance. Try again in a moment.": "Soko lilibadilika wakati hili linawekwa, hivyo halikutimizwa. Hakuna kilichotolewa kwenye salio lako. Jaribu tena baada ya muda mfupi.",
+  "The price available was too far from the published mark, so CAPX refused the trade rather than fill it badly. Nothing was taken from your balance.": "Bei iliyopatikana ilikuwa mbali sana na bei iliyochapishwa, hivyo CAPX ilikataa biashara badala ya kuitimiza vibaya. Hakuna kilichotolewa kwenye salio lako.",
+  "This did not go through on the network. Nothing was taken from your balance. Try again shortly.": "Hili halikupita kwenye mtandao. Hakuna kilichotolewa kwenye salio lako. Jaribu tena hivi karibuni.",
+  "The price for this security is not available right now, so nothing was traded. Try again shortly.": "Bei ya hisa hii haipatikani sasa hivi, hivyo hakuna kilichofanyika. Jaribu tena hivi karibuni.",
+  "Buying is paused while CAPX reconciles its holdings. Selling is unaffected, and this will reopen shortly.": "Kununua kumesitishwa wakati CAPX inalinganisha mali zake. Kuuza hakuathiriki, na hili litafunguliwa hivi karibuni.",
+  "Your account needs to be verified before this can go through.": "Akaunti yako inahitaji kuthibitishwa kabla hili halijapita.",
 };

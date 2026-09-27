@@ -10,6 +10,7 @@ import { USDC_BASE } from "@/lib/assets";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { useT } from "@/lib/i18n";
 import { haptic } from "@/lib/haptics";
+import { friendlyError } from "@/lib/friendlyError";
 import { WalletButton } from "./WalletButton";
 
 /**
@@ -236,7 +237,7 @@ export function SelfCustodyTicket({ symbol, side, initialAmount, currencySwitch 
       if (!j.ok) throw new Error(j.error);
       q = j.quote;
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("Could not price that"));
+      setError(friendlyError(e instanceof Error ? e.message : null) ?? t("Could not price that"));
       setStep("idle");
       return;
     }

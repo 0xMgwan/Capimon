@@ -133,12 +133,26 @@ export function WalletSection({ holdings }: {
     let alive = true;
     const tick = async () => {
       if (!alive) return;
+      /*
+       * While something is in flight, ask the server to look now.
+       *
+       * Polling only read the database, and the database only changed when
+       * the cron swept every fifteen minutes — so a deposit that had cleared
+       * at nTZS within seconds sat behind a spinner until a timer somewhere
+       * else happened to fire. This settles the customer's own deposits on
+       * demand, which is the same check against the same upstream: the money
+       * still has to have arrived, and asking more often cannot change the
+       * answer. It only decides how soon anybody looks.
+       */
+      if (pendingCount > 0) {
+        await fetch("/api/ntzs/settle/mine", { method: "POST" })
+          .catch(() => { /* the cron remains the backstop */ });
+      }
       await loadDeposits();
       await refresh();
     };
     const first = setTimeout(tick, 0);
-    // Watch closely while something is in flight, idle otherwise. The server
-    // credits it either way — this only decides how soon the screen catches up.
+    // Watch closely while something is in flight, idle otherwise.
     const stop = pollWhileVisible(tick, pendingCount > 0 ? 6_000 : 30_000);
     return () => { alive = false; clearTimeout(first); stop(); };
   }, [loadDeposits, refresh, pendingCount]);

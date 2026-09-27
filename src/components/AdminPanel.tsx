@@ -30,6 +30,23 @@ type HolderRow = {
 };
 
 /** One identity check, without the images it points at. */
+/**
+ * The statuses each tab is worth filtering by.
+ *
+ * Only where the column exists and takes a small set of values: Users and
+ * Holdings have no status, and offering an empty filter over them would be a
+ * control that does nothing.
+ */
+const STATUSES: Partial<Record<string, string[]>> = {
+  deposits: ["pending", "settled", "failed"],
+  orders: ["pending", "settled", "failed"],
+  kyc: ["pending", "approved", "rejected"],
+};
+
+/** Everything a row shows, flattened, so one box can search all of it. */
+const haystack = (o: unknown): string =>
+  JSON.stringify(o ?? "").toLowerCase();
+
 type KycRow = {
   id: string; user_id: string; email: string; name: string | null;
   doc_type: string; doc_number: string | null; status: string; reason: string | null;
@@ -78,7 +95,8 @@ type Admin = {
               ntzs_deposit_id: string | null; ntzs_status: string | null; ntzs_reference: string | null;
               swap_ref: string | null; transfer_tx: string | null; rate_tzs_usdc: string | null }[];
   users: { id: string; email: string; name: string | null; phone: string | null; nida_number: string | null;
-           deposits: number; settled_tzs: number; usdc_balance: string | null; created_at: string }[];
+           deposits: number; settled_tzs: number; usdc_balance: string | null;
+           tzs_balance: string | null; share_entries: number; created_at: string }[];
   orders: { id: string; email: string; side: string; symbol: string; price: string | null; usdc_amount: string | null;
             qty: string | null; status: string; tx_hash: string | null; created_at: string }[];
 };
@@ -95,6 +113,13 @@ export function AdminPanel() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<"deposits" | "users" | "orders" | "holdings" | "withdrawals" | "kyc">("deposits");
+  /** Free text over whatever the rows already show. */
+  const [query, setQuery] = useState("");
+  /** The status chips, where the tab has a status worth filtering by. */
+  const [statusFilter, setStatusFilter] = useState("all");
+  // A tab change carries its own meaning; keeping the last tab's filter over
+  // it would hide rows for a reason nobody chose.
+  useEffect(() => { setStatusFilter("all"); }, [tab]);
   const [kyc, setKyc] = useState<KycRow[] | null>(null);
   const [holders, setHolders] = useState<HolderRow[] | null>(null);
   /*
@@ -165,6 +190,23 @@ export function AdminPanel() {
     }
   };
   const [openRow, setOpenRow] = useState<string | null>(null);
+
+  /**
+   * One filter, applied to whichever list is on screen.
+   *
+   * Search runs over the row's own data rather than a chosen set of fields:
+   * the desk arrives with a string copied from an email, a bank statement or
+   * a block explorer, and should not have to know which column it came from.
+   * Status is exact, because "pending" matching "pending settlement" in some
+   * other field would be worse than no filter.
+   */
+  const sift = useCallback(<T extends Record<string, unknown>>(rows: T[]): T[] => {
+    const q = query.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (statusFilter !== "all" && String(r.status ?? "") !== statusFilter) return false;
+      return !q || haystack(r).includes(q);
+    });
+  }, [query, statusFilter]);
 
   const load = useCallback(async (t: string) => {
     if (!t) return;
@@ -770,11 +812,53 @@ export function AdminPanel() {
         ))}
       </div>
 
-      <div className="scroll-thin mt-4 overflow-x-auto rounded-2xl border hairline">
+      {/*
+        * One search box and one status filter, over whichever tab is open.
+        *
+        * Every tab here is a list that grows without bound, and the desk's
+        * questions about them are nearly always "this customer" or "the ones
+        * that failed". Both were answered by scrolling. The search matches
+        * whatever the row already shows — a name, an email, a reference, a
+        * hash — because the desk arrives with a string somebody has pasted
+        * from somewhere else and should not have to know which column it
+        * belongs to.
+        */}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search name, email, reference, hash…"
+          className="min-w-[14rem] flex-1 rounded-full border hairline bg-transparent px-4 py-2 text-[13px] outline-none focus:border-[var(--color-accent)]"
+        />
+        {STATUSES[tab] && (
+          <span className="inline-flex overflow-hidden rounded-full border hairline text-[12px]">
+            {["all", ...STATUSES[tab]!].map((st) => (
+              <button
+                key={st}
+                onClick={() => setStatusFilter(st)}
+                className={`px-3 py-1.5 capitalize transition-colors ${
+                  statusFilter === st ? "bg-[var(--fg)] text-[var(--bg)]" : "text-[var(--muted)] hover:surface"}`}
+              >
+                {st}
+              </button>
+            ))}
+          </span>
+        )}
+        {(query || statusFilter !== "all") && (
+          <button
+            onClick={() => { setQuery(""); setStatusFilter("all"); }}
+            className="rounded-full border hairline px-3 py-1.5 text-[12px] text-[var(--muted)] hover:surface"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      <div className="scroll-thin mt-3 overflow-x-auto rounded-2xl border hairline">
         <table className="w-full min-w-[720px] border-collapse text-sm">
           <thead className="border-b hairline">
             <tr>{(tab === "deposits" ? ["User", "Amount", "Status", "Credited", "Phone", "When"]
-                : tab === "users" ? ["User", "National ID", "Phone", "Deposits", "Balance"]
+                : tab === "users" ? ["User", "National ID", "Phone", "Deposits", "Cash held"]
                 : tab === "holdings" ? ["Holder", "Asset", "Quantity", "Cost", "Value", "Since"]
                 : tab === "withdrawals" ? ["User", "Amount", "Reference", "When"]
                 : tab === "kyc" ? ["Applicant", "Document", "Selfie", "Status", "Decision"]
@@ -783,7 +867,7 @@ export function AdminPanel() {
             ))}</tr>
           </thead>
           <tbody>
-            {tab === "deposits" && data.deposits.map((d) => (
+            {tab === "deposits" && sift(data.deposits).map((d) => (
               <>
               <tr key={d.id} onClick={() => setOpenRow(openRow === d.id ? null : d.id)}
                   className="cursor-pointer border-b hairline last:border-0 hover:surface">
@@ -838,7 +922,7 @@ export function AdminPanel() {
               )}
               </>
             ))}
-            {tab === "users" && data.users.map((u) => (
+            {tab === "users" && sift(data.users).map((u) => (
               <tr key={u.id} className="border-b hairline last:border-0">
                 <td className="px-3 py-3">
                   <div className="font-medium">{u.name ?? "—"}</div>
@@ -849,10 +933,35 @@ export function AdminPanel() {
                 <td className="tnum px-3 py-3 text-right">
                   {u.deposits} · {TZS(u.settled_tzs)}
                 </td>
-                <td className="tnum px-3 py-3 text-right">{usd(Number(u.usdc_balance ?? 0))}</td>
+                {/*
+                  * Both currencies, and the sum in whichever the desk is
+                  * reading in.
+                  *
+                  * This showed USDC alone under the heading "Balance", so an
+                  * account holding five thousand shillings read as eight
+                  * cents of dust. Cash is cash whichever currency it is in;
+                  * shares are counted separately and noted, so an empty cash
+                  * line is not mistaken for an empty account.
+                  */}
+                <td className="tnum px-3 py-3 text-right">
+                  {(() => {
+                    const tzs = Number(u.tzs_balance ?? 0);
+                    const usdc = Number(u.usdc_balance ?? 0);
+                    const totalUsd = usdc + (rate > 0 ? tzs * rate : 0);
+                    return (
+                      <>
+                        <div>{money(totalUsd)}</div>
+                        <div className="text-[10px] text-[var(--muted)]">
+                          {Math.round(tzs).toLocaleString()} TZS · {usd(usdc)}
+                          {u.share_entries > 0 && " · holds shares"}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </td>
               </tr>
             ))}
-            {tab === "holdings" && (holders ?? []).map((h) => {
+            {tab === "holdings" && sift(holders ?? []).map((h) => {
               // Valued at what it cost, in the currency it was bought in. The
               // live mark belongs on the customer's own page; here the useful
               // question is what they put in and what they took out.
@@ -902,7 +1011,7 @@ export function AdminPanel() {
                 Nobody holds a position yet.
               </td></tr>
             )}
-            {tab === "kyc" && (kyc ?? []).map((k) => (
+            {tab === "kyc" && sift(kyc ?? []).map((k) => (
               <tr key={k.id} className="border-b hairline last:border-0 align-top">
                 <td className="px-3 py-3">
                   <div>{k.email}</div>
@@ -1006,7 +1115,7 @@ export function AdminPanel() {
                 No verification submissions yet.
               </td></tr>
             )}
-            {tab === "withdrawals" && (data.withdrawals ?? []).map((w) => (
+            {tab === "withdrawals" && sift(data.withdrawals ?? []).map((w) => (
               <tr key={w.id} className="border-b hairline last:border-0">
                 <td className="px-3 py-3">{w.email}</td>
                 <td className="tnum px-3 py-3 text-right">{TZS(Math.abs(Number(w.amount)))}</td>
@@ -1016,7 +1125,7 @@ export function AdminPanel() {
                 </td>
               </tr>
             ))}
-            {tab === "orders" && data.orders.map((o) => (
+            {tab === "orders" && sift(data.orders).map((o) => (
               <tr key={o.id} className="border-b hairline last:border-0">
                 <td className="px-3 py-3">{o.email}</td>
                 <td className="px-3 py-3 text-right capitalize">{o.side}</td>

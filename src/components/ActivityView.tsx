@@ -11,6 +11,7 @@ import { NtzsIcon } from "./icons/Ntzs";
 import { UsdcIcon } from "./icons/Usdc";
 import { useT } from "@/lib/i18n";
 import { haptic } from "@/lib/haptics";
+import { friendlyError, wasRewritten } from "@/lib/friendlyError";
 
 /**
  * Every movement of one customer's money, with the receipt underneath.
@@ -246,9 +247,28 @@ function Row({ item, open, onToggle, t }: {
         <div className="border-t hairline px-3.5 py-3 text-[12px]">
           {item.note && <p className="mb-2 leading-relaxed text-[var(--muted)]">{item.note}</p>}
           {item.error && (
-            <p className="mb-2 rounded-xl border border-[var(--color-down)]/35 bg-[var(--color-down)]/[0.06] px-3 py-2 leading-relaxed text-[var(--color-down)]">
-              {item.error}
-            </p>
+            /*
+              Said to the customer, with the original underneath.
+              The raw message names the omnibus, the settlement float and a
+              treasury, which is the right level of detail for whoever has to
+              fix it and no use at all to somebody asking whether their money
+              is safe. The technical version stays, folded away, because
+              anybody writing to support should be able to quote the sentence
+              the desk will recognise.
+            */
+            <div className="mb-2 rounded-xl border border-[var(--color-down)]/35 bg-[var(--color-down)]/[0.06] px-3 py-2">
+              <p className="leading-relaxed text-[var(--color-down)]">{friendlyError(item.error)}</p>
+              {wasRewritten(item.error) && (
+                <details className="mt-1.5">
+                  <summary className="cursor-pointer text-[11px] text-[var(--muted)]">
+                    {t("Technical detail")}
+                  </summary>
+                  <p className="mt-1 break-words text-[11px] leading-relaxed text-[var(--muted)]">
+                    {item.error}
+                  </p>
+                </details>
+              )}
+            </div>
           )}
 
           <dl className="grid gap-1">

@@ -10,6 +10,7 @@ import { KycPrompt } from "./KycPrompt";
 import { WalletLinkPrompt } from "./WalletLinkPrompt";
 import { RecurringBuys } from "./RecurringBuys";
 import { useDse } from "@/lib/useDse";
+import { useMarkets } from "@/lib/useMarkets";
 import { usd, costLabel } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { NtzsIcon } from "./icons/Ntzs";
@@ -27,6 +28,7 @@ export function CustodialPortfolio() {
   const { currency, setCurrency, canShowTzs, format: money } = useCurrency();
   // Hooks before the early return: a plan can only be made in something live.
   const dse = useDse();
+  const { data: usMarkets } = useMarkets();
   if (!account) return null;
 
   const { tzs, cashTzs, positions, equity, total } = account;
@@ -159,9 +161,28 @@ export function CustodialPortfolio() {
         */}
       {/* Anchored, so a link can land on the standing orders directly. */}
       <div id="recurring" className="scroll-mt-24" />
-      <RecurringBuys securities={dse
-        .filter((d) => d.status === "live")
-        .map((d) => ({ symbol: d.symbol, name: d.name, logo: d.logo, price: d.price }))} />
+      {/*
+        * Both boards, because a standing order is about the habit rather
+        * than the market.
+        *
+        * It was DSE-only for the reason all of this started there, not for
+        * any reason that survives: the plan is denominated in shillings
+        * either way, and a US name simply converts at buy time the way the
+        * manual ticket already does. Shilling listings lead, because that is
+        * what most people here are saving into.
+        *
+        * Prices are carried in each listing's own currency so the preview can
+        * say what a plan actually buys; a dollar price through the live rate
+        * is the same arithmetic the order will do.
+        */}
+      <RecurringBuys securities={[
+        ...dse
+          .filter((d) => d.status === "live")
+          .map((d) => ({ symbol: d.symbol, name: d.name, logo: d.logo, price: d.price, currency: "TZS" as const })),
+        ...(usMarkets?.markets ?? []).map((m) => ({
+          symbol: m.symbol, name: m.name, logo: m.logo, price: m.price, currency: "USD" as const,
+        })),
+      ]} />
 
       {/*
         * Money first, then what it bought.

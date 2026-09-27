@@ -190,7 +190,23 @@ export async function runDue(now = new Date()): Promise<{ ran: number; bought: n
       kycStatus: u.kyc_status, nidaNumber: u.nida_number,
     } as SessionUser;
 
-    const result = await placeSecurityOrder(user, { security: b.symbol, side: "buy", amount: b.amountTzs });
+    /*
+     * A US name goes down the US path, in shillings.
+     *
+     * A standing order has always been denominated in TZS, which is what the
+     * customer holds; the difference is only what happens to those shillings
+     * on the way. A DSE share settles against a published mark and never
+     * leaves the currency. A US share converts to USDC at buy time and trades
+     * on-chain — the same thing the manual ticket does when somebody with a
+     * shilling balance buys NVIDIA, and the same refusals, because both now
+     * call the one implementation rather than each keeping a copy.
+     */
+    const { BY_SYMBOL } = await import("./assets");
+    const usAsset = BY_SYMBOL[b.symbol.toLowerCase()];
+    const result = usAsset
+      ? await import("./usOrders").then((m) =>
+          m.placeUsOrder(user, { symbol: b.symbol, side: "buy", amount: b.amountTzs, currency: "TZS" }))
+      : await placeSecurityOrder(user, { security: b.symbol, side: "buy", amount: b.amountTzs });
 
     if (result.ok) {
       bought++;

@@ -47,7 +47,24 @@ export async function GET(req: Request) {
                  (select coalesce(sum(amount_tzs),0) from capx.deposits d
                    where d.user_id = u.id and d.status = 'settled')::int as settled_tzs,
                  (select coalesce(sum(amount),0)::text from capx.ledger_entries l
-                   where l.user_id = u.id and l.asset = 'USDC') as usdc_balance
+                   where l.user_id = u.id and l.asset = 'USDC') as usdc_balance,
+                 /*
+                  * The shilling balance, which for most customers is the
+                  * whole of it.
+                  *
+                  * The column said "balance" and summed USDC alone, so an
+                  * account that had deposited five thousand shillings and
+                  * still held them read as eight cents — the eight cents
+                  * being whatever dust was left in the other currency. Both
+                  * are reported now and the desk adds them up.
+                  */
+                 (select coalesce(sum(amount),0)::text from capx.ledger_entries l
+                   where l.user_id = u.id and l.asset = 'TZS') as tzs_balance,
+                 /* Shares, at cost, so a zero cash balance is not mistaken
+                    for an empty account. */
+                 (select count(*) from capx.ledger_entries l
+                   where l.user_id = u.id and l.asset not in ('TZS','USDC')
+                     and l.amount > 0)::int as share_entries
             from capx.users u order by created_at desc limit 100`,
       sql`select o.id::text, o.side, o.symbol, o.usdc_amount::text, o.qty::text, o.price::text, o.status,
                  o.tx_hash, o.error, o.created_at, u.email

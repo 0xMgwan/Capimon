@@ -53,7 +53,15 @@ const dt = (s: string) =>
     day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false,
   }).replace(",", " ·");
 
-type Listing = { symbol: string; name: string; logo: string | null; price: number };
+type Listing = {
+  symbol: string; name: string; logo: string | null; price: number;
+  /** The currency the mark is quoted in. A US name is priced in dollars. */
+  currency?: "TZS" | "USD";
+};
+
+/** A listing's price said in its own currency, which is how it is quoted. */
+const mark = (s: Listing) =>
+  s.currency === "USD" ? `$${s.price.toFixed(2)}` : `${Math.round(s.price).toLocaleString()} TZS`;
 
 /**
  * Choosing the share, with the companies shown as companies.
@@ -100,9 +108,7 @@ function SharePicker({ list, value, onPick }: {
           <span className="block truncate text-[11.5px] text-[var(--muted)]">{chosen.name}</span>
         </span>
         {chosen.price > 0 && (
-          <span className="tnum shrink-0 text-[12px] text-[var(--muted)]">
-            {Math.round(chosen.price).toLocaleString()} TZS
-          </span>
+          <span className="tnum shrink-0 text-[12px] text-[var(--muted)]">{mark(chosen)}</span>
         )}
         <svg viewBox="0 0 24 24" className={`h-4 w-4 shrink-0 text-[var(--muted)] transition-transform ${open ? "rotate-180" : ""}`}
           fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -130,9 +136,7 @@ function SharePicker({ list, value, onPick }: {
                 <span className="block truncate text-[11px] text-[var(--muted)]">{s.name}</span>
               </span>
               {s.price > 0 && (
-                <span className="tnum shrink-0 text-[11.5px] text-[var(--muted)]">
-                  {Math.round(s.price).toLocaleString()}
-                </span>
+                <span className="tnum shrink-0 text-[11.5px] text-[var(--muted)]">{mark(s)}</span>
               )}
             </button>
           ))}

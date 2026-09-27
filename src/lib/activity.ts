@@ -55,6 +55,18 @@ export type ActivityItem = {
   refs: { label: string; value: string; href?: string }[];
   /** A line of plain English, where the numbers alone do not say it. */
   note: string | null;
+  /**
+   * Whether this added to the account or took from it.
+   *
+   * A ledger adjustment carries its direction in the sign of its amount, and
+   * the amount was being shown as an absolute value — so the two halves of a
+   * currency conversion, one out and one in, rendered as two identical
+   * credits under one identical word. Direction is the difference between a
+   * receipt and a puzzle.
+   */
+  direction?: "in" | "out";
+  /** A better name than the kind, where the metadata knows one. */
+  label?: string;
 };
 
 const num = (v: unknown): number | null => {
@@ -238,9 +250,29 @@ export async function userActivity(userId: string, limit = 120): Promise<Activit
       });
     }
 
+    /*
+     * A name for what this actually was.
+     *
+     * "Adjustment" is the ledger's word for anything that is not a trade, a
+     * deposit or a withdrawal, and it is the right word in the books. On a
+     * receipt it says nothing: a customer whose failed order left them
+     * holding dollars saw two rows both called Adjustment, both unsigned,
+     * one for 2,171 TZS and one for $0.82, and no way to tell that the
+     * second was the first. The reason is already stored; it only had to be
+     * read.
+     */
+    const label =
+      meta.reason === "order failed after the shilling swap" ? "Shillings converted"
+      : meta.reason === "shillings already converted; held as USDC" ? "Held as dollars"
+      : meta.reason === "converted to shillings" ? "Converted to shillings"
+      : meta.reason === "converted from dollars" ? "Converted from dollars"
+      : undefined;
+
     items.push({
       id: `ledger:${e.id}`,
       kind: isDividend ? "dividend" : e.kind === "adjustment" ? "adjustment" : "withdrawal",
+      direction: amount >= 0 ? "in" : "out",
+      label,
       // A ledger entry is written once the movement has happened, so there is
       // nothing pending about one.
       status: "settled",
@@ -257,6 +289,13 @@ export async function userActivity(userId: string, limit = 120): Promise<Activit
       note: isDividend
         ? "Paid in shares, not cash: the company's dividend raised what each token is worth, "
           + "so your holding grew. Nothing to do."
+        : meta.reason === "order failed after the shilling swap"
+          ? "A US share needs dollars, so your shillings were converted first. The trade then failed, "
+            + "so the money stayed as dollars — see the line below. Nothing was lost, and you can "
+            + "convert it back to shillings from your wallet."
+        : meta.reason === "shillings already converted; held as USDC"
+          ? "This is the other half of the line above: the shillings that were converted, now held "
+            + "as dollars in your balance."
         : typeof meta.reason === "string" ? meta.reason
         : typeof meta.note === "string" ? meta.note
         : e.kind === "adjustment"

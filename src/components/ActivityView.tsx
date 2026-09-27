@@ -48,6 +48,8 @@ type Item = {
   error: string | null;
   refs: { label: string; value: string; href?: string }[];
   note: string | null;
+  direction?: "in" | "out";
+  label?: string;
 };
 
 type Filter = "all" | "trades" | "money" | "issues";
@@ -192,7 +194,11 @@ function Row({ item, open, onToggle, t }: {
     : `${Math.round(n).toLocaleString()} TZS`;
 
   const title =
-    item.kind === "dividend" ? `${t("Dividend")} · ${item.asset}`
+    // What the metadata says it was, where it knows: "Adjustment" is the
+    // ledger's word for everything that is not a trade, and on a receipt it
+    // is a name that tells the reader nothing.
+    item.label ? t(item.label)
+    : item.kind === "dividend" ? `${t("Dividend")} · ${item.asset}`
     : item.kind === "deposit" ? t("Deposit")
     : item.kind === "withdrawal" ? t("Withdrawal")
     : item.kind === "adjustment" ? t("Adjustment")
@@ -238,7 +244,20 @@ function Row({ item, open, onToggle, t }: {
             </span>
           ) : (
             <>
-              <span className="tnum block text-[13.5px]">{money(item.amount, item.currency)}</span>
+              {/*
+                Signed, because direction is the whole meaning here.
+                Two halves of one conversion — shillings out, dollars in —
+                were drawn as two identical positive figures, so the receipt
+                read as though the account had been credited twice.
+                Only where the ledger actually knows the direction: a deposit
+                or a trade says which way it went in its own title.
+              */}
+              <span className={`tnum block text-[13.5px] ${
+                item.direction === "out" ? "text-[var(--color-down)]"
+                : item.direction === "in" ? "text-[var(--color-up)]" : ""}`}>
+                {item.direction === "out" ? "−" : item.direction === "in" ? "+" : ""}
+                {money(item.amount, item.currency)}
+              </span>
               {item.qty !== null && (
                 <span className="tnum block text-[11px] text-[var(--muted)]">
                   {qtyFmt(item.qty)} {item.asset}

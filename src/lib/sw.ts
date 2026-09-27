@@ -802,4 +802,11 @@ export const SW: Record<string, string> = {
   "Convert": "Badilisha",
   "Converting…": "Inabadilisha…",
   "Could not convert your balance": "Imeshindwa kubadilisha salio lako",
+  /* Naming the halves of a conversion. */
+  "Shillings converted": "Shilingi zimebadilishwa",
+  "Held as dollars": "Zinashikiliwa kama dola",
+  "Converted to shillings": "Zimebadilishwa kuwa shilingi",
+  "Converted from dollars": "Zimebadilishwa kutoka dola",
+  "A US share needs dollars, so your shillings were converted first. The trade then failed, so the money stayed as dollars — see the line below. Nothing was lost, and you can convert it back to shillings from your wallet.": "Hisa ya Marekani inahitaji dola, hivyo shilingi zako zilibadilishwa kwanza. Kisha biashara ilishindikana, hivyo fedha zilibaki kama dola — angalia mstari hapa chini. Hakuna kilichopotea, na unaweza kuzirudisha kuwa shilingi kutoka kwenye pochi yako.",
+  "This is the other half of the line above: the shillings that were converted, now held as dollars in your balance.": "Hii ni nusu nyingine ya mstari hapo juu: shilingi zilizobadilishwa, sasa zinashikiliwa kama dola kwenye salio lako.",
 };

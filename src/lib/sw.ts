@@ -813,4 +813,16 @@ export const SW: Record<string, string> = {
   "Connect a wallet": "Unganisha pochi",
   "Pay in shillings instead — CRDB is priced in TZS and settles from your CAPX balance.": "Lipa kwa shilingi badala yake — CRDB inapangwa bei kwa TZS na inakamilika kutoka salio lako la CAPX.",
   "Switch to TZS": "Badilisha kwenda TZS",
+  /* Asking for a place on the home screen. */
+  "Put CAPX on your home screen": "Weka CAPX kwenye skrini yako ya kwanza",
+  "Opens straight to your portfolio, stays signed in, and sends your morning and evening notes.": "Inafungua moja kwa moja kwenye uwekezaji wako, unabaki umeingia, na inatuma taarifa zako za asubuhi na jioni.",
+  "Add to home screen": "Ongeza kwenye skrini ya kwanza",
+  /* Left in English on purpose: this is the exact label iOS prints in the
+     share sheet, and a customer following the step has to find those words
+     on their own screen. Translating it sends them looking for a phrase
+     their phone does not show. */
+  "Add to Home Screen": "Add to Home Screen",
+  "Tap": "Gusa",
+  "in the toolbar": "kwenye upau wa vidhibiti",
+  "Choose": "Chagua",
 };

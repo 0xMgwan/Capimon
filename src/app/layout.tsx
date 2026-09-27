@@ -11,6 +11,7 @@ import { MobileTabs } from "@/components/MobileTabs";
 import { TradeFeed } from "@/components/TradeFeed";
 import { SafeArea } from "@/components/SafeArea";
 import { PullToRefresh } from "@/components/PullToRefresh";
+import { InstallPrompt } from "@/components/InstallPrompt";
 import { WalletSession } from "@/components/WalletSession";
 import { ThemeColor } from "@/components/ThemeColor";
 import { AppLaunch } from "@/components/AppLaunch";
@@ -152,6 +153,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <MobileTabs />
           <SafeArea />
           <PullToRefresh />
+          <InstallPrompt />
           <WalletSession />
           <Haptics />
           <ThemeColor />

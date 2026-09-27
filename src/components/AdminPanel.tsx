@@ -494,10 +494,29 @@ export function AdminPanel() {
           {/* Only offered when shillings are actually owed beyond what is held. */}
           {/* Offered for any shortfall: money can leave without a debit in more
               than one way, and the repair is measured either way. */}
-          {s && !s.ok && !s.unavailable && (
+          {/*
+            * Always reachable, loud only when it matters.
+            *
+            * This appeared only while solvency was already failing, which
+            * reads as helpful and is not: the desk's reason to reach for it
+            * is usually to check, and a control that hides whenever the
+            * answer might be "nothing to do" cannot be used to find that
+            * out. Worse, the moment somebody most wants it — after an
+            * incident, wondering whether it left a mark — is exactly when
+            * the numbers may already look fine and the button has vanished.
+            *
+            * Running it against a healthy book writes nothing and says so,
+            * so there is no cost to offering it. Red when there is a
+            * shortfall, quiet otherwise.
+            */}
+          {s && !s.unavailable && (
             <button onClick={reconcile} disabled={busy}
-              className="rounded-full border border-[var(--color-down)]/50 px-5 py-2.5 text-sm text-[var(--color-down)] transition-colors hover:bg-[var(--color-down)]/[0.06] disabled:opacity-50">
-              {busy ? "Working…" : "Reconcile balances to backing"}
+              className={`rounded-full border px-5 py-2.5 text-sm transition-colors disabled:opacity-50 ${
+                s.ok
+                  ? "hairline hover:surface"
+                  : "border-[var(--color-down)]/50 text-[var(--color-down)] hover:bg-[var(--color-down)]/[0.06]"
+              }`}>
+              {busy ? "Working…" : s.ok ? "Check balances against backing" : "Reconcile balances to backing"}
             </button>
           )}
           <button onClick={settle} disabled={busy}

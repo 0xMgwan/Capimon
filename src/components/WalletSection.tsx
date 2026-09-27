@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Arrow } from "./icons/Arrow";
 import { pollWhileVisible } from "@/lib/usePoll";
 import { motion, AnimatePresence } from "motion/react";
@@ -106,6 +106,19 @@ export function WalletSection({ holdings }: {
    * string is a deliberate act and stays empty.
    */
   const [amountText, setAmountText] = useState<string | null>(null);
+  /*
+   * The default is put *into* the field, once, rather than shown in place of
+   * an empty one.
+   *
+   * Rendering `amountText ?? "2000"` looks like a default and is a lie: the
+   * state is null while the DOM holds "2000", so the browser edits the string
+   * it can see. Type a digit and the change event arrives as "20006", which
+   * is how a field that appeared to contain 2000 produced 20006 — and why
+   * clearing it never took, since the next render put the fallback straight
+   * back. The value shown is now always exactly the state, so editing it
+   * edits the thing that is there.
+   */
+  const amountPrimed = useRef(false);
   const [phone, setPhone] = useState("");
   const [method, setMethod] = useState<"mobile_money" | "bank_transfer">("mobile_money");
   const [busy, setBusy] = useState(false);
@@ -116,6 +129,7 @@ export function WalletSection({ holdings }: {
      Clearing this one left a "0" wedged in the box that had to be selected
      over rather than deleted. */
   const [wdText, setWdText] = useState<string | null>(null);
+  const wdPrimed = useRef(false);
   const [bankDetails, setBankDetails] = useState<BankDetails | null>(null);
   const [hiddenRef, setHiddenRef] = useState<string | null>(null);
   const [payerAccount, setPayerAccount] = useState("");
@@ -215,6 +229,22 @@ export function WalletSection({ holdings }: {
   // Shillings plus whatever the USDC leg is worth — the same total the payout
   // is priced against, so the button and the panel cannot disagree.
   const wdAmount = Number(wdText ?? DEFAULT_WITHDRAW) || 0;
+
+  /*
+   * Primed once, on the first render that knows the account's own minimum.
+   * After that the field belongs to whoever is typing in it — including when
+   * what they have typed is nothing.
+   */
+  useEffect(() => {
+    if (!amountPrimed.current && presets.length) {
+      amountPrimed.current = true;
+      setAmountText(String(presets[1]));
+    }
+    if (!wdPrimed.current) {
+      wdPrimed.current = true;
+      setWdText(String(DEFAULT_WITHDRAW));
+    }
+  }, [presets]);
   const withdrawable = account.tzs + (account.cashTzs ?? 0);
   const belowMinWithdraw = withdrawable < MIN_WITHDRAW;
 
@@ -479,7 +509,7 @@ export function WalletSection({ holdings }: {
                     ))}
                   </div>
                   <input
-                    value={amountText ?? String(presets[1])}
+                    value={amountText ?? ""}
                     /* Digits only, but an empty field is allowed to stay
                        empty — that is how somebody replaces the amount
                        rather than typing around it. */
@@ -568,7 +598,7 @@ export function WalletSection({ holdings }: {
                   </div>
                   <div className="eyebrow mt-4 flex items-center gap-1.5"><NtzsIcon className="h-3.5 w-3.5" /> {t(wdTo === "bank" ? "Send to a bank account" : "Send to mobile money")}</div>
                   <input
-                    value={wdText ?? String(DEFAULT_WITHDRAW)}
+                    value={wdText ?? ""}
                     onChange={(e) => { setWdText(e.target.value.replace(/\D/g, "")); setQuote(null); }}
                     inputMode="numeric"
                     aria-label="Amount to withdraw"

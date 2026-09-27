@@ -92,7 +92,8 @@ export async function reconcileSwaps(): Promise<{
      one present and the other not means something stranger than a crash. */
   const stranded = await sql<{ id: string; user_id: string; swap_tzs: string;
                                swap_usdc: string; status: string; age_ms: string }[]>`
-    select o.id::text, o.user_id::text, o.swap_tzs::text, o.swap_usdc::text, o.status,
+    select o.id::text, o.user_id::text, o.swap_tzs::text,
+           coalesce(o.swap_usdc, 0)::text as swap_usdc, o.status,
            (extract(epoch from (now() - o.created_at)) * 1000)::text as age_ms
       from capx.orders o
      where o.swap_tzs is not null
@@ -109,6 +110,15 @@ export async function reconcileSwaps(): Promise<{
   for (const o of stranded) {
     const tzs = Number(o.swap_tzs);
     const usdc = Number(o.swap_usdc);
+
+    /*
+     * A conversion whose dollars are unknown cannot be repaired by guessing.
+     * Crediting zero would take the shillings and give nothing back.
+     */
+    if (!(usdc > 0)) {
+      needsDesk.push({ orderId: o.id, tzs, usdc: 0, ageMinutes: Math.round(Number(o.age_ms) / 60000) });
+      continue;
+    }
 
     if (o.status !== "failed") {
       // Still inside the life of a request that may yet finish on its own.
@@ -224,7 +234,47 @@ export async function placeUsOrder(
       let exec;
       if (side === "buy" && currency === "TZS") {
         const { swapTzsToUsdc } = await import("@/lib/ntzsFunding");
-        const converted = await swapTzsToUsdc(amount);
+        /*
+         * A refusal from inside the swap can still be about money that moved.
+         *
+         * `swapTzsToUsdc` converts and then checks its own work. If one of
+         * those checks fails, the shillings are already gone — and this used
+         * to see only an exception, leave `swapped` null, and skip the unwind
+         * entirely. The customer kept their ledger balance, the omnibus kept
+         * neither the shillings nor an explanation, and nothing was left for
+         * reconcileSwaps to find. So a failure that knows what it moved says
+         * so, and it is treated exactly like a trade that failed afterwards.
+         */
+        const converted = await swapTzsToUsdc(amount).catch(async (e: unknown) => {
+          const carried = (e as { swapped?: { tzsSpent: number; usdc?: number } }).swapped;
+          if (carried) {
+            /*
+             * Awaited, not fired and forgotten. This row is the only record
+             * that the shillings moved, and a serverless function that exits
+             * while the write is in flight loses exactly the thing it was
+             * written to preserve.
+             */
+            await sql`
+              update capx.orders
+                 set swap_tzs = ${carried.tzsSpent}, swap_usdc = ${carried.usdc ?? null}
+               where id = ${orderId}`.catch(() => {});
+
+            /*
+             * Only unwind when the dollars are known.
+             *
+             * One of these refusals is "the swap reported no output and no
+             * rate was available to price it" — which means the shillings
+             * are gone and how much they became is genuinely unknown.
+             * Unwinding that would debit the customer's TZS and credit them
+             * nothing, which is worse than the gap it was meant to close.
+             * The row records what left; the desk decides what it became.
+             */
+            if (carried.usdc && carried.usdc > 0) {
+              swapped = { tzsSpent: carried.tzsSpent, usdc: carried.usdc };
+            }
+          }
+          throw e;
+        });
         tzsSpent = converted.tzsSpent;
         swapped = converted;
 

@@ -224,6 +224,16 @@ export async function swapTzsToUsdc(amountTzs: number) {
   const result = await swap({ userId, from: "NTZS", to: "USDC", amount: amountTzs });
 
   /*
+   * From here the shillings are gone.
+   *
+   * Every refusal below this line is a refusal about money that has already
+   * moved, so each one carries what it moved. Without that the caller sees
+   * only a failed order and has nothing to unwind from — which is how a
+   * conversion becomes a shortfall nobody can trace.
+   */
+  const moved = { tzsSpent: amountTzs };
+
+  /*
    * Take what the swap says it produced, never a balance delta.
    *
    * The omnibus is one shared account: a sweep, another customer's order or a
@@ -245,8 +255,11 @@ export async function swapTzsToUsdc(amountTzs: number) {
 
   const usdc = reported > 0 ? reported : quoted;
   if (!(usdc > 0)) {
-    throw new NtzsError("swap_incomplete",
-      "The swap reported no USDC output, and no rate was available to price it.", 409);
+    throw Object.assign(
+      new NtzsError("swap_incomplete",
+        "The swap reported no USDC output, and no rate was available to price it.", 409),
+      { swapped: moved },
+    );
   }
 
   /*
@@ -256,23 +269,41 @@ export async function swapTzsToUsdc(amountTzs: number) {
    * the book that everyone else pays for.
    */
   if (quoted > 0 && usdc > quoted * 1.05) {
-    throw new NtzsError(
-      "swap_output_implausible",
-      `The swap reported ${usdc.toFixed(6)} USDC for ${amountTzs.toLocaleString()} TZS, but that is ` +
-      `only worth about ${quoted.toFixed(6)}. Not trading on a figure that does not add up.`,
-      409,
+    throw Object.assign(
+      new NtzsError(
+        "swap_output_implausible",
+        `The swap reported ${usdc.toFixed(6)} USDC for ${amountTzs.toLocaleString()} TZS, but that is ` +
+        `only worth about ${quoted.toFixed(6)}. Not trading on a figure that does not add up.`,
+        409,
+      ),
+      { swapped: { ...moved, usdc: quoted } },
     );
   }
 
-  // Confirm the money is really there before it is spent, without using the
-  // reading as the amount.
-  const after = await omnibusBalances();
-  if (after.usdc + 1e-9 < usdc) {
-    throw new NtzsError("swap_incomplete",
-      `Swapped ${amountTzs.toLocaleString()} TZS but the omnibus shows ${after.usdc.toFixed(6)} USDC ` +
-      `against ${usdc.toFixed(6)} expected.`, 409);
-  }
-
+  /*
+   * No balance check here, and that is the fix rather than an omission.
+   *
+   * This used to read the omnibus back and refuse if it held less USDC than
+   * the swap had just produced. The omnibus is one shared account — the
+   * comment forty lines above says exactly that, as the reason never to
+   * derive this swap's output from a balance delta — and the same fact
+   * invalidates a balance reading as proof. Every buy sweeps the omnibus to
+   * the treasury on its way to trading, so a second order running behind the
+   * first read a balance the first had already taken, and threw.
+   *
+   * It threw *after* the swap. The shillings had left, the customer had not
+   * been debited, and the money sat as USDC on its way to the treasury with
+   * the ledger still claiming shillings nobody held. A verification step that
+   * invents the exact failure it exists to prevent is worse than no
+   * verification.
+   *
+   * What actually protects this is upstream and downstream. Upstream: the
+   * output is the swap's own report, bounded by a quote taken beforehand, so
+   * a misread field cannot become a purchase nobody funded. Downstream:
+   * ensureTreasuryFunded confirms on-chain that the USDC reached the treasury
+   * — with retries — before a single share is bought. The money is checked
+   * where it is going, not in a room everybody walks through.
+   */
   return { usdc, tzsSpent: amountTzs };
 }
 

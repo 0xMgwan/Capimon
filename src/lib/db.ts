@@ -473,6 +473,33 @@ export async function migrate() {
         )`;
 
       await sql`
+        /*
+         * The last corporate-action multiplier applied to each security.
+         *
+         * A US dividend or split does not rewrite token balances; it raises a
+         * WAD multiplier on the contract, so one token comes to represent
+         * slightly more than one share. A wallet holding the token gets that
+         * automatically. A custodial claim does not: it is a fixed number in
+         * the ledger, written at trade time, and nothing ever revisited it —
+         * so the uplift accumulated on CAPX's side of the book instead of
+         * reaching the people whose money bought it.
+         *
+         * This is the high-water mark per symbol. Anything above it is
+         * undistributed, and a run credits the difference to whoever holds
+         * the claim. Absent a row, the baseline is 1.0, which is where every
+         * one of these tokens started — so the first run distributes
+         * everything outstanding rather than quietly writing it off.
+         */
+        create table if not exists capx.corporate_actions (
+          symbol       text primary key,
+          multiplier   numeric(38,18) not null,
+          /* What the last run did, for the desk to read back. */
+          holders      integer not null default 0,
+          qty_credited numeric(38,8) not null default 0,
+          applied_at   timestamptz not null default now()
+        )`;
+
+      await sql`
         create table if not exists capx.job_runs (
           job        text primary key,
           ran_at     timestamptz not null default now(),

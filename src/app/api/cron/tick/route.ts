@@ -68,6 +68,25 @@ export async function GET(req: Request) {
   }
 
   /*
+   * Dividends and splits, once each morning.
+   *
+   * A multiplier moves rarely and never urgently, so this belongs on the
+   * slowest tick that still catches it the same day. It reads the chain,
+   * compares against what has been distributed, and credits the difference
+   * to whoever holds the claim — the part that was silently accruing to CAPX
+   * before, because a custodial claim is a number in the ledger and nothing
+   * ever went back to it when the token grew.
+   */
+  if (hour === 8) {
+    try {
+      const { applyCorporateActions } = await import("@/lib/corporateActions");
+      did.corporateActions = await applyCorporateActions();
+    } catch (e) {
+      did.corporateActions = { error: e instanceof Error ? e.message : "failed" };
+    }
+  }
+
+  /*
    * 2. The marks settlement prices against, once each morning before the
    *    portfolio note goes out — a summary computed from yesterday's prices
    *    would be worse than no summary.

@@ -339,6 +339,54 @@ export function AdminPanel() {
    * trades charged and what has already been moved, so there is nothing here to
    * mistype — this button only decides when.
    */
+  /**
+   * Dividends and splits, distributed to custodial holders.
+   *
+   * A corporate action raises the token's multiplier, which pays anybody
+   * holding the token directly and pays a custodial claim not at all — the
+   * claim is a number in the ledger, and the uplift used to sit with CAPX
+   * until somebody noticed. The scheduled run catches one the same morning;
+   * this is for the first run and for watching one happen.
+   *
+   * Safe to press twice. Every credit is keyed to the symbol, the multiplier
+   * and the holder against a unique index, so a second press writes nothing
+   * and reports nothing credited.
+   */
+  const distribute = async () => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await fetch("/api/admin/corporate-actions", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+      });
+      const j = await r.json();
+      if (!j.ok) { setNote(j.error ?? "Could not apply corporate actions."); return; }
+
+      const applied = (j.applied ?? []) as {
+        symbol: string; from: number; to: number; holders: number;
+        qtyCredited: number; needsDesk?: string;
+      }[];
+      const moved = applied.filter((a) => a.qtyCredited > 0);
+      const stuck = applied.filter((a) => a.needsDesk);
+
+      setNote(
+        [
+          moved.length
+            ? moved.map((a) =>
+                `${a.symbol}: multiplier ${a.from} → ${a.to}, credited ` +
+                `${a.qtyCredited.toFixed(8)} across ${a.holders} holder${a.holders === 1 ? "" : "s"}.`).join(" ")
+            : "Nothing outstanding. Every security's multiplier is already distributed.",
+          ...stuck.map((a) => `${a.symbol}: ${a.needsDesk}`),
+        ].join(" "),
+      );
+      await load(token);
+    } catch {
+      setNote("Could not reach the server.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const sweep = async (force = false) => {
     setBusy(true); setNote(null);
     try {
@@ -454,6 +502,14 @@ export function AdminPanel() {
           <button onClick={settle} disabled={busy}
             className="rounded-full border hairline px-5 py-2.5 text-sm transition-colors hover:surface disabled:opacity-50">
             {busy ? "Working…" : "Settle pending deposits"}
+          </button>
+          {/*
+            Beside settlement, because both are the same kind of act: money
+            that has already arrived somewhere, being put where it belongs.
+          */}
+          <button onClick={distribute} disabled={busy}
+            className="rounded-full border hairline px-5 py-2.5 text-sm transition-colors hover:surface disabled:opacity-50">
+            {busy ? "Working…" : "Distribute dividends"}
           </button>
         </div>
       </div>

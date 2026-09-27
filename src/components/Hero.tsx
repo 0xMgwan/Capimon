@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Arrow } from "./icons/Arrow";
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useMarkets } from "@/lib/useMarkets";
@@ -140,7 +141,7 @@ export function Hero() {
 
               {/* Phones: one line of links — the ticket below is the call to action. */}
               <div className="flex items-center gap-5 text-sm font-medium sm:hidden">
-                <Link href="/markets" className="underline-offset-4 hover:underline">{t("Explore markets")} →</Link>
+                <Link href="/markets" className="underline-offset-4 hover:underline">{t("Explore markets")} <Arrow /></Link>
                 <Link href="/how-it-works" className="text-[var(--muted)] underline-offset-4 hover:underline">{t("How it works")}</Link>
               </div>
               <div className="hidden sm:flex sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
@@ -149,7 +150,7 @@ export function Hero() {
                   className="group inline-flex items-center justify-center gap-2 rounded-full bg-[var(--fg)] px-6 py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95"
                 >
                   {t("Explore markets")}
-                  <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
+                  <Arrow />
                 </Link>
                 <Link
                   href="/how-it-works"
@@ -199,7 +200,7 @@ export function Hero() {
             <div className={`tnum mt-1 text-[11px] ${!crdbQ ? "text-[var(--muted)]" : crdbQ.changePct >= 0 ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
               {crdbQ ? `${crdbQ.changePct >= 0 ? "▲" : "▼"} ${Math.abs(crdbQ.changePct).toFixed(2)}% · ` : ""}
               <span className="text-[var(--muted)]">{t("buy in shillings")}</span>{" "}
-              <span className="inline-block text-[var(--muted)] transition-transform group-hover:translate-x-0.5">→</span>
+              <Arrow className="text-[var(--muted)]" />
             </div>
           </Link>
           <div className="bg-[var(--bg)] p-4 sm:bg-[var(--bg)]/80 sm:p-5 sm:backdrop-blur">

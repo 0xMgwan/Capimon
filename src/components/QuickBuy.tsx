@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Arrow } from "./icons/Arrow";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
@@ -271,7 +272,7 @@ export function QuickBuy() {
                 className="group mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--fg)] py-3 text-sm font-medium text-[var(--bg)] sm:mt-4 sm:py-3.5 transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
               >
                 {t("Review")} {dsePick ?? selected?.ticker ?? ""} {t("order")}
-                <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
+                <Arrow />
               </button>
 
               {/* The long version of this lived here and nobody read it. The

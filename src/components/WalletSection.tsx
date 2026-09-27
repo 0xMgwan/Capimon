@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Arrow } from "./icons/Arrow";
 import { pollWhileVisible } from "@/lib/usePoll";
 import { motion, AnimatePresence } from "motion/react";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
@@ -177,7 +178,12 @@ export function WalletSection({ holdings }: {
     const first = setTimeout(tick, 0);
     // Watch closely while something is in flight, idle otherwise.
     const stop = pollWhileVisible(tick, pendingCount > 0 ? 6_000 : 30_000);
-    return () => { alive = false; clearTimeout(first); stop(); };
+    const onPull = () => { void tick(); };
+    window.addEventListener("capx:refresh", onPull);
+    return () => {
+      alive = false; clearTimeout(first); stop();
+      window.removeEventListener("capx:refresh", onPull);
+    };
   }, [loadDeposits, refresh, pendingCount]);
 
   /* The newest open bank transfer, so its details survive a reload. */
@@ -887,7 +893,7 @@ function BankTransferCard({ bank, onDone }: { bank: BankDetails; onDone: (sent: 
         onClick={() => onDone(true)}
         className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border-2 border-[var(--fg)] py-3 text-sm font-semibold transition-colors hover:bg-[var(--fg)] hover:text-[var(--bg)] active:scale-[0.98]"
       >
-        {t("I have sent it")} <span aria-hidden>→</span>
+        {t("I have sent it")} <Arrow />
       </button>
       {/*
         * And the other answer.

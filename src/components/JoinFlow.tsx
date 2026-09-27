@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Arrow } from "./icons/Arrow";
 import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Reveal, RevealWords } from "@/components/Reveal";
@@ -143,7 +144,7 @@ export function JoinFlow() {
                   href="/markets"
                   className="mt-3 inline-block rounded-full border hairline px-4 py-2 text-[13px] font-medium transition-colors hover:surface"
                 >
-                  {t("Explore markets")} →
+                  {t("Explore markets")} <Arrow />
                 </Link>
               </>
             ) : signedIn ? (
@@ -202,7 +203,7 @@ export function JoinFlow() {
               </div>
             </div>
             <Link href="/markets" className="mt-4 block rounded-full bg-[var(--fg)] py-3.5 text-center text-sm font-medium text-[var(--bg)]">
-              {t("Explore markets")} →
+              {t("Explore markets")} <Arrow />
             </Link>
           </Step>
         </div>

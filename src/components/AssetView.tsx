@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Arrow } from "./icons/Arrow";
 import { Comments } from "./Comments";
 import { useEffect, useState } from "react";
 import type { AssetMeta } from "@/lib/assets";
@@ -44,7 +45,7 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
   return (
     <div className="mx-auto max-w-[1400px] px-4 pb-24 pt-3 sm:px-8 sm:pt-8">
       <Link href="/markets" className="text-[13px] text-[var(--muted)] transition-colors hover:text-[var(--fg)]">
-        ← {t("Markets")}
+        <Arrow dir="left" /> {t("Markets")}
       </Link>
 
       {/*

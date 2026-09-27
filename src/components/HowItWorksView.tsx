@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Arrow } from "./icons/Arrow";
 import { Reveal, RevealWords } from "@/components/Reveal";
 import { ASSETS } from "@/lib/assets";
 import { useDse } from "@/lib/useDse";
@@ -190,7 +191,7 @@ export function HowItWorksView() {
       <Reveal className="mt-16">
         <div className="flex flex-wrap gap-3">
           <Link href="/markets" className="rounded-full bg-[var(--fg)] px-6 py-3.5 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03]">
-            {t("Explore markets")} →
+            {t("Explore markets")} <Arrow />
           </Link>
           <a href="/proof"
             className="rounded-full border hairline px-6 py-3.5 text-sm font-medium transition-colors hover:surface">

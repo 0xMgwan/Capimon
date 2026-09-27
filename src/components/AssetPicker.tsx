@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Arrow } from "./icons/Arrow";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
@@ -134,7 +135,7 @@ export function AssetPicker({
               </span>
             </>
           ) : (
-            <span className="text-[11px] text-[var(--muted)]">Open →</span>
+            <span className="text-[11px] text-[var(--muted)]">Open <Arrow /></span>
           )}
         </span>
       </>

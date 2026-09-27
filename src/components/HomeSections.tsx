@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { LiveBars } from "./LiveBars";
+import { Arrow } from "./icons/Arrow";
 import { motion, useScroll, useTransform } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useDse, type DseListing } from "@/lib/useDse";
@@ -113,7 +115,7 @@ export function DseSection() {
               {t("US equities, from the same account")}
             </span>
             <span className="mt-3 text-[12px] font-medium">
-              {t("All markets")} <span className="inline-block transition-transform group-hover:translate-x-0.5">→</span>
+              {t("All markets")} <Arrow />
             </span>
           </Link>
         )}
@@ -180,7 +182,7 @@ function DseCard({ d }: { d: DseListing }) {
           </span>
         </span>
         <span className="font-medium transition-transform group-hover:translate-x-0.5">
-          {t("Buy")} {d.symbol} →
+          {t("Buy")} {d.symbol} <Arrow />
         </span>
       </div>
     </Link>
@@ -262,7 +264,7 @@ export function ProductsSection() {
             </div>
 
             <Link href="/markets" className="mt-6 sm:mt-8 inline-flex items-center gap-2 rounded-full bg-[var(--fg)] px-5 py-3 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03]">
-              {t("Browse US equities")} <span>→</span>
+              {t("Browse US equities")} <Arrow />
             </Link>
           </div>
         </Reveal>
@@ -319,7 +321,7 @@ function SideCard({
         <div className="tnum text-2xl font-medium">{stat}</div>
         <div className="eyebrow mt-0.5">{statLabel}</div>
         <Link href={href} className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium transition-colors hover:text-[var(--color-accent)]">
-          {cta} <span>→</span>
+          {cta} <Arrow />
         </Link>
       </div>
     </div>
@@ -341,7 +343,7 @@ export function LiveBoard() {
               <h2 className="display mt-3 text-[clamp(1.65rem,4.6vw,3.6rem)]">{t("Everything, marked to the chain.")}</h2>
             </div>
             <Link href="/markets" className="rounded-full border hairline px-5 py-2.5 text-sm transition-colors hover:surface">
-              View all {data?.totals.assets ?? ""} markets →
+              View all {data?.totals.assets ?? ""} markets <Arrow />
             </Link>
           </div>
         </Reveal>
@@ -667,20 +669,20 @@ export function ClosingCTA() {
           {/* The two markets as facts, not adjectives: what is live on each. */}
           <div className="mt-7 flex flex-wrap justify-center gap-2 text-[12px]">
             <span className="inline-flex items-center gap-2 rounded-full border hairline px-3.5 py-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-up)]" />
+              <LiveBars />
               {t("DSE")} · CRDB · {t("in shillings")}
             </span>
             <span className="inline-flex items-center gap-2 rounded-full border hairline px-3.5 py-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-up)]" />
+              <LiveBars />
               {t("US stocks")} · {data?.markets.length ?? 13} {t("names")} · {t("in dollars")}
             </span>
           </div>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
-            <Link href="/markets/crdb" className="rounded-full bg-[var(--fg)] px-7 py-4 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95">
-              {t("Buy CRDB")} →
+            <Link href="/markets/crdb" className="group inline-flex items-center gap-2 rounded-full bg-[var(--fg)] px-7 py-4 text-sm font-medium text-[var(--bg)] transition-transform hover:scale-[1.03] active:scale-95">
+              {t("Buy CRDB")} <Arrow />
             </Link>
-            <Link href="/markets" className="rounded-full border hairline px-7 py-4 text-sm font-medium transition-colors hover:surface">
-              {t("Browse US stocks")} →
+            <Link href="/markets" className="group inline-flex items-center gap-2 rounded-full border hairline px-7 py-4 text-sm font-medium transition-colors hover:surface">
+              {t("Browse US stocks")} <Arrow />
             </Link>
           </div>
         </Reveal>

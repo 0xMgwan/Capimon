@@ -93,7 +93,9 @@ export function ActivityView() {
     // A settling deposit changes status without anybody doing anything, so
     // the page watches — but slowly, and only while it is being looked at.
     const stop = pollWhileVisible(load, 30_000);
-    return () => { alive = false; stop(); };
+    // And immediately when somebody pulls the page down to ask.
+    window.addEventListener("capx:refresh", load);
+    return () => { alive = false; stop(); window.removeEventListener("capx:refresh", load); };
   }, [account]);
 
   if (!enabled) return null;
@@ -125,7 +127,16 @@ export function ActivityView() {
       </p>
 
       <div className="mt-4 flex flex-wrap gap-1.5">
-        {(["all", "trades", "money", "issues"] as const).map((f) => (
+        {/*
+          * Three filters, not four.
+          *
+          * "Needs attention" put a standing count of a customer's failures on
+          * the page — and a failed order is already the loudest row in the
+          * list, in red, with the reason underneath. A tab that exists to
+          * tally them is the app worrying at somebody about money that is, in
+          * every case here, still theirs.
+          */}
+        {(["all", "trades", "money"] as const).map((f) => (
           <button
             key={f}
             onClick={() => { haptic(); setFilter(f); }}

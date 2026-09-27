@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Arrow } from "./icons/Arrow";
 import { pollWhileVisible } from "@/lib/usePoll";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -103,11 +104,13 @@ export function PortfolioView() {
       window.setTimeout(load, 2500);
     };
     window.addEventListener("capx:settled", onSettled);
+    window.addEventListener("capx:refresh", load);
     return () => {
       alive = false;
       clearTimeout(first);
       stop();
       window.removeEventListener("capx:settled", onSettled);
+      window.removeEventListener("capx:refresh", load);
     };
   }, [address]);
 
@@ -187,7 +190,7 @@ export function PortfolioView() {
               )}
             </p>
             <Link href="/markets" className="mt-6 inline-block rounded-full bg-[var(--fg)] px-6 py-3 text-sm font-medium text-[var(--bg)]">
-              Browse markets →
+              Browse markets <Arrow />
             </Link>
           </div>
         ) : (

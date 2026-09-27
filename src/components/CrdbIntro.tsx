@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Arrow } from "./icons/Arrow";
 import { useT } from "@/lib/i18n";
 import { useDse } from "@/lib/useDse";
 import { DseLogo } from "./DseLogo";
@@ -33,7 +34,7 @@ export function CrdbIntro({ symbol = "CRDB", name = "CRDB Bank Plc" }: { symbol?
   return (
     <div className="mb-3">
       <Link href="/markets" className="text-[13px] text-[var(--muted)] transition-colors hover:text-[var(--fg)]">
-        ← {t("Markets")}
+        <Arrow dir="left" /> {t("Markets")}
       </Link>
       <div className="mt-2 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">

@@ -32,6 +32,8 @@ type Deposit = {
 
 const TZS = (n: number) => `${Math.round(n).toLocaleString()} TZS`;
 const MIN_WITHDRAW = 5_000;
+/** What the field offers before anybody types over it. */
+const DEFAULT_WITHDRAW = 10_000;
 
 /** Preset ladder starting at whichever floor the active rail imposes. */
 const presetsFor = (min: number) => [min, min * 4, min * 10, min * 20].map((n) => Math.round(n / 500) * 500);
@@ -91,14 +93,29 @@ export function WalletSection({ holdings }: {
     return buyable.filter((m) => held.has(m.symbol));
   }, [buyable, account?.positions]);
   const [deposits, setDeposits] = useState<Deposit[]>([]);
-  const [amountTzs, setAmountTzs] = useState(0);
+  /*
+   * What is in the field, as typed, rather than what it comes to.
+   *
+   * These were one number, and `amount` fell back to a preset whenever it was
+   * zero. So clearing the box to type something else made it zero, the
+   * fallback made it two thousand, and the controlled input put two thousand
+   * straight back under the cursor — there was no way to get rid of it, and
+   * therefore no way to type any amount that did not begin with a 2.
+   *
+   * Null means untouched, and only then does the default apply. An empty
+   * string is a deliberate act and stays empty.
+   */
+  const [amountText, setAmountText] = useState<string | null>(null);
   const [phone, setPhone] = useState("");
   const [method, setMethod] = useState<"mobile_money" | "bank_transfer">("mobile_money");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [panel, setPanel] = useState<"none" | "deposit" | "withdraw">("none");
-  const [wdAmount, setWdAmount] = useState(10_000);
+  /* Same shape as the deposit field: what is typed, not what it comes to.
+     Clearing this one left a "0" wedged in the box that had to be selected
+     over rather than deleted. */
+  const [wdText, setWdText] = useState<string | null>(null);
   const [bankDetails, setBankDetails] = useState<BankDetails | null>(null);
   const [hiddenRef, setHiddenRef] = useState<string | null>(null);
   const [payerAccount, setPayerAccount] = useState("");
@@ -194,9 +211,10 @@ export function WalletSection({ holdings }: {
   const phoneToUse = phone || account.user.phone || "";
   const minTzs = account.depositMinTzs ?? 500;
   const presets = presetsFor(minTzs);
-  const amount = amountTzs || presets[1];
+  const amount = Number(amountText ?? presets[1]) || 0;
   // Shillings plus whatever the USDC leg is worth — the same total the payout
   // is priced against, so the button and the panel cannot disagree.
+  const wdAmount = Number(wdText ?? DEFAULT_WITHDRAW) || 0;
   const withdrawable = account.tzs + (account.cashTzs ?? 0);
   const belowMinWithdraw = withdrawable < MIN_WITHDRAW;
 
@@ -451,7 +469,7 @@ export function WalletSection({ holdings }: {
                     {presets.map((p) => (
                       <button
                         key={p}
-                        onClick={() => setAmountTzs(p)}
+                        onClick={() => setAmountText(String(p))}
                         className={`tnum rounded-full border py-2 text-[12px] font-medium transition-all active:scale-95 ${
                           amount === p ? "border-transparent bg-[var(--fg)] text-[var(--bg)]" : "hairline hover:surface"
                         }`}
@@ -461,8 +479,11 @@ export function WalletSection({ holdings }: {
                     ))}
                   </div>
                   <input
-                    value={String(amount)}
-                    onChange={(e) => setAmountTzs(Number(e.target.value.replace(/\D/g, "")) || 0)}
+                    value={amountText ?? String(presets[1])}
+                    /* Digits only, but an empty field is allowed to stay
+                       empty — that is how somebody replaces the amount
+                       rather than typing around it. */
+                    onChange={(e) => setAmountText(e.target.value.replace(/\D/g, ""))}
                     inputMode="numeric"
                     aria-label="Amount in shillings"
                     className="tnum mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
@@ -547,8 +568,8 @@ export function WalletSection({ holdings }: {
                   </div>
                   <div className="eyebrow mt-4 flex items-center gap-1.5"><NtzsIcon className="h-3.5 w-3.5" /> {t(wdTo === "bank" ? "Send to a bank account" : "Send to mobile money")}</div>
                   <input
-                    value={String(wdAmount)}
-                    onChange={(e) => { setWdAmount(Number(e.target.value.replace(/\D/g, "")) || 0); setQuote(null); }}
+                    value={wdText ?? String(DEFAULT_WITHDRAW)}
+                    onChange={(e) => { setWdText(e.target.value.replace(/\D/g, "")); setQuote(null); }}
                     inputMode="numeric"
                     aria-label="Amount to withdraw"
                     className="tnum mt-2 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"

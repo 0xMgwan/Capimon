@@ -798,4 +798,8 @@ export const SW: Record<string, string> = {
   /* Dividends, which arrive as shares. */
   "Dividend": "Gawio",
   "Paid in shares, not cash: the company's dividend raised what each token is worth, so your holding grew. Nothing to do.": "Imelipwa kwa hisa, si fedha: gawio la kampuni limeongeza thamani ya kila tokeni, hivyo kiasi unachoshikilia kimeongezeka. Hakuna la kufanya.",
+  /* Putting a dollar balance back into shillings. */
+  "Convert": "Badilisha",
+  "Converting…": "Inabadilisha…",
+  "Could not convert your balance": "Imeshindwa kubadilisha salio lako",
 };

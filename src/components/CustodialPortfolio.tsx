@@ -178,10 +178,22 @@ export function CustodialPortfolio() {
       <RecurringBuys securities={[
         ...dse
           .filter((d) => d.status === "live")
+          /* CRDB first, then the rest of the Dar es Salaam board
+             alphabetically. It is the listing most people here are saving
+             into and the one the whole app opens on, so it should not be
+             third in a dropdown because of where it falls in the alphabet. */
+          .sort((a, b) =>
+            (a.symbol === "CRDB" ? -1 : b.symbol === "CRDB" ? 1 : 0) ||
+            a.symbol.localeCompare(b.symbol))
           .map((d) => ({ symbol: d.symbol, name: d.name, logo: d.logo, price: d.price, currency: "TZS" as const })),
-        ...(usMarkets?.markets ?? []).map((m) => ({
-          symbol: m.symbol, name: m.name, logo: m.logo, price: m.price, currency: "USD" as const,
-        })),
+        /* Then the US names. Shillings before dollars throughout: the second
+           board is the second act. */
+        ...(usMarkets?.markets ?? [])
+          .slice()
+          .sort((a, b) => a.ticker.localeCompare(b.ticker))
+          .map((m) => ({
+            symbol: m.symbol, name: m.name, logo: m.logo, price: m.price, currency: "USD" as const,
+          })),
       ]} />
 
       {/*

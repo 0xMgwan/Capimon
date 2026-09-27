@@ -319,3 +319,66 @@ export async function ensureTreasuryUsdc(need: number) {
   const { swept } = await ensureTreasuryFunded(need, to);
   return { converted, swept };
 }
+
+/**
+ * Swaps a USDC balance back into shillings.
+ *
+ * The mirror of `swapTzsToUsdc`, and it exists because of what happens when
+ * that one half-succeeds. A shilling buy converts first and trades second; if
+ * the trade fails, the customer's money is correctly recorded as USDC — and
+ * then there was no way back. They could buy a US share with it or withdraw
+ * it, but not return it to the currency they started in, which for somebody
+ * whose whole balance is shillings is a one-way door they never chose to walk
+ * through.
+ *
+ * Every safeguard from the other direction applies here for the same reasons.
+ * The conversion is priced before it is made, so there is an independent
+ * ceiling. The output is taken from what the swap reports rather than from a
+ * balance delta, because the omnibus is one shared account and differencing
+ * it attributes every other customer's movement to this one. And a reported
+ * figure above the quote is refused rather than credited: crediting too much
+ * is a hole in the book that everyone else pays for.
+ */
+export async function swapUsdcToTzs(amountUsdc: number) {
+  const caps = await capabilities();
+  if (!caps.wallets.available) {
+    throw new NtzsError("wallets_required",
+      "Converting a dollar balance needs the 'wallets' capability.", 503);
+  }
+  const { swap, getSwapRate } = await import("./ntzs");
+  const userId = await omnibusUserId();
+
+  const before = await omnibusBalances();
+  if (before.usdc + 1e-9 < amountUsdc) {
+    throw new NtzsError("insufficient_omnibus_usdc",
+      `The omnibus holds ${before.usdc.toFixed(2)} USDC against ${amountUsdc.toFixed(2)} to convert.`,
+      409);
+  }
+
+  const quote = await getSwapRate("USDC", "NTZS", amountUsdc);
+  const quoted = Number(quote.expectedOutput ?? 0);
+
+  const result = await swap({ userId, from: "USDC", to: "NTZS", amount: amountUsdc });
+
+  const reported = Number(
+    (result as Record<string, unknown>).toAmount
+    ?? (result as Record<string, unknown>).outputAmount
+    ?? (result as Record<string, unknown>).amountOut
+    ?? (result as Record<string, unknown>).ntzsAmount
+    ?? 0,
+  );
+
+  const tzs = reported > 0 ? reported : quoted;
+  if (!(tzs > 0)) {
+    throw new NtzsError("swap_incomplete",
+      "The swap reported no shilling output, and no rate was available to price it.", 409);
+  }
+  if (quoted > 0 && tzs > quoted * 1.05) {
+    throw new NtzsError("swap_output_implausible",
+      `The swap reported ${Math.round(tzs).toLocaleString()} TZS for ${amountUsdc.toFixed(2)} USDC, ` +
+      `but that is only worth about ${Math.round(quoted).toLocaleString()}. ` +
+      `Not crediting a figure that does not add up.`, 409);
+  }
+
+  return { usdcSpent: amountUsdc, tzs };
+}

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import { requireDb, bad, boom } from "@/lib/apiHelpers";
+import { BY_SYMBOL } from "@/lib/assets";
 import { listFor, createFor, updateFor, type Cadence } from "@/lib/recurring";
 import { dseSecurity } from "@/lib/dseSecurities";
 
@@ -49,10 +50,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, plans: await listFor(user.id) });
     }
 
+    /*
+     * Both boards, because a standing order may be for either.
+     *
+     * This checked the DSE registry alone, which was correct when a plan
+     * could only be for a DSE listing and became a refusal the moment the
+     * picker started offering US names — "that security is not listed on
+     * CAPX" about NVIDIA, which is listed on CAPX and was visible in the
+     * dropdown that produced the request.
+     *
+     * A US asset carries no status of its own: it is in the table or it is
+     * not, and being in the table is what listed means.
+     */
     const symbol = String(body.symbol ?? "").trim().toUpperCase();
-    const security = symbol ? await dseSecurity(symbol) : null;
-    if (!security) return bad("That security is not listed on CAPX.", "unknown_security");
-    if (security.status !== "live") return bad(`${symbol} is not open for trading yet.`, "not_live");
+    const usAsset = symbol ? BY_SYMBOL[symbol.toLowerCase()] : null;
+    const security = usAsset ? null : symbol ? await dseSecurity(symbol) : null;
+    if (!usAsset && !security) return bad("That security is not listed on CAPX.", "unknown_security");
+    if (security && security.status !== "live") {
+      return bad(`${symbol} is not open for trading yet.`, "not_live");
+    }
 
     const amountTzs = Math.round(Number(body.amountTzs));
     if (!Number.isFinite(amountTzs) || amountTzs < MIN_TZS) {
@@ -74,7 +90,10 @@ export async function POST(req: Request) {
     const existing = await listFor(user.id);
     if (existing.length >= 10) return bad("You already have ten plans. Cancel one first.");
 
-    const plan = await createFor(user.id, { symbol: security.symbol, amountTzs, cadence, dayOf });
+    // The registry spelling either way, never whatever case was typed.
+    const plan = await createFor(user.id, {
+      symbol: usAsset ? usAsset.symbol : security!.symbol, amountTzs, cadence, dayOf,
+    });
     return NextResponse.json({ ok: true, plan, plans: await listFor(user.id) });
   } catch (e) {
     return boom(e, "Could not save your plan");

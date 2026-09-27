@@ -5,6 +5,7 @@ import { pollWhileVisible } from "@/lib/usePoll";
 import { motion, AnimatePresence } from "motion/react";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { NtzsIcon } from "./icons/Ntzs";
+import { UsdcIcon } from "./icons/Usdc";
 import { usd, ledgerAmount } from "@/lib/format";
 import { useRouter } from "next/navigation";
 import { useMemo } from "react";
@@ -128,6 +129,28 @@ export function WalletSection({ holdings }: {
   }, [wdTo, banks.length]);
 
   const pendingCount = deposits.filter((d) => IN_FLIGHT.has(d.status)).length;
+
+  /** Putting a stranded dollar balance back into shillings. */
+  const [converting, setConverting] = useState(false);
+  const convertToTzs = async () => {
+    setConverting(true);
+    try {
+      const r = await fetch("/api/account/convert", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ all: true }),
+      });
+      const j = await r.json();
+      if (!j.ok) { setError(j.error ?? t("Could not convert your balance")); return; }
+      setError(null);
+      setNotice(`${usd(j.usdc)} → ${Math.round(j.tzs).toLocaleString()} TZS.`);
+      await Promise.all([refresh(), loadDeposits()]);
+    } catch {
+      setError(t("Could not reach the server."));
+    } finally {
+      setConverting(false);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -295,6 +318,27 @@ export function WalletSection({ holdings }: {
                     <span className="tnum text-[var(--fg)]">{parts.join(" + ")}</span>
                     {parts.length > 1 && <span>{t("each spent in its own currency")}</span>}
                     {account.equity > 0 && <span>· {usd(account.equity)} {t("in shares")}</span>}
+                    {/*
+                      * The way back out of dollars.
+                      *
+                      * Shillings become dollars when somebody buys a US share.
+                      * If that trade then fails, the money is correctly
+                      * recorded as USDC and there was no way to return it —
+                      * so an account whose whole balance is shillings, whose
+                      * intention was CRDB, was left holding a currency it
+                      * never chose. Offered only when there is a dollar
+                      * balance to move, because at any other time it would be
+                      * a currency desk, and CAPX is not one.
+                      */}
+                    {account.cash >= 0.01 && (
+                      <button
+                        onClick={() => void convertToTzs()}
+                        disabled={converting}
+                        className="rounded-full border hairline px-2.5 py-0.5 text-[11px] font-medium transition-colors hover:surface disabled:opacity-50"
+                      >
+                        {converting ? t("Converting…") : `${t("Convert")} ${usd(account.cash)} → TZS`}
+                      </button>
+                    )}
                   </div>
                 );
               })()}
@@ -632,6 +676,9 @@ export function WalletSection({ holdings }: {
                   extra: d.usdc_credited ? `+${usd(Number(d.usdc_credited))}` : null,
                   tone: "neutral" as const,
                   asset: null,
+                  // A shilling deposit, always: the mobile-money rail is the
+                  // only way one arrives.
+                  currency: "TZS" as const,
                 })),
                 /*
                  * One row per trade, not one per ledger entry.
@@ -650,6 +697,8 @@ export function WalletSection({ holdings }: {
                     key: string; at: string; inFlight: boolean; glyph: string; asset: string | null;
                     title: string; sub: string | null; main: string; extra: string | null;
                     tone: "up" | "down" | "neutral";
+                    /** For a cash row, which money it was — so it can wear its mark. */
+                    currency?: "TZS" | "USDC" | null;
                   };
                   const rows: Row[] = [];
 
@@ -677,6 +726,7 @@ export function WalletSection({ holdings }: {
                       title: `${e.kind[0].toUpperCase()}${e.kind.slice(1)} ${e.asset}`,
                       sub: null, main: ledgerAmount(amount, e.asset), extra: null,
                       tone: amount >= 0 ? "up" : "down",
+                      currency: cash ? (e.asset as "TZS" | "USDC") : null,
                     });
                   }
 
@@ -710,11 +760,25 @@ export function WalletSection({ holdings }: {
                         size={32}
                       />
                     ) : (
-                      <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] ${
+                      /*
+                        The money's own mark, not a grey arrow.
+                        A trade row shows the company, so a deposit showing an
+                        anonymous ↓ was the only line in the statement with
+                        nothing to recognise it by — and Activity already drew
+                        the nTZS mark for the same movement, so the two lists
+                        disagreed about what a shilling looks like.
+                        A deposit still in flight keeps the spinner: what it is
+                        doing matters more than what currency it is in.
+                      */
+                      <span className={`grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full text-[11px] ${
                         row.inFlight ? "bg-[#b45309]/10 text-[#b45309]" : "surface"}`}>
                         {row.inFlight
                           ? <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                          : row.glyph}
+                          : row.currency === "TZS"
+                            ? <NtzsIcon className="h-5 w-5 rounded-full" />
+                            : row.currency === "USDC"
+                              ? <UsdcIcon className="h-5 w-5" />
+                              : row.glyph}
                       </span>
                     )}
                     <span className="min-w-0 flex-1">

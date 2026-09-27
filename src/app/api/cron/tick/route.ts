@@ -68,6 +68,19 @@ export async function GET(req: Request) {
   }
 
   /*
+   * Any shilling swap whose own request could not finish telling the ledger
+   * about it. Cheap when there is nothing to do — one indexed query — and
+   * the thing it repairs is an unbacked liability, so it runs every tick
+   * rather than once a day.
+   */
+  try {
+    const { reconcileSwaps } = await import("@/lib/usOrders");
+    did.strandedSwaps = await reconcileSwaps();
+  } catch (e) {
+    did.strandedSwaps = { error: e instanceof Error ? e.message : "failed" };
+  }
+
+  /*
    * Dividends and splits, once each morning.
    *
    * A multiplier moves rarely and never urgently, so this belongs on the

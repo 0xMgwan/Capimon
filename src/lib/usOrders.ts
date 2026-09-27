@@ -28,6 +28,120 @@ export type UsOrderResult =
       venues: string[]; impact: number }
   | { ok: false; code: string; error: string; orderId?: string; note?: string };
 
+/**
+ * Tells the ledger that a customer's shillings became dollars.
+ *
+ * Written as two adjustments rather than a reversal, because nothing is being
+ * reversed: the swap happened and cannot be undone. What is being corrected
+ * is the ledger's belief that the money is still shillings.
+ *
+ * Idempotent by reference. Calling it again writes nothing, which is what
+ * lets the failing request try it and the reconciliation pass try it again
+ * without either needing to know whether the other succeeded.
+ */
+export async function unwindSwap(
+  userId: string,
+  orderId: string,
+  tzsSpent: number,
+  usdc: number,
+): Promise<boolean> {
+  const result = await record([
+    { userId, kind: "adjustment", asset: "TZS", amount: (-tzsSpent).toString(),
+      ref: `${orderId}:unwind-tzs`,
+      metadata: { orderId, reason: "order failed after the shilling swap" } },
+    { userId, kind: "adjustment", asset: "USDC", amount: usdc.toString(),
+      ref: `${orderId}:unwind-usdc`,
+      metadata: { orderId, reason: "shillings already converted; held as USDC" } },
+  ]);
+  return result.written > 0;
+}
+
+/**
+ * Finishes any unwind that its own request could not.
+ *
+ * Looks for the specific inconsistency this can leave behind: an order that
+ * recorded a shilling swap, did not settle, and has neither the successful
+ * trade's cash entry nor the unwind's. Those are the accounts whose ledger
+ * claims shillings the omnibus has already converted.
+ *
+ * Deliberately narrow, and only where the outcome is known.
+ *
+ * A *failed* order is unambiguous: the trade did not happen, so the money is
+ * USDC and saying so is the whole repair. A *pending* one that swapped is
+ * not. The process may have died before the trade, in which case the same
+ * repair applies — or after it, in which case the shares exist, the treasury
+ * is holding them, and crediting USDC as well would invent value out of a
+ * crash. Nothing here can tell those apart without reading the chain, so
+ * they are reported rather than repaired, and a person looks.
+ *
+ * It never touches a settled order, never guesses an amount — both come from
+ * the order row, written at the moment of the swap — and writes through the
+ * same idempotent path, so running it twice, or alongside a retry, costs
+ * nothing.
+ */
+const PENDING_GRACE_MS = 15 * 60_000;
+
+export async function reconcileSwaps(): Promise<{
+  fixed: { orderId: string; tzs: number; usdc: number; written: boolean }[];
+  needsDesk: { orderId: string; tzs: number; usdc: number; ageMinutes: number }[];
+}> {
+  await migrate();
+  const sql = db();
+
+  /* Missing either leg counts as missing: the pair is written atomically, so
+     one present and the other not means something stranger than a crash. */
+  const stranded = await sql<{ id: string; user_id: string; swap_tzs: string;
+                               swap_usdc: string; status: string; age_ms: string }[]>`
+    select o.id::text, o.user_id::text, o.swap_tzs::text, o.swap_usdc::text, o.status,
+           (extract(epoch from (now() - o.created_at)) * 1000)::text as age_ms
+      from capx.orders o
+     where o.swap_tzs is not null
+       and o.status <> 'settled'
+       and not exists (
+         select 1 from capx.ledger_entries l
+          where l.ref in (o.id::text || ':cash', o.id::text || ':unwind-tzs'))
+     order by o.created_at
+     limit 50`;
+
+  const fixed: { orderId: string; tzs: number; usdc: number; written: boolean }[] = [];
+  const needsDesk: { orderId: string; tzs: number; usdc: number; ageMinutes: number }[] = [];
+
+  for (const o of stranded) {
+    const tzs = Number(o.swap_tzs);
+    const usdc = Number(o.swap_usdc);
+
+    if (o.status !== "failed") {
+      // Still inside the life of a request that may yet finish on its own.
+      if (Number(o.age_ms) < PENDING_GRACE_MS) continue;
+      needsDesk.push({ orderId: o.id, tzs, usdc, ageMinutes: Math.round(Number(o.age_ms) / 60000) });
+      continue;
+    }
+
+    const written = await unwindSwap(o.user_id, o.id, tzs, usdc).catch(() => false);
+    fixed.push({ orderId: o.id, tzs, usdc, written });
+  }
+
+  if (fixed.length || needsDesk.length) {
+    const { sendMail } = await import("./mail");
+    await sendMail({
+      subject: `CAPX: ${fixed.length} stranded swap(s) completed, ${needsDesk.length} need a person`,
+      text: [
+        ...fixed.map((d) =>
+          `${d.orderId}: ${d.tzs} TZS → ${d.usdc} USDC — ${d.written ? "unwind written" : "STILL FAILING"}`),
+        ...(needsDesk.length
+          ? ["", "These swapped and then stopped, with the order still pending. Whether the trade",
+             "landed is not knowable from the database — check the treasury on Base before",
+             "deciding. Crediting USDC for a trade that did happen would invent value.", ""]
+          : []),
+        ...needsDesk.map((d) =>
+          `${d.orderId}: ${d.tzs} TZS → ${d.usdc} USDC, pending ${d.ageMinutes} min`),
+      ].join("\n"),
+    }).catch(() => { /* the entries are written either way */ });
+  }
+
+  return { fixed, needsDesk };
+}
+
 export async function placeUsOrder(
   user: SessionUser,
   input: { symbol: string; side: "buy" | "sell"; amount: number; currency?: "TZS" | "USDC" },
@@ -115,6 +229,23 @@ export async function placeUsOrder(
         swapped = converted;
 
         /*
+         * Written down before anything else can go wrong.
+         *
+         * From here the shillings are gone from the omnibus and the ledger
+         * has not been told. Everything between this line and the entries
+         * below — the trade, the ledger write, the process itself — can
+         * fail, and until now all of it failing meant the swap was
+         * unrecoverable: the only record of it was a local variable in a
+         * request that was already dying. One UPDATE closes that to the few
+         * milliseconds either side of this statement, and `reconcileSwaps`
+         * can finish anything that falls in it.
+         */
+        await sql`
+          update capx.orders
+             set swap_tzs = ${converted.tzsSpent}, swap_usdc = ${converted.usdc}
+           where id = ${orderId}`;
+
+        /*
          * Never buy more than the customer paid for.
          *
          * The trade is sized from the swap's output, so anything that
@@ -200,14 +331,40 @@ export async function placeUsOrder(
        * failed order turns into an unbacked liability.
        */
       if (swapped) {
-        await record([
-          { userId: user.id, kind: "adjustment", asset: "TZS", amount: (-swapped.tzsSpent).toString(),
-            ref: `${orderId}:unwind-tzs`,
-            metadata: { orderId, reason: "order failed after the shilling swap" } },
-          { userId: user.id, kind: "adjustment", asset: "USDC", amount: swapped.usdc.toString(),
-            ref: `${orderId}:unwind-usdc`,
-            metadata: { orderId, reason: "shillings already converted; held as USDC" } },
-        ]);
+        /*
+         * The unwind must not be able to fail silently.
+         *
+         * `record` swallows a duplicate reference and rethrows everything
+         * else, so any other database trouble used to propagate out of this
+         * catch block — past the return below — and leave the order marked
+         * failed with the shillings gone and the ledger still claiming them.
+         * The one path whose whole purpose is to prevent an unbacked
+         * liability was the one path that could create one.
+         *
+         * Now it is attempted, and a failure is reported rather than thrown:
+         * the row carries what was swapped, `reconcileSwaps` will complete
+         * it on the next tick, and the desk is told at once because this is
+         * real money in the wrong column until then.
+         */
+        await unwindSwap(user.id, orderId, swapped.tzsSpent, swapped.usdc)
+          .catch(async (unwindError: unknown) => {
+            const why = unwindError instanceof Error ? unwindError.message : "unknown";
+            await sql`
+              update capx.orders
+                 set error = coalesce(error, '') || ${`\n[unwind failed] ${why}`}
+               where id = ${orderId}`.catch(() => {});
+            const { sendMail } = await import("./mail");
+            await sendMail({
+              subject: `CAPX: order ${orderId} swapped but could not be unwound`,
+              text:
+                `A shilling buy converted ${swapped!.tzsSpent} TZS into ${swapped!.usdc} USDC and then ` +
+                `failed to trade. Writing the unwind to the ledger also failed.\n\n` +
+                `Reason: ${why}\n\n` +
+                `Until it is written, this account's ledger claims shillings the omnibus no longer ` +
+                `holds. The amounts are on the order row (swap_tzs, swap_usdc) and the next ` +
+                `reconcileSwaps run will complete it. Check that it does.`,
+            }).catch(() => {});
+          });
       }
       return {
         ok: false as const, code: "execution_failed", orderId, error: message,

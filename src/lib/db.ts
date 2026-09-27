@@ -604,6 +604,25 @@ export async function migrate() {
        * order wrong aborts the whole migration and leaves the column missing.
        */
       const lateColumns: Record<string, string[]> = {
+        orders: [
+          /*
+           * What a shilling buy converted, written the moment it converted.
+           *
+           * A TZS buy swaps shillings for USDC and then trades. The swap is
+           * irreversible, so if the trade fails the customer's money is now
+           * USDC and the ledger has to say so. That unwind lived only in the
+           * memory of the request that was already failing — a database
+           * error, a timeout or a deploy between the swap and the unwind and
+           * the shillings were gone from the omnibus with the ledger still
+           * claiming them, which is an unbacked liability and nothing left
+           * to reconstruct it from.
+           *
+           * Recorded here it survives the request, so a later pass can
+           * finish what the request could not.
+           */
+          "swap_tzs numeric(38,2)",
+          "swap_usdc numeric(38,6)",
+        ],
         users: [
           /*
            * Whether this account's trading is public.

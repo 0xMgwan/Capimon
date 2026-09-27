@@ -9,7 +9,7 @@ import { useCapimonAccount } from "@/lib/useCapimonAccount";
 import { Avatar } from "./Avatar";
 import { useT } from "@/lib/i18n";
 import { passwordProblem, PASSWORD_HINT } from "@/lib/passwordRule";
-import { needsTapSound, tapSoundEnabled, setTapSound, haptic } from "@/lib/haptics";
+import { tapSoundRelevant, tapSoundEnabled, setTapSound, haptic } from "@/lib/haptics";
 
 /** Shrink to this before sending; an avatar never needs more. */
 const AVATAR_PX = 128;
@@ -116,7 +116,7 @@ export function SettingsView() {
   const [showTapSound, setShowTapSound] = useState(false);
   useEffect(() => {
     const id = setTimeout(() => {
-      setShowTapSound(needsTapSound());
+      setShowTapSound(tapSoundRelevant());
       setTapSoundOn(tapSoundEnabled());
     }, 0);
     return () => clearTimeout(id);
@@ -312,7 +312,7 @@ export function SettingsView() {
         {showTapSound && (
           <Field
             label={t("Tap feedback")}
-            hint={t("This iPhone is older than iOS 18, the first version a website can use the Taptic Engine. A short click can be played instead. It is sound, not vibration.")}
+            hint={t("A short click, played where an iPhone cannot vibrate. Safari can only reach the Taptic Engine from a tap, never from a gesture like pulling down to refresh — so this is the only feedback available there. It is sound rather than vibration, and turning it off is remembered.")}
           >
             <button
               onClick={() => {

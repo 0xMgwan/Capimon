@@ -174,8 +174,6 @@ export const SW: Record<string, string> = {
   "Tap feedback": "Mrejesho wa kugusa",
   "Click on": "Mlio umewashwa",
   "Click off": "Mlio umezimwa",
-  "This iPhone is older than iOS 18, the first version a website can use the Taptic Engine. A short click can be played instead. It is sound, not vibration.":
-    "iPhone hii ni ya zamani kuliko iOS 18, ambayo ndiyo toleo la kwanza tovuti inaweza kutumia Taptic Engine. Badala yake mlio mfupi unaweza kupigwa. Ni sauti, si mtetemo.",
   "Legal": "Kisheria",
   "These terms describe how CAPX actually operates today. They have not yet been reviewed by a licensed Tanzanian advocate, and will be updated when they are. If anything here conflicts with Tanzanian law, the law applies.":
     "Masharti haya yanaeleza jinsi CAPX inavyofanya kazi leo. Bado hayajakaguliwa na wakili aliyesajiliwa Tanzania, na yatasasishwa yatakapokaguliwa. Kama kitu chochote hapa kinapingana na sheria za Tanzania, sheria ndiyo inayotumika.",
@@ -825,4 +823,6 @@ export const SW: Record<string, string> = {
   "Tap": "Gusa",
   "in the toolbar": "kwenye upau wa vidhibiti",
   "Choose": "Chagua",
+  /* Tap feedback on an iPhone. */
+  "A short click, played where an iPhone cannot vibrate. Safari can only reach the Taptic Engine from a tap, never from a gesture like pulling down to refresh — so this is the only feedback available there. It is sound rather than vibration, and turning it off is remembered.": "Mlio mfupi, unaochezwa pale iPhone isipoweza kutetema. Safari inaweza kufikia Taptic Engine kwa kugusa tu, kamwe si kwa ishara kama kuvuta chini kuonyesha upya — hivyo huu ndio mrejesho pekee unaopatikana hapo. Ni sauti badala ya mtetemo, na ukizima tutakumbuka.",
 };

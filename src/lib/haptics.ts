@@ -94,17 +94,44 @@ function isIosSafari() {
  * nothing rather than throwing, and nothing here blocks the action that
  * triggered it.
  */
-export function haptic(feel: Feel = "light") {
+export function haptic(feel: Feel = "light", opts: {
+  /**
+   * True when this comes from a drag rather than a tap.
+   *
+   * It decides which mechanism is even possible. The iOS switch haptic plays
+   * only inside a trusted `click`, and a drag produces none — but the call
+   * still *succeeds*, because clicking the hidden switch throws nothing
+   * whether or not the Taptic Engine answers. So a gesture asking for a
+   * haptic on iOS got silence and a return value saying it had worked, which
+   * is why pull-to-refresh felt like nothing for several attempts.
+   *
+   * Told that it is a gesture, iOS skips the switch it cannot use and goes
+   * straight to the sound, which is the only answer available there.
+   */
+  gesture?: boolean;
+} = {}) {
   try {
     if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
       navigator.vibrate(PATTERN[feel]);
       return;
     }
+    if (isIosSafari() && opts.gesture) {
+      if (tapSoundEnabled()) tick();
+      return;
+    }
     if (isIosSafari()) {
-      // iOS 18 and up feel this. Older devices get the audio click only if
-      // the person asked for it.
+      /*
+       * iOS 18 and up feel the switch. Everything below it, and every
+       * gesture the switch cannot reach, gets the click instead.
+       *
+       * A drag is the case that forced this. The switch haptic plays only
+       * inside a trusted `click`, and a pull-to-refresh produces none — so
+       * on an iPhone the gesture had no feedback at all and no way to get
+       * any. The tick is sound rather than touch and is a poorer thing, but
+       * it is a real answer where there was none.
+       */
       const played = iosHaptic();
-      if (!played || (needsTapSound() && tapSoundEnabled())) tick();
+      if ((!played || needsTapSound()) && tapSoundEnabled()) tick();
     }
   } catch {
     /* feedback is a courtesy; never let it interrupt the thing it accompanies */
@@ -117,9 +144,50 @@ export function haptic(feel: Feel = "light") {
 const SOUND_KEY = "capx-tap-sound";
 
 /** Whether the audio fallback is switched on. Off unless chosen. */
+/**
+ * Whether the audio tick plays.
+ *
+ * On by default, but only where it is the only feedback available: a phone
+ * that can vibrate already answers, and adding a sound to a device that has
+ * a Taptic Engine would be noise on top of a nicety. On an iPhone below iOS
+ * 18, or anywhere else with neither the Vibration API nor the switch haptic,
+ * this is the difference between a control that responds and one that seems
+ * broken.
+ *
+ * "Off" is remembered; nothing else is. Somebody who turns it off has said
+ * so, and the absence of an answer is not consent in either direction — so a
+ * device that needs it gets it, and one tap of a setting stops it forever.
+ */
 export function tapSoundEnabled() {
   if (typeof localStorage === "undefined") return false;
-  try { return localStorage.getItem(SOUND_KEY) === "on"; } catch { return false; }
+  try {
+    const stored = localStorage.getItem(SOUND_KEY);
+    if (stored === "off") return false;
+    if (stored === "on") return true;
+    /*
+     * Any iPhone, not only the ones with no haptic at all.
+     *
+     * iOS 18 can feel a button, through the switch control, and cannot feel a
+     * drag — the switch plays only inside a trusted click and a pull produces
+     * none. So "does this device need the sound" has two answers depending on
+     * what is being answered, and for gestures the answer on every iPhone is
+     * yes. `needsTapSound` still means what it always did, and still governs
+     * the button fallback, so a phone that can feel a tap does not also hear
+     * one.
+     */
+    return isIosSafari();
+  } catch { return false; }
+}
+
+/**
+ * Whether the tap-sound setting is worth showing this person.
+ *
+ * Any iPhone: either it has no haptic at all, or it has one that cannot
+ * answer a gesture. Everything else vibrates properly and does not need the
+ * switch explained to it.
+ */
+export function tapSoundRelevant() {
+  return isIosSafari();
 }
 
 export function setTapSound(on: boolean) {

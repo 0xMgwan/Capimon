@@ -228,15 +228,6 @@ export function Hero() {
         </motion.div>
       </div>
 
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2, duration: 0.8 }}
-        className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2"
-      >
-        <div className="flex items-center gap-2 text-[11px] text-[var(--muted)]">
-          {t("Scroll to explore")}
-          <motion.span animate={{ y: [0, 5, 0] }} transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}>↓</motion.span>
-        </div>
-      </motion.div>
     </section>
   );
 }

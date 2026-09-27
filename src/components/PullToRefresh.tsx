@@ -109,7 +109,7 @@ export function PullToRefresh() {
         if (wasPulling) setPull(0);
         return;
       }
-      haptic("medium");
+      haptic("medium", { gesture: true });
 
       setBusy(true);
       setPull(TRIGGER_PX * 0.6);
@@ -136,7 +136,7 @@ export function PullToRefresh() {
            * everywhere else rather than a promise that is not kept.
            */
           if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
-            haptic("success");
+            haptic("success", { gesture: true });
           }
         } finally {
           // A beat, so a refresh that returns instantly still reads as having

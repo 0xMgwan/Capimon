@@ -215,6 +215,19 @@ export async function raiseLiquidity(neededTzs: number): Promise<{ raisedTzs: nu
   const { placeSecurityOrder } = await import("./dseOrders");
 
   /*
+   * DSE shares only, and that is not an omission.
+   *
+   * A US share settles in dollars against a real on-chain market: selling one
+   * is an actual swap, so the proceeds and the gain come back as USDC within
+   * the same request. It funds its own redemption and there is nothing for a
+   * provider to do. If that route is ever too thin to trade, executeSell
+   * refuses rather than filling badly — which a standing bid would not fix
+   * either, since the problem there is the market, not the float.
+   *
+   * A DSE share is the opposite: the underlying sits with the custodian, the
+   * token has no outside market, and converting it takes days and a willing
+   * buyer on the exchange. That gap is the entire reason this exists.
+   *
    * Sell what came back, most first.
    *
    * The float drained because customers sold, so the inventory that needs

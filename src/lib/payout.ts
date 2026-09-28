@@ -64,10 +64,41 @@ export async function chooseRail(amountTzs: number, rampAvailable: boolean) {
   if (!rampAvailable) return false;
   try {
     const { omnibusBalances } = await import("./omnibus");
+    const { getSwapRate } = await import("./ntzs");
     const omnibus = await omnibusBalances();
+
+    /*
+     * Count the dollars the disbursement rail can convert, not only the
+     * shillings already sitting there.
+     *
+     * This asked whether the omnibus held enough TZS and nothing else, so an
+     * omnibus of 84,139 TZS and 3.79 USDC sent a 90,000 TZS payout to the
+     * ramp — which then converted ninety thousand shillings into dollars,
+     * pushed them into the settlement float, and off-ramped them back into
+     * shillings on the customer's phone. Two spreads and a payout fee, to
+     * raise a shortfall of 5,861 that one small swap covered.
+     *
+     * ensureNtzsHasTzs converts exactly that way for this rail, and will pull
+     * from the treasury when the omnibus is short of dollars, so the honest
+     * question is what all three together can reach.
+     */
+    const probe = 100_000;
+    const rate = await getSwapRate("NTZS", "USDC", probe)
+      .then((r) => Number(r.expectedOutput ?? 0) / probe)
+      .catch(() => 0);
+
+    let reachableTzs = omnibus.tzs;
+    if (rate > 0) {
+      const { treasuryHoldings } = await import("./treasury");
+      const treasuryUsdc = await treasuryHoldings()
+        .then((h) => Number(h?.usdc ?? 0)).catch(() => 0);
+      // Discounted by the same margin the conversion itself adds for spread.
+      reachableTzs += ((omnibus.usdc + treasuryUsdc) / rate) / 1.02;
+    }
+
     // A small margin, so a payout is not routed to a balance that a concurrent
     // trade is about to spend.
-    if (omnibus.tzs >= amountTzs * 1.02) return false;
+    if (reachableTzs >= amountTzs * 1.02) return false;
   } catch {
     /* cannot read the omnibus: the ramp can always fund itself */
   }

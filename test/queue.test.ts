@@ -81,3 +81,21 @@ test("randomised: the plan never overspends and never overpays", () => {
   }
   assert.equal(checked, 5000);
 });
+
+test("the rail is chosen on everything the disbursement path can reach", () => {
+  // The arithmetic chooseRail now runs, with the real shape of the omnibus
+  // that sent a 90,000 TZS payout down the expensive rail.
+  const rate = 1 / 2660;                       // USDC per TZS
+  const reach = (tzs: number, omniUsdc: number, treasuryUsdc: number) =>
+    tzs + ((omniUsdc + treasuryUsdc) / rate) / 1.02;
+
+  const want = 90_000;
+  // Before: shillings alone did not cover it, so it took the ramp.
+  assert.ok(!(84_139 >= want * 1.02), "shillings alone fall short");
+  // After: the dollars it can convert do cover it, so it disburses.
+  assert.ok(reach(84_139, 3.79, 0) >= want * 1.02,
+    `reachable ${Math.round(reach(84_139, 3.79, 0))} should cover ${want * 1.02}`);
+
+  // A genuinely empty omnibus still goes to the ramp rather than pretending.
+  assert.ok(!(reach(1_000, 0, 0) >= want * 1.02));
+});

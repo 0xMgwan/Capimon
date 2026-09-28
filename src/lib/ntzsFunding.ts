@@ -413,3 +413,56 @@ export async function swapUsdcToTzs(amountUsdc: number) {
 
   return { usdcSpent: amountUsdc, tzs };
 }
+
+/**
+ * The most CAPX could actually pay out in shillings right now.
+ *
+ * Distinct from what a customer is owed, and the distinction is the whole
+ * point. Their balance is a claim on CAPX; this is what CAPX can presently
+ * honour. The two are usually the same and diverge exactly when it matters —
+ * when enough gain has been realised that the ledger owes more shillings than
+ * anybody paid in, which is money that exists as shares in custody rather
+ * than as cash.
+ *
+ * Counts only what can be moved. The omnibus shillings, plus the omnibus
+ * dollars at the live rate because those can be swapped back, plus the ramp
+ * float where the ramp is the rail — that float can pay somebody out even
+ * though it cannot be transferred anywhere else, which is the one thing it is
+ * good for.
+ *
+ * Fails open. If none of these can be read, the caller gets `null` and should
+ * carry on: refusing a legitimate withdrawal because an RPC was slow would be
+ * a worse failure than the one this exists to prevent.
+ */
+export async function payoutCapacityTzs(): Promise<number | null> {
+  try {
+    const [omnibus, rate] = await Promise.all([
+      omnibusBalances(),
+      import("./ntzs").then(async (m) => {
+        const r = await m.getSwapRate("NTZS", "USDC", 100_000);
+        const out = Number(r.expectedOutput ?? 0);
+        return out > 0 ? out / 100_000 : 0;
+      }).catch(() => 0),
+    ]);
+
+    let capacity = omnibus.tzs;
+    if (rate > 0 && omnibus.usdc > 0) capacity += omnibus.usdc / rate;
+
+    /*
+     * The settlement float, counted only here.
+     *
+     * It backs balances and cannot be transferred out — which makes it
+     * useless for funding a trade and perfectly good for funding a payout,
+     * since a payout is the one direction it moves in.
+     */
+    const ramp = await import("./ntzs")
+      .then((m) => m.rampBalance())
+      .then((b) => Number(b.usdcBalance ?? b.balance ?? b.usdc ?? 0))
+      .catch(() => 0);
+    if (rate > 0 && ramp > 0) capacity += ramp / rate;
+
+    return capacity;
+  } catch {
+    return null;
+  }
+}

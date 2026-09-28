@@ -97,6 +97,21 @@ export async function GET(req: Request) {
     } catch (e) {
       did.corporateActions = { error: e instanceof Error ? e.message : "failed" };
     }
+
+    /*
+     * Whether the shillings owed have outrun the shillings held.
+     *
+     * Once a day is the right cadence: it moves with realised gains rather
+     * than with the clock, and the thing it guards against — a customer
+     * discovering it before the desk does — needs a morning's warning, not a
+     * minute's. Silent unless there is something to say.
+     */
+    try {
+      const { redemptionTripwire } = await import("@/lib/redemption");
+      did.redemption = await redemptionTripwire();
+    } catch (e) {
+      did.redemption = { error: e instanceof Error ? e.message : "failed" };
+    }
   }
 
   /*

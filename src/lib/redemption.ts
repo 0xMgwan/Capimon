@@ -138,3 +138,65 @@ export async function redemptionExposure(): Promise<RedemptionExposure | null> {
     shortfallTzs: Math.max(0, wouldOwe - cashTzs),
   };
 }
+
+
+/**
+ * Tells the desk when realised gains are outrunning the float.
+ *
+ * The panel answers the question when somebody thinks to ask it. This asks
+ * it every morning, because the moment that matters — the first day the
+ * shillings owed exceed the shillings on hand — arrives without anybody
+ * doing anything, and would otherwise be discovered by a customer.
+ *
+ * Two thresholds, because they mean different things. Cash owed against cash
+ * held is the immediate one: those are shillings somebody can ask for today,
+ * and falling short of them is a refused withdrawal. The redemption total is
+ * the horizon one: it would only all come due if everybody sold at once,
+ * which is a stress case rather than a forecast, so it warns rather than
+ * alarms.
+ *
+ * Silent when there is nothing to say. A daily mail that is usually "all
+ * well" is a daily mail nobody reads, and the one that matters arrives
+ * looking exactly like the ones that did not.
+ */
+const CASH_HEADROOM = 1.25;
+
+export async function redemptionTripwire(): Promise<
+  { level: "none" | "watch" | "urgent"; message?: string }
+> {
+  const x = await redemptionExposure();
+  if (!x) return { level: "none" };
+
+  const urgent = x.owedCashTzs > 0 && x.cashTzs < x.owedCashTzs;
+  const watch = !urgent && x.owedCashTzs > 0 && x.cashTzs < x.owedCashTzs * CASH_HEADROOM;
+
+  if (!urgent && !watch) return { level: "none" };
+
+  const lines = [
+    urgent
+      ? `The float holds ${Math.round(x.cashTzs).toLocaleString()} TZS against ` +
+        `${Math.round(x.owedCashTzs).toLocaleString()} TZS already owed as cash. ` +
+        `A withdrawal can now be refused for lack of shillings.`
+      : `The float holds ${Math.round(x.cashTzs).toLocaleString()} TZS against ` +
+        `${Math.round(x.owedCashTzs).toLocaleString()} TZS owed as cash — less than a quarter ` +
+        `in hand above what could be asked for today.`,
+    "",
+    `If every holder sold at today's marks the bill would be ` +
+    `${Math.round(x.totalValueTzs + x.owedCashTzs).toLocaleString()} TZS, of which ` +
+    `${Math.round(x.unrealisedTzs).toLocaleString()} TZS is gain nobody paid in.`,
+    "",
+    "That gain exists as shares in custody rather than as cash, so the way to meet it is to",
+    "convert inventory — the broker sells on the exchange, or buys the float back directly.",
+    "The shares themselves are fully held; this is about timing, not backing.",
+  ];
+
+  const { sendMail } = await import("./mail");
+  await sendMail({
+    subject: urgent
+      ? "CAPX: shillings owed now exceed the float"
+      : "CAPX: the shilling float is running thin",
+    text: lines.join("\n"),
+  }).catch(() => { /* the panel still shows it */ });
+
+  return { level: urgent ? "urgent" : "watch", message: lines[0] };
+}

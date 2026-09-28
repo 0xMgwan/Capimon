@@ -39,6 +39,52 @@ async function spendableTzs(userId: string) {
   return { tzs, usdc, totalTzs, usdcPerTzs };
 }
 
+
+/**
+ * Whether CAPX can presently fund this payout, said before it is attempted.
+ *
+ * A customer's balance is a claim; the float is what can honour it. They part
+ * company exactly when enough gain has been realised that the ledger owes
+ * more shillings than were ever paid in — that money exists as shares in
+ * custody, not as cash, and no amount of asking nTZS will conjure it.
+ *
+ * Without this the request was accepted and failed downstream, so somebody
+ * who had sold at a profit met an upstream error with no explanation and a
+ * balance they could not move. Refusing here costs them a message; failing
+ * there cost them their confidence.
+ *
+ * Fails open by design: an unreadable float returns null and the withdrawal
+ * proceeds. Blocking a good payout because a balance could not be read would
+ * be the worse mistake, and the rails refuse honestly on their own.
+ */
+async function capacityRefusal(amountTzs: number) {
+  const { payoutCapacityTzs } = await import("@/lib/ntzsFunding");
+  const capacity = await payoutCapacityTzs();
+  if (capacity === null || amountTzs <= capacity) return null;
+
+  /*
+   * The desk hears about it immediately. A customer hitting this is the first
+   * evidence that realised gains have outrun the float, and it should reach a
+   * person before it reaches a second customer.
+   */
+  void import("@/lib/mail").then((m) => m.sendMail({
+    subject: "CAPX: a withdrawal exceeded what the float can pay",
+    text:
+      `A customer asked to withdraw ${Math.round(amountTzs).toLocaleString()} TZS and the float ` +
+      `can presently fund ${Math.round(capacity).toLocaleString()} TZS.\n\n` +
+      `Their balance is real and is not in question. What is short is shillings: the redemption ` +
+      `panel on the desk shows how much of what is owed is gain that exists as shares rather ` +
+      `than cash, and therefore how much inventory needs converting.`,
+  })).catch(() => {});
+
+  return bad(
+    `Withdrawals are limited to ${Math.floor(capacity).toLocaleString()} TZS at the moment. ` +
+    `Your balance is safe and unchanged — take out less now, or try again shortly.`,
+    "payout_capacity",
+    409,
+  );
+}
+
 /**
  * Which rail pays this out.
  *
@@ -124,6 +170,8 @@ export async function GET(req: Request) {
     if (amountTzs > funds.totalTzs) {
       return bad(`Your balance is ${Math.floor(funds.totalTzs).toLocaleString()} TZS.`, "insufficient_balance");
     }
+    const noCapacity = await capacityRefusal(amountTzs);
+    if (noCapacity) return noCapacity;
 
     const caps = await capabilities();
     // Ramp pays phones only, so a bank payout always takes the disbursement rail.
@@ -214,6 +262,8 @@ export async function POST(req: Request) {
     if (amountTzs > funds.totalTzs) {
       return bad(`Your balance is ${Math.floor(funds.totalTzs).toLocaleString()} TZS.`, "insufficient_balance");
     }
+    const noCapacity = await capacityRefusal(amountTzs);
+    if (noCapacity) return noCapacity;
 
     // Same rail choice as the quote, for the same reasons.
     const caps = await capabilities();

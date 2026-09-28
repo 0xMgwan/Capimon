@@ -461,6 +461,31 @@ export async function payoutCapacityTzs(): Promise<number | null> {
       .catch(() => 0);
     if (rate > 0 && ramp > 0) capacity += ramp / rate;
 
+    /*
+     * The treasury's dollars, which the payout path already spends.
+     *
+     * Leaving these out was simply wrong. `ensureNtzsHasTzs` funds a
+     * disbursement by sending treasury USDC to the omnibus and swapping it,
+     * so a payout can reach this money — and a capacity figure that cannot
+     * see what the payout path spends will refuse, or now queue, withdrawals
+     * that would have gone through.
+     *
+     * It matters most for US shares. Those settle in dollars: selling one is
+     * a real on-chain swap, so the proceeds and the gain arrive as treasury
+     * USDC rather than as shillings in the omnibus. Without this line a
+     * customer who sold Apple at a profit could be queued against a float
+     * that was holding their money the whole time.
+     *
+     * Discounted by the same 2% the funding path adds for the swap's own
+     * spread, so the figure is what can actually be delivered rather than
+     * what is nominally held.
+     */
+    const treasuryUsdc = await import("./treasury")
+      .then((m) => m.treasuryHoldings())
+      .then((h) => Number(h?.usdc ?? 0))
+      .catch(() => 0);
+    if (rate > 0 && treasuryUsdc > 0) capacity += (treasuryUsdc / 1.02) / rate;
+
     return capacity;
   } catch {
     return null;

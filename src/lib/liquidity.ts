@@ -47,6 +47,21 @@ import type { SessionUser } from "./auth";
  * enforced the moment they are set.
  */
 
+/**
+ * What a provider earns, in basis points off the mark when the bid acquires.
+ *
+ * A hundred, out of the two hundred and fifty the platform charges — the same
+ * pool the custodian broker's hundred comes from. It is earned only when the
+ * facility is actually used, which is the property that makes it the right
+ * shape: a provider who is never called on costs nothing, and one who absorbs
+ * a difficult day is paid for it.
+ *
+ * Facility orders are also exempt from the platform fee. Without that the
+ * provider would pay 250 bps on the way in and 250 on the way out to earn
+ * 100, and the facility would be a way of losing four percent politely.
+ */
+export const DEFAULT_SPREAD_BPS = 100;
+
 export const lpTokenHash = (token: string) =>
   createHash("sha256").update(token.trim()).digest("hex");
 
@@ -60,13 +75,15 @@ export type Provider = {
   bandPct: number | null;
   /** The mark they will not sell below, as a percentage over what they paid. */
   minMarginPct: number | null;
+  /** What they earn: basis points off the mark when the bid acquires. */
+  spreadBps: number;
   active: boolean;
 };
 
 type Row = {
   id: string; name: string; user_id: string; committed_tzs: string | null;
   max_daily_tzs: string | null; floor_tzs: string; band_pct: string | null;
-  min_margin_pct: string | null; active: boolean;
+  min_margin_pct: string | null; spread_bps: string | null; active: boolean;
 };
 
 const toProvider = (r: Row): Provider => ({
@@ -76,11 +93,13 @@ const toProvider = (r: Row): Provider => ({
   floorTzs: Number(r.floor_tzs),
   bandPct: r.band_pct === null ? null : Number(r.band_pct),
   minMarginPct: r.min_margin_pct === null ? null : Number(r.min_margin_pct),
+  spreadBps: r.spread_bps === null ? DEFAULT_SPREAD_BPS : Number(r.spread_bps),
   active: r.active,
 });
 
 const SELECT = `id::text, name, user_id::text, committed_tzs::text, max_daily_tzs::text,
-                floor_tzs::text, band_pct::text, min_margin_pct::text, active`;
+                floor_tzs::text, band_pct::text, min_margin_pct::text,
+                spread_bps::text, active`;
 
 /** The provider behind a desk token, or null. */
 export async function providerByToken(token: string): Promise<Provider | null> {
@@ -300,6 +319,7 @@ export async function absorbClaims(neededTzs: number): Promise<{ retiredTzs: num
 
       const result = await placeSecurityOrder(buyer, {
         security: s.symbol, side: "buy", amount: Math.floor(wanted),
+        facility: { discountBps: p.spreadBps },
       }).catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : "failed" }));
 
       /*
@@ -557,8 +577,11 @@ export async function releaseInventory(): Promise<{ releasedTzs: number; release
       const qty = Math.min(held, budget / s.mark);
       if (!(qty > 0) || qty * s.mark < s.mark) continue;
 
+      /* Sold at the mark, with no discount and no fee: the spread was taken
+         on acquisition and taking it twice would hand it back. */
       const result = await placeSecurityOrder(seller, {
         security: s.symbol, side: "sell", amount: qty,
+        facility: { discountBps: 0 },
       }).catch(() => null);
       if (!result?.ok) continue;
 

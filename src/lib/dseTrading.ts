@@ -173,12 +173,13 @@ export type Quote = {
  * charge it — taking it in shares would leave CAPX accruing fractions of a
  * security it would then have to account for.
  */
-export function quoteBuyTzs(price: number, tzs: number): Quote {
-  const fee = feeEnabled ? roundTo((tzs * FEE_BPS) / 10_000, TZS_DP) : 0;
+export function quoteBuyTzs(price: number, tzs: number, feeBpsOverride?: number): Quote {
+  const bps = feeBpsOverride ?? FEE_BPS;
+  const fee = bps > 0 ? roundTo((tzs * bps) / 10_000, TZS_DP) : 0;
   const netTzs = roundTo(tzs - fee, TZS_DP);
   // Floor the shares: the customer is never credited more than their shillings
   // bought, and the difference stays as backing rather than being conjured.
-  return { side: "buy", price, tzs: roundTo(tzs, TZS_DP), netTzs, fee, qty: floorTo(netTzs / price, QTY_DP), feeBps: FEE_BPS };
+  return { side: "buy", price, tzs: roundTo(tzs, TZS_DP), netTzs, fee, qty: floorTo(netTzs / price, QTY_DP), feeBps: bps };
 }
 
 /**
@@ -197,10 +198,11 @@ export function sellQtyOrAll(requested: number, held: number): number {
   return remainder > 0 && remainder < DUST_SHARES ? held : requested;
 }
 
-export function quoteSellQty(price: number, qty: number): Quote {
+export function quoteSellQty(price: number, qty: number, feeBpsOverride?: number): Quote {
+  const bps = feeBpsOverride ?? FEE_BPS;
   const gross = roundTo(qty * price, TZS_DP);
-  const fee = feeEnabled ? roundTo((gross * FEE_BPS) / 10_000, TZS_DP) : 0;
-  return { side: "sell", price, tzs: roundTo(gross - fee, TZS_DP), netTzs: gross, fee, qty: roundTo(qty, QTY_DP), feeBps: FEE_BPS };
+  const fee = bps > 0 ? roundTo((gross * bps) / 10_000, TZS_DP) : 0;
+  return { side: "sell", price, tzs: roundTo(gross - fee, TZS_DP), netTzs: gross, fee, qty: roundTo(qty, QTY_DP), feeBps: bps };
 }
 
 /** Shares a shilling amount buys, for the "how many do I get" display. */

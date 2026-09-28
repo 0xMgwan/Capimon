@@ -41,6 +41,21 @@ export async function GET(req: Request) {
     const out = await Promise.all(list.map(async (p) => {
       const cap = await capacityOf(p);
 
+      /*
+       * The spread, over the whole history rather than the last forty fills.
+       *
+       * Buying at a discount d means the shares received are worth
+       * spend/(1-d), so the earning is spend/(1-d) - spend. Taking it as
+       * spend*d understates it slightly and, more to the point, is not what
+       * the arithmetic does.
+       */
+      const [absorbed] = await sql<{ total: string }[]>`
+        select coalesce(sum(tzs), 0)::text as total from capx.lp_fills
+         where provider_id = ${p.id}::uuid and side = 'buy'`;
+      const spentTzs = Number(absorbed?.total ?? 0);
+      const d = p.spreadBps / 10_000;
+      const earnedTzs = d > 0 && d < 1 ? spentTzs / (1 - d) - spentTzs : 0;
+
       const fills = await sql<{ symbol: string; qty: string; tzs: string;
                                 side: string; created_at: string }[]>`
         select symbol, qty::text, tzs::text, side, created_at
@@ -77,6 +92,9 @@ export async function GET(req: Request) {
         ...cap,
         holdings,
         minMarginPct: p.minMarginPct,
+        spreadBps: p.spreadBps,
+        absorbedTzs: spentTzs,
+        earnedTzs,
         fills: fills.map((f) => ({
           symbol: f.symbol, qty: Number(f.qty), tzs: Number(f.tzs),
           side: f.side === "sell" ? "sell" : "buy", at: f.created_at,
@@ -201,6 +219,7 @@ export async function POST(req: Request) {
       const floor = num(body.floorTzs);
       const band = num(body.bandPct);
       const margin = num(body.minMarginPct);
+      const spread = num(body.spreadBps);
       if (committed !== undefined) {
         await sql`update capx.liquidity_providers set committed_tzs = ${committed} where id = ${id}::uuid`;
       }
@@ -215,6 +234,9 @@ export async function POST(req: Request) {
       }
       if (margin !== undefined) {
         await sql`update capx.liquidity_providers set min_margin_pct = ${margin} where id = ${id}::uuid`;
+      }
+      if (spread !== undefined) {
+        await sql`update capx.liquidity_providers set spread_bps = ${spread} where id = ${id}::uuid`;
       }
     }
 

@@ -26,6 +26,7 @@ type Provider = {
   id: string; name: string; active: boolean;
   committedTzs: number | null; maxDailyTzs: number | null;
   floorTzs: number; bandPct: number | null; minMarginPct: number | null;
+  spreadBps: number; absorbedTzs: number; earnedTzs: number;
   availableTzs: number; cashTzs: number; inventoryTzs: number; drawnTodayTzs: number;
   reason: string | null;
   holdings: Holding[]; fills: Fill[];
@@ -191,7 +192,9 @@ export function LiquidityDesk() {
         has room to carry the shilling claim it creates — scarcest security first, since inventory
         customers cannot buy is inventory doing the most harm sitting still — and you can ask for it
         now with the button below. Your return is the difference: you bought at the mark on a day
-        somebody needed to exit, and sold at the mark on a day somebody wanted in.
+        somebody needed to exit — at an agreed discount to it, which is what you are paid for
+        standing ready — and sold back at the mark. Facility orders carry no platform fee, so the
+        spread is yours rather than something a round trip takes back.
       </p>
 
       {!data.providers.length && (
@@ -256,7 +259,7 @@ export function LiquidityDesk() {
               </button>
             </div>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <Stat label="Available now" value={tzs(p.availableTzs)}
                     hint={p.reason ?? "the tightest of your limits"} />
               <Stat label="Cash balance" value={tzs(p.cashTzs)}
@@ -265,6 +268,10 @@ export function LiquidityDesk() {
                     hint={p.committedTzs === null ? "no committed size set" : `of ${tzs(p.committedTzs)} committed`} />
               <Stat label="Bought today" value={tzs(p.drawnTodayTzs)}
                     hint={p.maxDailyTzs === null ? "no daily limit set" : `of ${tzs(p.maxDailyTzs)}`} />
+              <Stat label="Earned on fills" value={tzs(p.earnedTzs)}
+                    hint={p.absorbedTzs > 0
+                      ? `${(p.spreadBps / 100).toFixed(2)}% off the mark on ${tzs(p.absorbedTzs)} absorbed`
+                      : `${(p.spreadBps / 100).toFixed(2)}% off the mark, when called on`} />
             </div>
 
             {p.holdings.length > 0 && (
@@ -359,6 +366,8 @@ export function LiquidityDesk() {
                         onSave={(v) => void setTerm(p, "bandPct", v)} busy={busy} />
                   <Term label="Won't sell below cost + (%)" value={p.minMarginPct}
                         onSave={(v) => void setTerm(p, "minMarginPct", v)} busy={busy} />
+                  <Term label="Your spread (bps off the mark)" value={p.spreadBps}
+                        onSave={(v) => void setTerm(p, "spreadBps", v)} busy={busy} />
                 </div>
               </div>
             )}

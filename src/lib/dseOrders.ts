@@ -42,7 +42,22 @@ export type OrderDone = {
 
 export async function placeSecurityOrder(
   user: SessionUser,
-  input: { security: string; side: "buy" | "sell"; amount: number },
+  input: {
+    security: string; side: "buy" | "sell"; amount: number;
+    /**
+     * The facility's terms, set only by the liquidity subsystem.
+     *
+     * A provider's order is otherwise an ordinary order in every respect, and
+     * these two are the whole of the difference: they acquire at a discount to
+     * the mark, which is what they earn for standing ready, and they are not
+     * charged the platform fee — a fee on both legs of a round trip would take
+     * five percent to pay them one.
+     *
+     * Never reachable from a request. The route that places customer orders
+     * does not pass it and cannot be made to.
+     */
+    facility?: { discountBps: number };
+  },
 ): Promise<OrderDone | OrderRefusal> {
   const { side, amount } = input;
   const bad = (error: string, code = "bad_request", status = 400): OrderRefusal =>
@@ -91,9 +106,24 @@ export async function placeSecurityOrder(
    * amount almost never lands on a round number of shares.
    */
   const held = side === "sell" ? await balanceOf(user.id, SEC) : 0;
+
+  /*
+   * The facility buys below the mark and sells at it.
+   *
+   * That spread is the provider's entire compensation, and it is applied to
+   * the acquisition only: a discount on the way out as well would hand it
+   * straight back. The shares come from CAPX's own unallocated inventory, so
+   * the cost of the discount falls on CAPX and never on a customer's backing
+   * — the number of shares owed to clients is unchanged by it.
+   */
+  const facilityPrice = input.facility && side === "buy"
+    ? market.price * (1 - input.facility.discountBps / 10_000)
+    : market.price;
+  const facilityFeeBps = input.facility ? 0 : undefined;
+
   const quote = side === "buy"
-    ? quoteBuyTzs(market.price, amount)                       // amount is shillings
-    : quoteSellQty(market.price, sellQtyOrAll(amount, held)); // amount is shares
+    ? quoteBuyTzs(facilityPrice, amount, facilityFeeBps)                       // amount is shillings
+    : quoteSellQty(facilityPrice, sellQtyOrAll(amount, held), facilityFeeBps); // amount is shares
 
   if (!(quote.qty > 0)) {
     return bad(side === "buy"

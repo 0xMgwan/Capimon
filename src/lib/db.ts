@@ -809,6 +809,13 @@ export async function migrate() {
            * releases at whatever the published mark is.
            */
           "min_margin_pct numeric(6,2)",
+          /*
+           * What the provider earns, in basis points off the mark on
+           * acquisition. Null is not "no spread" — it is the standard rate,
+           * because a provider with no agreed spread is working for nothing
+           * and that is never what was meant.
+           */
+          "spread_bps numeric(6,2)",
         ],
       };
       for (const [table, columns] of Object.entries(lateColumns)) {

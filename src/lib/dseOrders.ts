@@ -189,8 +189,23 @@ export async function placeSecurityOrder(
      * settled: the customer's money is the thing that must not be got wrong,
      * and the split is an accounting entry on our own side. It never throws,
      * and it is keyed to the order so a retry cannot pay twice.
+     *
+     * Never on a facility order, and stated rather than left to follow from
+     * the fee being nil.
+     *
+     * The custodian broker may also be a liquidity provider — FIMCO is both —
+     * and on that order the same party would be collecting the broker's share
+     * of a fee and the provider's spread for the one transaction. They are
+     * paid for different things (custody and the exchange relationship on one
+     * hand, standing ready with capital on the other) but not for the same
+     * order twice. The broker's fee on a customer's own trade is untouched by
+     * this and is where that relationship is actually paid.
+     *
+     * Written as its own condition so that anyone who later charges a fee on
+     * facility orders has to decide about this deliberately, instead of
+     * reintroducing a double credit by changing a number somewhere else.
      */
-    if (quote.fee > 0) {
+    if (quote.fee > 0 && !input.facility) {
       const { accrueBrokerFee } = await import("./brokerLedger");
       await accrueBrokerFee({ orderId, security: SEC, fee: quote.fee });
     }

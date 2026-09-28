@@ -128,8 +128,8 @@ export async function POST(req: Request) {
           { status: 400 },
         );
       }
-      const [u] = await sql<{ id: string }[]>`
-        select id::text from capx.users where lower(email) = ${email}`;
+      const [u] = await sql<{ id: string; kyc_status: string }[]>`
+        select id::text, kyc_status from capx.users where lower(email) = ${email}`;
       if (!u) {
         return NextResponse.json(
           { ok: false, error: `No CAPX account for ${email}. They need one first — that is where their shillings sit.` },
@@ -145,6 +145,12 @@ export async function POST(req: Request) {
       return NextResponse.json({
         ok: true, token,
         note: "Copy this token now — only its hash is kept, so it cannot be shown again.",
+        /* Said now rather than discovered later: the bid buys through the
+           ordinary order path, which refuses an unverified account. */
+        warning: u.kyc_status === "approved" ? undefined
+          : `That account is not verified yet, so the bid will not fill for it. `
+            + `Verify it and fund it with shillings, and the facility starts working with no `
+            + `further change here.`,
       });
     }
 

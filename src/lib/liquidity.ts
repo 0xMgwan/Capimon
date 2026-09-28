@@ -118,6 +118,27 @@ export async function capacityOf(p: Provider): Promise<{
     return { availableTzs: 0, cashTzs, inventoryTzs, drawnTodayTzs, reason: "paused by the provider" };
   }
 
+  /*
+   * A provider buys through the ordinary order path, which refuses an
+   * unverified account — as it should, since the whole point is that their
+   * purchase passes the same checks as a customer's.
+   *
+   * It is reported here rather than discovered there. Without this the bid
+   * simply never fills: raiseLiquidity would ask, the order would be refused,
+   * the failure would be swallowed, and the desk would show a healthy
+   * capacity against a facility that cannot buy anything. A provider whose
+   * account is not verified is owed that sentence, not a number.
+   */
+  const [acct] = await sql<{ kyc_status: string }[]>`
+    select kyc_status from capx.users where id = ${p.userId}::uuid`;
+  if ((acct?.kyc_status ?? "none") !== "approved") {
+    return {
+      availableTzs: 0, cashTzs, inventoryTzs, drawnTodayTzs,
+      reason: acct ? `the account is ${acct.kyc_status === "pending" ? "still being verified" : "not verified"}`
+                   : "the account no longer exists",
+    };
+  }
+
   /* The binding constraint, whichever it is. */
   const limits: { room: number; reason: string }[] = [
     { room: cashTzs - p.floorTzs, reason: "balance is at the agreed floor" },
@@ -177,6 +198,8 @@ export type Fill = { provider: string; symbol: string; qty: number; tzs: number 
  */
 export async function raiseLiquidity(neededTzs: number): Promise<{ raisedTzs: number; fills: Fill[] }> {
   const fills: Fill[] = [];
+  /** Why a provider was asked and did not buy — carried to the desk mail. */
+  const refusals: string[] = [];
   let raisedTzs = 0;
   if (!dbConfigured || !(neededTzs > 0)) return { raisedTzs, fills };
 
@@ -240,8 +263,20 @@ export async function raiseLiquidity(neededTzs: number): Promise<{ raisedTzs: nu
 
       const result = await placeSecurityOrder(buyer, {
         security: s.symbol, side: "buy", amount: Math.floor(wanted),
-      }).catch(() => null);
-      if (!result?.ok) continue;
+      }).catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : "failed" }));
+
+      /*
+       * A refused fill is recorded, not swallowed.
+       *
+       * This is the path that pays a customer who is waiting, so "it did not
+       * work" is not an acceptable amount of detail. Silently continuing is
+       * what turned an unverified provider account into a facility that
+       * looked funded and bought nothing.
+       */
+      if (!result.ok) {
+        refusals.push(`${p.name}/${s.symbol}: ${"error" in result ? result.error : "refused"}`);
+        continue;
+      }
 
       const spent = Number(result.tzs ?? 0);
       const qty = Number(result.qty ?? 0);
@@ -257,6 +292,23 @@ export async function raiseLiquidity(neededTzs: number): Promise<{ raisedTzs: nu
       room -= spent;
       s.qty = Math.max(0, s.qty - qty);
     }
+  }
+
+  /*
+   * The desk hears when the bid was called on and could not deliver, which
+   * matters more than hearing when it worked: a customer is queued behind it.
+   */
+  if (!fills.length && refusals.length) {
+    const { sendMail } = await import("./mail");
+    await sendMail({
+      subject: "CAPX: the standing bid was called on and bought nothing",
+      text:
+        `A payout needed ${Math.round(neededTzs).toLocaleString()} TZS more than the float held, ` +
+        `and every provider asked refused the order.\n\n` +
+        refusals.join("\n") +
+        `\n\nThe withdrawal is queued and the customer has been told so. Until a provider can ` +
+        `actually buy — a verified account with a shilling balance — it stays queued.`,
+    }).catch(() => {});
   }
 
   if (fills.length) {

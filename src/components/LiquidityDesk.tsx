@@ -79,7 +79,7 @@ export function LiquidityDesk() {
   /* Onboarding, and the one moment the token exists in a readable form. */
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
-  const [issued, setIssued] = useState<string | null>(null);
+  const [issued, setIssued] = useState<{ token: string; warning?: string } | null>(null);
 
   const create = async () => {
     setBusy(true); setErr(null); setIssued(null);
@@ -91,7 +91,7 @@ export function LiquidityDesk() {
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error ?? "Could not add that provider.");
-      setIssued(j.token);
+      setIssued({ token: j.token, warning: j.warning });
       setNewName(""); setNewEmail("");
       await load(token);
     } catch (e) {
@@ -309,8 +309,10 @@ export function LiquidityDesk() {
         <section className="mt-10 rounded-3xl border hairline p-5 sm:p-7">
           <h2 className="text-lg font-medium">Add a provider</h2>
           <p className="mt-1 max-w-2xl text-xs text-[var(--muted)]">
-            They need a CAPX account first: the facility is funded by that account&apos;s shilling
-            balance, which is what lets the bid settle instantly instead of waiting on a transfer.
+            They sign up as an ordinary CAPX user, verify, and fund that account with shillings.
+            Adding them here turns that account into a provider — there is no separate signup,
+            because the facility is funded by that same balance sitting in the omnibus, which is
+            what lets the bid settle instantly instead of waiting on a transfer.
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
             <input
@@ -336,7 +338,10 @@ export function LiquidityDesk() {
                 Their access token. Only its hash is stored, so this is the one time it can be read —
                 send it to them over something private, not email.
               </div>
-              <code className="mt-2 block break-all text-sm">{issued}</code>
+              <code className="mt-2 block break-all text-sm">{issued.token}</code>
+              {issued.warning && (
+                <p className="mt-2.5 text-xs text-[#b45309]">{issued.warning}</p>
+              )}
             </div>
           )}
           {err && <p className="mt-3 text-xs text-[var(--color-down)]">{err}</p>}

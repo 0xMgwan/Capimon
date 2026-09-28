@@ -92,7 +92,7 @@ export async function userActivity(userId: string, limit = 120): Promise<Activit
     sql<{ id: string; side: string; symbol: string; usdc_amount: string | null; qty: string | null;
           status: string; tx_hash: string | null; price: string | null; fee_usdc: string;
           error: string | null; created_at: string; settled_at: string | null;
-          metadata_tzs: string | null }[]>`
+          metadata_tzs: string | null; metadata_fee: string | null }[]>`
       select o.id::text, o.side, o.symbol, o.usdc_amount::text, o.qty::text, o.status,
              o.tx_hash, o.price::text, o.fee_usdc::text, o.error, o.created_at, o.settled_at,
              /*
@@ -104,7 +104,19 @@ export async function userActivity(userId: string, limit = 120): Promise<Activit
               * receipt for a transaction they did not recognise.
               */
              (select abs(l.amount)::text from capx.ledger_entries l
-               where l.ref = o.id::text || ':cash' and l.asset = 'TZS' limit 1) as metadata_tzs
+               where l.ref = o.id::text || ':cash' and l.asset = 'TZS' limit 1) as metadata_tzs,
+             /*
+              * And the fee on that leg, which lived only in its metadata.
+              *
+              * o.fee_usdc is the dollar fee and is nil for a shilling order,
+              * so the receipt rendered no fee at all — a buy showed the 5,000
+              * that left the balance with no sign that 125 of it was charged,
+              * while a sell showed the 2,925 that arrived and looked as though
+              * it were the only leg that cost anything. The fee was taken on
+              * both; only one of them said so.
+              */
+             (select (l.metadata->>'fee')::text from capx.ledger_entries l
+               where l.ref = o.id::text || ':cash' and l.asset = 'TZS' limit 1) as metadata_fee
         from capx.orders o
        where o.user_id = ${userId}::uuid
        order by o.created_at desc limit ${limit}`,
@@ -160,7 +172,7 @@ export async function userActivity(userId: string, limit = 120): Promise<Activit
       amount: tzs ?? num(o.usdc_amount),
       currency: tzs !== null ? "TZS" : "USDC",
       price: num(o.price),
-      fee: num(o.fee_usdc),
+      fee: num(o.metadata_fee) ?? num(o.fee_usdc),
       error: o.error,
       refs,
       note: null,

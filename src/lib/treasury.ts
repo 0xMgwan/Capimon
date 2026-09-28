@@ -524,7 +524,9 @@ export async function sendUsdcToNtzs(usdc: number, ntzsAddress: `0x${string}`) {
  * no API can source a transfer out of it, so counting it would promise
  * funding that nothing can deliver.
  */
-export async function reachableUsdc(): Promise<{ onChain: number; sweepable: number; total: number } | null> {
+export async function reachableUsdc(): Promise<
+  { onChain: number; sweepable: number; convertible: number; total: number } | null
+> {
   const to = treasuryAddress();
   if (!to) return null;
   try {
@@ -534,7 +536,26 @@ export async function reachableUsdc(): Promise<{ onChain: number; sweepable: num
       })) as bigint, 6));
     const { sweepableUsdc } = await import("./ntzsFunding");
     const sweepable = await sweepableUsdc().catch(() => 0);
-    return { onChain, sweepable, total: onChain + sweepable };
+
+    /*
+     * And the shillings, because the funding path converts them.
+     *
+     * This has to agree with ensureTreasuryFunded or it is worse than not
+     * existing: a pre-flight that counts less than the funder can reach
+     * refuses orders that would have gone through, which is the same failure
+     * it was written to prevent, arriving one step earlier.
+     */
+    const { omnibusBalances } = await import("./omnibus");
+    const { getSwapRate } = await import("./ntzs");
+    const omnibus = await omnibusBalances().catch(() => ({ tzs: 0, usdc: 0 }));
+    const probe = 100_000;
+    const rate = omnibus.tzs > 0
+      ? await getSwapRate("NTZS", "USDC", probe)
+          .then((r) => Number(r.expectedOutput ?? 0) / probe).catch(() => 0)
+      : 0;
+    const convertible = rate > 0 ? (omnibus.tzs * rate) / 1.02 : 0;
+
+    return { onChain, sweepable, convertible, total: onChain + sweepable + convertible };
   } catch {
     // Unreadable is not the same as empty: the caller must not refuse on it.
     return null;
@@ -554,7 +575,8 @@ export async function fundingRefusal(needUsdc: number): Promise<string | null> {
 
   return (
     `This order needs ${needUsdc.toFixed(2)} USDC but only ${reach.total.toFixed(2)} can reach ` +
-    `the treasury (${reach.onChain.toFixed(2)} on-chain, ${reach.sweepable.toFixed(2)} in the omnibus).` +
+    `the treasury (${reach.onChain.toFixed(2)} on-chain, ${reach.sweepable.toFixed(2)} in the omnibus, ` +
+    `${reach.convertible.toFixed(2)} convertible from shillings).` +
     (stranded > 0.01
       ? ` A further ${stranded.toFixed(2)} USDC sits in the nTZS settlement float, which backs balances ` +
         `but cannot be transferred out — it can be withdrawn to mobile money, or moved by nTZS. ` +
@@ -590,8 +612,52 @@ export async function ensureTreasuryFunded(needUsdc: number, address?: `0x${stri
   // be transferred to the treasury, so counting it here would promise funding
   // that no API call can deliver.
   const { sweepableUsdc, sweepToTreasury } = await import("./ntzsFunding");
-  const available = await sweepableUsdc();
+  let available = await sweepableUsdc();
   const shortfall = needUsdc - onHand;
+
+  /*
+   * Shillings in the omnibus are dollars that have not been converted yet.
+   *
+   * This swept USDC and stopped there, so an omnibus holding half a million
+   * shillings and no dollars failed an order it could perfectly well fund —
+   * and the operator was asked to top the treasury up by hand with money the
+   * customers had already sent. The payout path has always converted for
+   * exactly this reason; the trading path never learned to.
+   *
+   * It is the same pool either way. Converting TZS to USDC inside the omnibus
+   * changes what the backing is denominated in and not how much of it there
+   * is, and ensureNtzsHasTzs converts back whenever a shilling payout needs it
+   * to. So this is a change of form, not of ownership, and it is what makes
+   * the money a customer sent the money that buys their shares.
+   */
+  if (available < shortfall) {
+    try {
+      const { omnibusBalances } = await import("./omnibus");
+      const { getSwapRate } = await import("./ntzs");
+      const { swapTzsToUsdc } = await import("./ntzsFunding");
+      const omnibus = await omnibusBalances();
+
+      if (omnibus.tzs > 0) {
+        const probe = 100_000;
+        const rate = await getSwapRate("NTZS", "USDC", probe)
+          .then((r) => Number(r.expectedOutput ?? 0) / probe)
+          .catch(() => 0);
+
+        if (rate > 0) {
+          /* A little over, so the swap's own spread cannot leave it short. */
+          const wantTzs = Math.ceil(((shortfall - available) / rate) * 1.02);
+          const tzsToSwap = Math.min(Math.floor(omnibus.tzs), wantTzs);
+          if (tzsToSwap > 0) {
+            await swapTzsToUsdc(tzsToSwap);
+            available = await sweepableUsdc();
+          }
+        }
+      }
+    } catch {
+      /* The refusal below still explains itself; a failed conversion only
+         means it could not be avoided. */
+    }
+  }
 
   if (available < shortfall) {
     /*
@@ -607,7 +673,8 @@ export async function ensureTreasuryFunded(needUsdc: number, address?: `0x${stri
 
     throw new Error(
       `This order needs ${needUsdc.toFixed(2)} USDC but only ${(onHand + available).toFixed(2)} can reach ` +
-      `the treasury (${onHand.toFixed(2)} on-chain, ${available.toFixed(2)} in the omnibus).` +
+      `the treasury (${onHand.toFixed(2)} on-chain, ${available.toFixed(2)} in the omnibus, after ` +
+      `converting what shillings the omnibus could spare).` +
       (stranded > 0.01
         ? ` A further ${stranded.toFixed(2)} USDC sits in the nTZS settlement float, which backs balances ` +
           `but cannot be transferred out — it can be withdrawn to mobile money, or moved by nTZS. ` +

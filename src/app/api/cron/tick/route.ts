@@ -81,6 +81,49 @@ export async function GET(req: Request) {
   }
 
   /*
+   * Whether the next order could be funded at all.
+   *
+   * Everything the trading path needs is normally the customer's own money —
+   * their shillings convert, sweep and buy. It only runs dry when that money
+   * has drifted somewhere it cannot come back from, chiefly the ramp
+   * settlement float, and the first sign of it used to be somebody's order
+   * failing. Compared against the largest order of the past week, because
+   * that is the size the next one is plausibly going to be.
+   */
+  try {
+    const { reachableUsdc } = await import("@/lib/treasury");
+    const reach = await reachableUsdc();
+    if (reach) {
+      const { db } = await import("@/lib/db");
+      const [biggest] = await db()<{ usdc: string | null }[]>`
+        select max(usdc_amount)::text as usdc from capx.orders
+         where status = 'settled' and side = 'buy'
+           and created_at > now() - interval '7 days'`.catch(() => [{ usdc: null }]);
+      const typical = Math.max(10, Number(biggest?.usdc ?? 0));
+      did.funding = { ...reach, typical };
+
+      if (reach.total < typical) {
+        const { sendMail } = await import("@/lib/mail");
+        await sendMail({
+          subject: "CAPX: the treasury cannot fund a typical order",
+          text:
+            `Everything the trading path can reach comes to ${reach.total.toFixed(2)} USDC — ` +
+            `${reach.onChain.toFixed(2)} on-chain, ${reach.sweepable.toFixed(2)} in the omnibus, ` +
+            `${reach.convertible.toFixed(2)} convertible from shillings — against a largest recent ` +
+            `order of ${typical.toFixed(2)} USDC.\n\n` +
+            `A customer's own money normally funds their own order, so this means dollars have ` +
+            `drifted somewhere the trading path cannot reach: usually the nTZS settlement float, ` +
+            `which backs balances but can only be spent outward on mobile-money payouts.\n\n` +
+            `Either send USDC to the treasury on Base, or let the float drain through shilling ` +
+            `withdrawals before it is topped up again.`,
+        }).catch(() => {});
+      }
+    }
+  } catch (e) {
+    did.funding = { error: e instanceof Error ? e.message : "failed" };
+  }
+
+  /*
    * Shilling claims against the float, every tick.
    *
    * A payout rebalances on its way out, but a gap can open by other routes —

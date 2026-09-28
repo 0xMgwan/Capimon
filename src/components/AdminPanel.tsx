@@ -65,6 +65,12 @@ type Admin = {
     totalValueTzs: number; totalPaidTzs: number; unrealisedTzs: number;
     cashTzs: number; owedCashTzs: number; coverPct: number | null; shortfallTzs: number;
   } | null;
+  flow: {
+    days: { day: string; depositsTzs: number; withdrawalsTzs: number; netCashTzs: number;
+            claimsCreatedTzs: number; claimsSpentTzs: number }[];
+    worstOutflowTzs: number; worstOutflowDay: string | null; meanNetCashTzs: number;
+    deepestDrawdownTzs: number; floatTzs: number; runwayDays: number | null;
+  } | null;
   solvency: { ok: boolean; usdPerTzs: number; totals: { owedUsd: number; heldUsd: number; shortfallUsd: number; inventoryUsd: number };
               usdc?: { treasury: number; rampFloat: number };
               assets: { asset: string; owed: number; held: number; covered: boolean }[];
@@ -822,6 +828,106 @@ export function AdminPanel() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/*
+        * What moves the float, day by day.
+        *
+        * The redemption panel above is a stress figure: everybody sells at
+        * once. It is the right shape for understanding the exposure and the
+        * wrong number for sizing a facility, which is sized by the worst day
+        * that plausibly happens.
+        *
+        * Cash and claims are kept apart because only one of them is money. A
+        * share trade never moves the float — the shillings stay exactly where
+        * they were and the ledger reassigns them — but a sale does turn a
+        * share position into a balance somebody can ask for, and every one of
+        * those is a future withdrawal. A day that creates far more claims
+        * than it consumes has borrowed from a float that has not been asked
+        * for yet.
+        */}
+      {data.flow && data.flow.days.length > 0 && (
+        <div id="flow" className="mt-4 scroll-mt-24 rounded-2xl border hairline p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <div>
+              <div className="eyebrow">Shillings in and out</div>
+              <div className="mt-1 text-[12px] text-[var(--muted)]">
+                Last 30 days · what a liquidity line would have to cover
+              </div>
+            </div>
+            <div className="tnum text-right text-[12px] text-[var(--muted)]">
+              float now{" "}
+              <span className="tnum text-[var(--fg)]">
+                {Math.round(data.flow.floatTzs).toLocaleString()} TZS
+              </span>
+            </div>
+          </div>
+
+          {/*
+            One bar a day, deposits up and withdrawals down from a shared
+            centre line. Days where nothing happened stay on the axis rather
+            than being skipped, so a single busy afternoon cannot masquerade
+            as a trend.
+          */}
+          {(() => {
+            const peak = Math.max(
+              1,
+              ...data.flow!.days.map((d) => Math.max(d.depositsTzs, d.withdrawalsTzs)),
+            );
+            return (
+              <div className="mt-4 flex h-20 items-center gap-[2px]">
+                {data.flow!.days.map((d) => (
+                  <div key={d.day} className="flex h-full flex-1 flex-col justify-center" title={
+                    `${d.day}: +${Math.round(d.depositsTzs).toLocaleString()} / −${Math.round(d.withdrawalsTzs).toLocaleString()} TZS`
+                  }>
+                    <div className="flex h-1/2 items-end">
+                      <div className="w-full rounded-t-sm bg-[var(--color-up)]"
+                        style={{ height: `${(d.depositsTzs / peak) * 100}%` }} />
+                    </div>
+                    <div className="h-px bg-[var(--border)]" />
+                    <div className="flex h-1/2 items-start">
+                      <div className="w-full rounded-b-sm bg-[var(--color-down)]"
+                        style={{ height: `${(d.withdrawalsTzs / peak) * 100}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
+          <div className="mt-4 grid gap-px overflow-hidden rounded-2xl border hairline bg-[var(--border)] sm:grid-cols-3">
+            <Cell
+              label="Worst day out"
+              value={`${Math.round(data.flow.worstOutflowTzs).toLocaleString()} TZS`}
+              note={data.flow.worstOutflowDay ?? "none yet"}
+            />
+            <Cell
+              label="Deepest drawdown"
+              value={`${Math.round(data.flow.deepestDrawdownTzs).toLocaleString()} TZS`}
+              note="cumulative, below the start"
+            />
+            <Cell
+              label="Average day"
+              value={`${data.flow.meanNetCashTzs >= 0 ? "+" : ""}${Math.round(data.flow.meanNetCashTzs).toLocaleString()} TZS`}
+              note={data.flow.runwayDays !== null
+                ? `draining · ${Math.floor(data.flow.runwayDays)} days of float`
+                : "the float is growing"}
+            />
+          </div>
+
+          <p className="mt-3 text-[12px] leading-relaxed text-[var(--muted)]">
+            A share trade does not move this: the shillings stay where they are and the ledger
+            reassigns them. Only deposits and withdrawals do. Over the window customers turned{" "}
+            <span className="tnum text-[var(--fg)]">
+              {Math.round(data.flow.days.reduce((s, d) => s + d.claimsCreatedTzs, 0)).toLocaleString()} TZS
+            </span>{" "}
+            of shares into balances they can ask for, and spent{" "}
+            <span className="tnum text-[var(--fg)]">
+              {Math.round(data.flow.days.reduce((s, d) => s + d.claimsSpentTzs, 0)).toLocaleString()} TZS
+            </span>{" "}
+            of balances buying shares back.
+          </p>
         </div>
       )}
 

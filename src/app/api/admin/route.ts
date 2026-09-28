@@ -161,7 +161,7 @@ export async function GET(req: Request) {
     }
 
     // Reported separately: an unreachable dependency is not a shortfall.
-    const [solvency, ntzs, onchain, caps, route, feePos, sweeps, redemption] = await Promise.all([
+    const [solvency, ntzs, onchain, caps, route, feePos, sweeps, redemption, flow] = await Promise.all([
       treasuryConfigured ? checkSolvency().catch(() => null) : null,
       ntzsConfigured ? ntzsTreasury().catch(() => null) : null,
       treasuryConfigured ? treasuryHoldings({ prices: true }).catch(() => null) : null,
@@ -173,6 +173,9 @@ export async function GET(req: Request) {
          on hand to pay it. Solvency answers the share question; this is the
          cash one. */
       import("@/lib/redemption").then((m) => m.redemptionExposure()).catch(() => null),
+      /* What actually moves the float, day by day — the number that sizes a
+         facility, as distinct from the stress figure above it. */
+      import("@/lib/netFlow").then((m) => m.netFlow(30)).catch(() => null),
     ]);
     const fees = { position: feePos, sweeps };
 
@@ -185,6 +188,7 @@ export async function GET(req: Request) {
                  where asset = 'USDC' and kind = 'deposit') as ledger,
                (select count(*)::int from capx.deposits where status = 'settled') as deposits`,
       redemption,
+      flow,
       totals: {
         users: totals[0]?.users ?? 0,
         pendingDeposits: totals[0]?.pending ?? 0,

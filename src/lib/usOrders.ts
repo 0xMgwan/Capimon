@@ -233,6 +233,35 @@ export async function placeUsOrder(
       let tzsSpent = 0;
       let exec;
       if (side === "buy" && currency === "TZS") {
+        /*
+         * Asked before the shillings move, because the swap cannot be undone.
+         *
+         * The treasury's funding check already refuses an order it cannot
+         * cover, but it runs at the point of trading — which on this path is
+         * after the conversion. So an order that never had a chance still
+         * converted the customer's shillings into dollars they did not ask
+         * for, and every retry converted a little more of the next person's.
+         *
+         * Priced from the live rate rather than from the swap's own output,
+         * which does not exist yet. An unreadable balance returns null and
+         * the order proceeds: refusing a good trade because a figure could
+         * not be read would be the worse mistake, and the check downstream
+         * still stands.
+         */
+        const { getSwapRate: rateForCheck } = await import("@/lib/ntzs");
+        const { fundingRefusal } = await import("@/lib/treasury");
+        const needUsdc = await rateForCheck("NTZS", "USDC", Math.max(1, Math.round(amount)))
+          .then((r) => Number(r.expectedOutput ?? 0))
+          .catch(() => 0);
+        if (needUsdc > 0) {
+          const refusal = await fundingRefusal(needUsdc);
+          if (refusal) {
+            await sql`update capx.orders set status = 'failed', error = ${refusal.slice(0, 2000)}
+                       where id = ${orderId}`.catch(() => {});
+            return { ok: false, code: "treasury_unfunded", error: refusal, orderId };
+          }
+        }
+
         const { swapTzsToUsdc } = await import("@/lib/ntzsFunding");
         /*
          * A refusal from inside the swap can still be about money that moved.

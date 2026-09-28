@@ -511,6 +511,60 @@ export async function sendUsdcToNtzs(usdc: number, ntzsAddress: `0x${string}`) {
 }
 
 /**
+ * What the treasury could actually spend, asked before anything is spent.
+ *
+ * ensureTreasuryFunded answers the same question, but it answers it at the
+ * point of trading — which for a shilling order is after the shillings have
+ * already been converted. The swap is irreversible, so a customer whose order
+ * could never have been funded still ended up holding dollars they did not
+ * ask for, and every retry converted a little more. This is the same sum,
+ * available early enough to refuse instead.
+ *
+ * The ramp settlement float is deliberately excluded. It backs balances and
+ * no API can source a transfer out of it, so counting it would promise
+ * funding that nothing can deliver.
+ */
+export async function reachableUsdc(): Promise<{ onChain: number; sweepable: number; total: number } | null> {
+  const to = treasuryAddress();
+  if (!to) return null;
+  try {
+    const onChain = Number(formatUnits(
+      (await publicClient.readContract({
+        address: USDC_BASE, abi: b20Abi, functionName: "balanceOf", args: [to],
+      })) as bigint, 6));
+    const { sweepableUsdc } = await import("./ntzsFunding");
+    const sweepable = await sweepableUsdc().catch(() => 0);
+    return { onChain, sweepable, total: onChain + sweepable };
+  } catch {
+    // Unreadable is not the same as empty: the caller must not refuse on it.
+    return null;
+  }
+}
+
+/** Says why an order of this size cannot be funded, or null if it can. */
+export async function fundingRefusal(needUsdc: number): Promise<string | null> {
+  const reach = await reachableUsdc();
+  if (!reach || !(needUsdc > 0)) return null;
+  if (reach.total >= needUsdc) return null;
+
+  const { rampBalance } = await import("./ntzs");
+  const stranded = await rampBalance()
+    .then((b) => Number(b.usdcBalance ?? b.balance ?? b.usdc ?? 0))
+    .catch(() => 0);
+
+  return (
+    `This order needs ${needUsdc.toFixed(2)} USDC but only ${reach.total.toFixed(2)} can reach ` +
+    `the treasury (${reach.onChain.toFixed(2)} on-chain, ${reach.sweepable.toFixed(2)} in the omnibus).` +
+    (stranded > 0.01
+      ? ` A further ${stranded.toFixed(2)} USDC sits in the nTZS settlement float, which backs balances ` +
+        `but cannot be transferred out — it can be withdrawn to mobile money, or moved by nTZS. ` +
+        `Deposits made now land in the omnibus and are spendable straight away.`
+      : "") +
+    ` Nothing was converted and your balance is unchanged.`
+  );
+}
+
+/**
  * Makes sure the treasury holds enough USDC to place an order, pulling from the
  * nTZS side when it does not.
  *

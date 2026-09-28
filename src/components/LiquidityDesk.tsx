@@ -194,7 +194,10 @@ export function LiquidityDesk() {
         now with the button below. Your return is the difference: you bought at the mark on a day
         somebody needed to exit — at an agreed discount to it, which is what you are paid for
         standing ready — and sold back at the mark. Facility orders carry no platform fee, so the
-        spread is yours rather than something a round trip takes back.
+        spread is yours rather than something a round trip takes back — and because no fee is
+        charged on them, no broker share accrues on them either. Where the custodian broker is also
+        a provider, the spread replaces that share on these orders rather than stacking on top of
+        it; the broker fee on customers&apos; own trades is separate and unaffected.
       </p>
 
       {!data.providers.length && (

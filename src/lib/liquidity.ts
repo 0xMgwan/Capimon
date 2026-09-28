@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "crypto";
 import { db, dbConfigured, migrate } from "./db";
 import { balanceOf } from "./ledger";
+import { BROKER_FEE_BPS } from "./fees";
 import type { SessionUser } from "./auth";
 
 /**
@@ -59,8 +60,38 @@ import type { SessionUser } from "./auth";
  * Facility orders are also exempt from the platform fee. Without that the
  * provider would pay 250 bps on the way in and 250 on the way out to earn
  * 100, and the facility would be a way of losing four percent politely.
+ *
+ * ## Why it is capped, and why the broker's is nil
+ *
+ * The spread is borne by CAPX, so every basis point of it comes out of CAPX's
+ * 150. Left uncapped it could be set past the point where CAPX earns anything
+ * at all on a customer exit, and nothing in the arithmetic would object.
+ *
+ * A provider who is also the custodian broker is a sharper version of the same
+ * problem. FIMCO already takes 100 bps of every customer's fee for holding the
+ * shares and carrying the exchange relationship. Paying them a spread as well
+ * puts their side of one exit at 2.01% against CAPX's 0.49% — for one customer
+ * trade, to the same party, from two different pots. So `alsoBroker` forces
+ * the spread to nil: their compensation is the broker share they were already
+ * receiving, and the facility's contribution is that it no longer costs them
+ * 4.94% a cycle to provide.
  */
 export const DEFAULT_SPREAD_BPS = 100;
+
+/**
+ * The most any provider's spread may be.
+ *
+ * Pinned to the broker's slice rather than to a number typed here, so the two
+ * counterparties can never between them take more of a customer's fee than
+ * CAPX does.
+ */
+export const MAX_SPREAD_BPS = BROKER_FEE_BPS;
+
+/** What the spread actually is, after the cap and the broker rule. */
+export function spreadFor(p: Pick<Provider, "spreadBps" | "alsoBroker">): number {
+  if (p.alsoBroker) return 0;
+  return Math.max(0, Math.min(MAX_SPREAD_BPS, p.spreadBps));
+}
 
 export const lpTokenHash = (token: string) =>
   createHash("sha256").update(token.trim()).digest("hex");
@@ -77,13 +108,16 @@ export type Provider = {
   minMarginPct: number | null;
   /** What they earn: basis points off the mark when the bid acquires. */
   spreadBps: number;
+  /** Also the custodian broker, in which case the broker share is their pay. */
+  alsoBroker: boolean;
   active: boolean;
 };
 
 type Row = {
   id: string; name: string; user_id: string; committed_tzs: string | null;
   max_daily_tzs: string | null; floor_tzs: string; band_pct: string | null;
-  min_margin_pct: string | null; spread_bps: string | null; active: boolean;
+  min_margin_pct: string | null; spread_bps: string | null;
+  also_broker: boolean; active: boolean;
 };
 
 const toProvider = (r: Row): Provider => ({
@@ -94,12 +128,13 @@ const toProvider = (r: Row): Provider => ({
   bandPct: r.band_pct === null ? null : Number(r.band_pct),
   minMarginPct: r.min_margin_pct === null ? null : Number(r.min_margin_pct),
   spreadBps: r.spread_bps === null ? DEFAULT_SPREAD_BPS : Number(r.spread_bps),
+  alsoBroker: r.also_broker,
   active: r.active,
 });
 
 const SELECT = `id::text, name, user_id::text, committed_tzs::text, max_daily_tzs::text,
                 floor_tzs::text, band_pct::text, min_margin_pct::text,
-                spread_bps::text, active`;
+                spread_bps::text, also_broker, active`;
 
 /** The provider behind a desk token, or null. */
 export async function providerByToken(token: string): Promise<Provider | null> {
@@ -334,7 +369,7 @@ export async function absorbClaims(neededTzs: number): Promise<{ retiredTzs: num
 
       const result = await placeSecurityOrder(buyer, {
         security: s.symbol, side: "buy", amount: Math.floor(wanted),
-        facility: { discountBps: p.spreadBps },
+        facility: { discountBps: spreadFor(p) },
       }).catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : "failed" }));
 
       /*

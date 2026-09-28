@@ -855,6 +855,18 @@ export async function migrate() {
            * and that is never what was meant.
            */
           "spread_bps numeric(6,2)",
+          /*
+           * Whether this provider is also the custodian broker.
+           *
+           * FIMCO is both. Their broker share of the fee is already
+           * compensation for the relationship, so paying them a spread on top
+           * would take their side of a single customer exit to 2% and leave
+           * CAPX with 0.5%. Set here rather than inferred, because the broker
+           * is identified by a fee destination and a provider by a ledger
+           * account, and guessing that two are the same party is exactly the
+           * kind of inference that is right until it quietly is not.
+           */
+          "also_broker boolean not null default false",
         ],
       };
       for (const [table, columns] of Object.entries(lateColumns)) {

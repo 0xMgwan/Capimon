@@ -26,7 +26,8 @@ type Provider = {
   id: string; name: string; active: boolean;
   committedTzs: number | null; maxDailyTzs: number | null;
   floorTzs: number; bandPct: number | null; minMarginPct: number | null;
-  spreadBps: number; absorbedTzs: number; earnedTzs: number;
+  spreadBps: number; spreadSetBps: number; alsoBroker: boolean;
+  absorbedTzs: number; earnedTzs: number;
   availableTzs: number; cashTzs: number; inventoryTzs: number; drawnTodayTzs: number;
   reason: string | null;
   holdings: Holding[]; fills: Fill[];
@@ -104,8 +105,11 @@ export function LiquidityDesk() {
   };
 
   const setTerm = async (p: Provider, field: string, raw: string) => {
-    const value = raw.trim() === "" ? null : Number(raw);
-    if (value !== null && !Number.isFinite(value)) return;
+    /* One field here is a yes/no rather than a limit. */
+    const value = field === "alsoBroker"
+      ? raw === "1"
+      : raw.trim() === "" ? null : Number(raw);
+    if (typeof value === "number" && !Number.isFinite(value)) return;
     setBusy(true);
     try {
       await fetch("/api/lp", {
@@ -271,10 +275,12 @@ export function LiquidityDesk() {
                     hint={p.committedTzs === null ? "no committed size set" : `of ${tzs(p.committedTzs)} committed`} />
               <Stat label="Bought today" value={tzs(p.drawnTodayTzs)}
                     hint={p.maxDailyTzs === null ? "no daily limit set" : `of ${tzs(p.maxDailyTzs)}`} />
-              <Stat label="Earned on fills" value={tzs(p.earnedTzs)}
-                    hint={p.absorbedTzs > 0
-                      ? `${(p.spreadBps / 100).toFixed(2)}% off the mark on ${tzs(p.absorbedTzs)} absorbed`
-                      : `${(p.spreadBps / 100).toFixed(2)}% off the mark, when called on`} />
+              <Stat label="Earned on fills" value={p.alsoBroker ? "via broker fee" : tzs(p.earnedTzs)}
+                    hint={p.alsoBroker
+                      ? "your broker share is the compensation; no spread on top"
+                      : p.absorbedTzs > 0
+                        ? `${(p.spreadBps / 100).toFixed(2)}% off the mark on ${tzs(p.absorbedTzs)} absorbed`
+                        : `${(p.spreadBps / 100).toFixed(2)}% off the mark, when called on`} />
             </div>
 
             {p.holdings.length > 0 && (
@@ -354,6 +360,15 @@ export function LiquidityDesk() {
             {data.admin && (
               <div className="mt-8 border-t hairline pt-5">
                 <h3 className="text-sm font-medium">Terms</h3>
+                {/* The split, computed, so nobody has to work it out from two
+                    files to find out what CAPX keeps. */}
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  On one customer exit this provider takes{" "}
+                  <b>{p.alsoBroker ? "1.00%" : `${(p.spreadBps / 100).toFixed(2)}%`}</b>
+                  {p.alsoBroker ? " as the broker share, and no spread" : " as spread"}; CAPX keeps{" "}
+                  <b>{p.alsoBroker ? "1.50%" : `${(1.5 - p.spreadBps / 100).toFixed(2)}%`}</b>
+                  {p.alsoBroker ? "." : " once the spread it bears is taken off its 1.50%."}
+                </p>
                 <p className="mt-1 text-xs text-[var(--muted)]">
                   Blank means no limit agreed, and nothing is enforced on that ground. Each one is
                   checked the moment it is set.
@@ -369,8 +384,20 @@ export function LiquidityDesk() {
                         onSave={(v) => void setTerm(p, "bandPct", v)} busy={busy} />
                   <Term label="Won't sell below cost + (%)" value={p.minMarginPct}
                         onSave={(v) => void setTerm(p, "minMarginPct", v)} busy={busy} />
-                  <Term label="Your spread (bps off the mark)" value={p.spreadBps}
+                  <Term label="Spread (bps off the mark, max 100)" value={p.spreadSetBps}
                         onSave={(v) => void setTerm(p, "spreadBps", v)} busy={busy} />
+                  <div className="rounded-2xl border hairline p-3">
+                    <div className="text-[11px] uppercase tracking-wide text-[var(--muted)]">
+                      Also the custodian broker
+                    </div>
+                    <button
+                      onClick={() => void setTerm(p, "alsoBroker", p.alsoBroker ? "" : "1")}
+                      disabled={busy}
+                      className="mt-1.5 rounded-full border hairline px-3 py-1 text-xs disabled:opacity-50"
+                    >
+                      {p.alsoBroker ? "Yes — spread forced to nil" : "No — spread applies"}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

@@ -226,3 +226,35 @@ test("releasing never takes the float below the level the alarm watches", () => 
   assert.ok(b.cash / b.claims >= 1.25 - 1e-9,
     `cover fell to ${(b.cash / b.claims).toFixed(4)}, below the 1.25 the tripwire watches`);
 });
+
+test("the broker cannot also collect a spread, and no spread can exceed the cap", async () => {
+  const { spreadFor, MAX_SPREAD_BPS, DEFAULT_SPREAD_BPS } = await import("../src/lib/liquidity");
+
+  // FIMCO: broker share is the compensation, nothing on top.
+  assert.equal(spreadFor({ spreadBps: 100, alsoBroker: true }), 0);
+  assert.equal(spreadFor({ spreadBps: 250, alsoBroker: true }), 0);
+
+  // A separate provider gets the standard rate, and never more than the cap.
+  assert.equal(spreadFor({ spreadBps: DEFAULT_SPREAD_BPS, alsoBroker: false }), 100);
+  assert.equal(spreadFor({ spreadBps: 250, alsoBroker: false }), MAX_SPREAD_BPS);
+  assert.equal(spreadFor({ spreadBps: -50, alsoBroker: false }), 0);
+  assert.ok(MAX_SPREAD_BPS <= 100, "the cap must never let counterparties outweigh CAPX");
+});
+
+test("what each party takes on one customer exit", () => {
+  const FEE = 250, BROKER = 100, CAPX = 150, amt = 10_000_000;
+  const bps = (b: number) => (amt * b) / 10_000;
+  const spreadOn = (b: number) => amt / (1 - b / 10_000) - amt;
+
+  // FIMCO as both, with the spread forced to nil.
+  const fimco = bps(BROKER) + spreadOn(0);
+  const capxA = bps(CAPX) - spreadOn(0);
+  assert.equal(Math.round(fimco), bps(BROKER));
+  assert.equal(Math.round(capxA), bps(CAPX));
+  assert.ok(capxA / amt >= 0.015 - 1e-12, "CAPX must keep 1.5% when the provider is the broker");
+
+  // A separate provider at the capped 100 bps: the spread comes out of CAPX's share.
+  const capxB = bps(CAPX) - spreadOn(100);
+  assert.ok(capxB > 0, "CAPX must still be positive with a third-party provider");
+  assert.ok(bps(BROKER) + spreadOn(100) <= bps(FEE) - capxB + 1e-6);
+});

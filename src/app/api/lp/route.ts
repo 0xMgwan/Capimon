@@ -53,7 +53,9 @@ export async function GET(req: Request) {
         select coalesce(sum(tzs), 0)::text as total from capx.lp_fills
          where provider_id = ${p.id}::uuid and side = 'buy'`;
       const spentTzs = Number(absorbed?.total ?? 0);
-      const d = p.spreadBps / 10_000;
+      const { spreadFor } = await import("@/lib/liquidity");
+      const effectiveBps = spreadFor(p);
+      const d = effectiveBps / 10_000;
       const earnedTzs = d > 0 && d < 1 ? spentTzs / (1 - d) - spentTzs : 0;
 
       const fills = await sql<{ symbol: string; qty: string; tzs: string;
@@ -92,7 +94,9 @@ export async function GET(req: Request) {
         ...cap,
         holdings,
         minMarginPct: p.minMarginPct,
-        spreadBps: p.spreadBps,
+        spreadBps: effectiveBps,
+        spreadSetBps: p.spreadBps,
+        alsoBroker: p.alsoBroker,
         absorbedTzs: spentTzs,
         earnedTzs,
         fills: fills.map((f) => ({
@@ -236,7 +240,15 @@ export async function POST(req: Request) {
         await sql`update capx.liquidity_providers set min_margin_pct = ${margin} where id = ${id}::uuid`;
       }
       if (spread !== undefined) {
-        await sql`update capx.liquidity_providers set spread_bps = ${spread} where id = ${id}::uuid`;
+        /* Capped here as well as when it is read: a value that cannot be
+           stored is clearer than one that is silently ignored later. */
+        const { MAX_SPREAD_BPS } = await import("@/lib/liquidity");
+        const capped = spread === null ? null : Math.max(0, Math.min(MAX_SPREAD_BPS, spread));
+        await sql`update capx.liquidity_providers set spread_bps = ${capped} where id = ${id}::uuid`;
+      }
+      if (typeof body.alsoBroker === "boolean") {
+        await sql`update capx.liquidity_providers set also_broker = ${body.alsoBroker}
+                   where id = ${id}::uuid`;
       }
     }
 

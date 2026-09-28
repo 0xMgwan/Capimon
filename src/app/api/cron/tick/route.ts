@@ -81,6 +81,21 @@ export async function GET(req: Request) {
   }
 
   /*
+   * Shilling claims against the float, every tick.
+   *
+   * A payout rebalances on its way out, but a gap can open by other routes —
+   * a sale that is never withdrawn, a corporate action, a provider funding
+   * late — and none of those pass through a payout path. Cheap when the book
+   * is square, which is the normal case.
+   */
+  try {
+    const { rebalanceClaims } = await import("@/lib/liquidity");
+    did.claims = await rebalanceClaims();
+  } catch (e) {
+    did.claims = { error: e instanceof Error ? e.message : "failed" };
+  }
+
+  /*
    * The people who were told their withdrawal would follow.
    *
    * Every tick, because a queued payout is money somebody is waiting on and

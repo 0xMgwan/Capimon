@@ -39,7 +39,7 @@ export async function reconcileQueue(): Promise<{
   if (!rows.length) return out;
 
   const { payoutCapacityTzs } = await import("./ntzsFunding");
-  const { raiseLiquidity } = await import("./liquidity");
+  const { rebalanceClaims } = await import("./liquidity");
   const { executePayout, spendableTzs } = await import("./payout");
   const { notify } = await import("./notify");
 
@@ -69,14 +69,15 @@ export async function reconcileQueue(): Promise<{
       continue;
     }
 
-    /* Enough shillings? If not, ask the standing bid, then look again. */
-    let capacity = await payoutCapacityTzs();
-    if (capacity !== null && amountTzs > capacity) {
-      try {
-        const { raisedTzs } = await raiseLiquidity(amountTzs - capacity);
-        if (raisedTzs > 0) capacity = await payoutCapacityTzs();
-      } catch { /* the row waits */ }
-    }
+    /*
+     * Enough shillings yet?
+     *
+     * Nothing is asked of a provider here. Their buying cannot raise the
+     * float — a DSE order moves no money — so the only things that refill it
+     * are a deposit, a provider funding their account, or inventory sold on
+     * the exchange. This waits for one of those.
+     */
+    const capacity = await payoutCapacityTzs();
     if (capacity !== null && amountTzs > capacity) {
       out.stillShort++;
       /*
@@ -101,6 +102,9 @@ export async function reconcileQueue(): Promise<{
                        attempts = attempts + 1
                  where id = ${row.id}::uuid`;
       out.sent++;
+
+      /* The float has just fallen; put the claims back under it. */
+      await rebalanceClaims().catch(() => null);
 
       await notify({
         userId: row.user_id, kind: "withdrawal", ref: `withdrawal:${result.ref}`,

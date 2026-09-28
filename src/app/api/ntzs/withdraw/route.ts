@@ -32,34 +32,25 @@ const MIN_TZS = 5_000;
  */
 async function capacityRefusal(amountTzs: number, userId: string, dest: PayoutDest, label: string) {
   const { payoutCapacityTzs } = await import("@/lib/ntzsFunding");
-  let capacity = await payoutCapacityTzs();
+  const capacity = await payoutCapacityTzs();
   if (capacity === null || amountTzs <= capacity) return null;
 
   /*
-   * Ask the standing bid before telling anybody no.
+   * The standing bid is not asked here, and asking it here was a mistake.
    *
-   * The float is short precisely because customers sold: their tokens are
-   * sitting in inventory and the shillings that were in the float went out
-   * with the last payout. Selling that inventory to a provider who has
-   * agreed to buy it turns it straight back into shillings — and because
-   * their balance already sits in the omnibus, the purchase is a ledger
-   * reassignment rather than a transfer, so it is done by the time this line
-   * returns.
+   * A DSE order writes two ledger entries and moves no money, so a provider
+   * buying inventory cannot raise the float by a shilling — this figure would
+   * come back identical and the payout would queue anyway. What actually pays
+   * a customer is the shillings a provider deposited, and those were counted
+   * as capacity long before the bid fired.
    *
-   * This is the ordinary path once a provider is funded. Everything below is
-   * what happens when there is none, or theirs is exhausted.
+   * The bid's job is on the other side of the payout: once money has left, it
+   * retires the provider's own cash claim so the float still covers what is
+   * owed. That runs in rebalanceClaims, after the money is out.
+   *
+   * So a float that is genuinely short of cash is genuinely short, and the
+   * honest thing is to say so and queue.
    */
-  try {
-    const { raiseLiquidity } = await import("@/lib/liquidity");
-    const { raisedTzs } = await raiseLiquidity(amountTzs - capacity);
-    if (raisedTzs > 0) {
-      const again = await payoutCapacityTzs();
-      if (again === null || amountTzs <= again) return null;
-      capacity = again;
-    }
-  } catch {
-    /* A provider failing is not a reason to lose the payout; it queues. */
-  }
 
   /*
    * Queued rather than refused.
@@ -334,6 +325,16 @@ export async function POST(req: Request) {
       userId: user.id, amountTzs, dest, label, key: quoteId,
     });
     const ref = result.ref;
+
+    /*
+     * Money has left, so the float has fallen while every other balance
+     * stands — including the provider's. This is the moment their cash claim
+     * should become a share claim, and it is deliberately after the payout:
+     * it can never delay or fail a withdrawal that has already succeeded.
+     */
+    void import("@/lib/liquidity")
+      .then((m) => m.rebalanceClaims())
+      .catch(() => null);
 
     await notify({
       userId: user.id, kind: "withdrawal", ref: `withdrawal:${ref}`,

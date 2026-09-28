@@ -18,6 +18,25 @@ import type { SessionUser } from "./auth";
  * than a transfer: no wire, no waiting on a person, nothing external that can
  * fail. That is the whole reason this can be automatic at all.
  *
+ * ## What the purchase does, and what it does not
+ *
+ * It does not raise cash. A DSE order writes two ledger entries and moves no
+ * money — the shillings that pay a customer are the ones the provider already
+ * deposited, and those were in the omnibus and counted as payout capacity
+ * before the bid ever fired.
+ *
+ * What it does is retire a claim. Paying a customer their gain drains cash
+ * while every other balance stands, including the provider's own. The
+ * purchase converts the provider's cash claim into a share claim, so the
+ * shillings they put in are genuinely free for the customer rather than owed
+ * twice. Without it the provider is left holding a cash claim the float no
+ * longer covers, which is the same hole moved one seat along.
+ *
+ * So the facility is prefunding plus an automatic way for the provider to
+ * take the position they are being paid to take. Sizing it by a cash gap was
+ * wrong and measured something this cannot move; it is sized by the claim
+ * gap — what is owed as shillings, less what is held as shillings.
+ *
  * ## Why every limit is optional and every one is checked
  *
  * An automatic bid buys at the mark without being asked, including in a
@@ -184,30 +203,31 @@ async function withinBand(p: Provider, symbol: string, mark: number): Promise<bo
 export type Fill = { provider: string; symbol: string; qty: number; tzs: number };
 
 /**
- * Raises shillings by selling inventory to whoever has agreed to buy it.
+ * Retires shilling claims by selling inventory to whoever has agreed to buy it.
  *
- * Called when the float cannot cover a payout. Sells the securities customers
- * have handed back — highest inventory first, since that is where the float
- * drained from — through the ordinary order path, so a provider's purchase is
- * priced, recorded and fee-charged exactly like anybody else's. There is no
- * special case for them in the ledger, and there should not be: their
- * position has to be as auditable as a customer's.
+ * Called when the ledger owes more shillings than the float holds. Sells the
+ * securities customers have handed back — largest position first, since that
+ * is where the imbalance came from — through the ordinary order path, so a
+ * provider's purchase is priced, recorded and fee-charged exactly like
+ * anybody else's. There is no special case for them in the ledger, and there
+ * should not be: their position has to be as auditable as a customer's.
  *
- * Returns what it managed to raise, which may be less than asked and may be
- * nothing. The caller decides what to do about that; this only reports.
+ * Returns the claims it managed to retire, which may be less than asked and
+ * may be nothing. The caller decides what to do about that; this only
+ * reports.
  */
-export async function raiseLiquidity(neededTzs: number): Promise<{ raisedTzs: number; fills: Fill[] }> {
+export async function absorbClaims(neededTzs: number): Promise<{ retiredTzs: number; fills: Fill[] }> {
   const fills: Fill[] = [];
   /** Why a provider was asked and did not buy — carried to the desk mail. */
   const refusals: string[] = [];
-  let raisedTzs = 0;
-  if (!dbConfigured || !(neededTzs > 0)) return { raisedTzs, fills };
+  let retiredTzs = 0;
+  if (!dbConfigured || !(neededTzs > 0)) return { retiredTzs, fills };
 
   await migrate();
   const sql = db();
 
   const all = (await providers()).filter((p) => p.active);
-  if (!all.length) return { raisedTzs, fills };
+  if (!all.length) return { retiredTzs, fills };
 
   const { available } = await import("./otc");
   const { readOraclePrice } = await import("./oracle");
@@ -247,7 +267,7 @@ export async function raiseLiquidity(neededTzs: number): Promise<{ raisedTzs: nu
   stock.sort((a, b) => b.qty * b.mark - a.qty * a.mark);
 
   for (const p of all) {
-    if (raisedTzs >= neededTzs) break;
+    if (retiredTzs >= neededTzs) break;
     const cap = await capacityOf(p);
     if (cap.availableTzs <= 0) continue;
 
@@ -263,7 +283,7 @@ export async function raiseLiquidity(neededTzs: number): Promise<{ raisedTzs: nu
       kycStatus: u.kyc_status, nidaNumber: u.nida_number,
     } as SessionUser;
 
-    let room = Math.min(cap.availableTzs, neededTzs - raisedTzs);
+    let room = Math.min(cap.availableTzs, neededTzs - retiredTzs);
 
     for (const s of stock) {
       if (room <= 0) break;
@@ -301,7 +321,7 @@ export async function raiseLiquidity(neededTzs: number): Promise<{ raisedTzs: nu
                 ${result.orderId ? `${result.orderId}` : null}::uuid)`.catch(() => {});
 
       fills.push({ provider: p.name, symbol: s.symbol, qty, tzs: spent });
-      raisedTzs += spent;
+      retiredTzs += spent;
       room -= spent;
       s.qty = Math.max(0, s.qty - qty);
     }
@@ -316,29 +336,71 @@ export async function raiseLiquidity(neededTzs: number): Promise<{ raisedTzs: nu
     await sendMail({
       subject: "CAPX: the standing bid was called on and bought nothing",
       text:
-        `A payout needed ${Math.round(neededTzs).toLocaleString()} TZS more than the float held, ` +
+        `The ledger owed ${Math.round(neededTzs).toLocaleString()} TZS more than the float held, ` +
         `and every provider asked refused the order.\n\n` +
         refusals.join("\n") +
-        `\n\nThe withdrawal is queued and the customer has been told so. Until a provider can ` +
-        `actually buy — a verified account with a shilling balance — it stays queued.`,
+        `\n\nUntil a provider can actually buy — a verified account with a shilling balance — ` +
+        `the shilling claims stand against a float that does not cover them.`,
     }).catch(() => {});
   }
 
   if (fills.length) {
     const { sendMail } = await import("./mail");
     await sendMail({
-      subject: `CAPX: ${Math.round(raisedTzs).toLocaleString()} TZS raised from liquidity providers`,
+      subject: `CAPX: ${Math.round(retiredTzs).toLocaleString()} TZS of claims taken on by liquidity providers`,
       text:
-        `A payout needed more shillings than the float held, so inventory was sold to the ` +
-        `standing bid.\\n\\n` +
+        `The ledger owed more shillings than the float held, so inventory was sold to the ` +
+        `standing bid.\n\n` +
         fills.map((f) =>
           `${f.provider}: ${f.qty.toFixed(6)} ${f.symbol} for ${Math.round(f.tzs).toLocaleString()} TZS`,
-        ).join("\\n") +
-        `\\n\\nThey now hold that inventory and recover the shillings when the next customer buys ` +
-        `it. Nothing here changes what backs a customer's position: the shares are the same ` +
-        `shares, in the same custody.`,
+        ).join("\n") +
+        `\n\nThose shilling claims are now share claims, so the float covers what is left of ` +
+        `it. The provider holds the position until they choose to sell it back — nothing here ` +
+        `unwinds it for them. Nothing here changes what backs a customer's position either: ` +
+        `the shares are the same shares, in the same custody.`,
     }).catch(() => {});
   }
 
-  return { raisedTzs, fills };
+  return { retiredTzs, fills };
+}
+
+
+/**
+ * What is owed in shillings, less what is held in shillings.
+ *
+ * The number that sizes the standing bid. It is deliberately not the
+ * redemption figure: that one asks what every holder selling at once would
+ * cost, which is a stress case. This asks what is owed as cash right now —
+ * balances somebody could ask for today — against the cash there is.
+ *
+ * Positive means claims exceed the float, which is the condition a provider
+ * exists to clear. Null when it cannot be read, and a null must never be
+ * read as zero: not knowing is not the same as being square.
+ */
+export async function cashClaimGapTzs(): Promise<number | null> {
+  try {
+    const { omnibusBalances } = await import("./omnibus");
+    const { totalLiabilities } = await import("./ledger");
+    const [omnibus, liabilities] = await Promise.all([omnibusBalances(), totalLiabilities()]);
+    const owed = liabilities.find((l) => l.asset === "TZS")?.amount ?? 0;
+    return owed - omnibus.tzs;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Brings shilling claims back under the float, if a provider can take them.
+ *
+ * Runs after money has actually left — a payout is the thing that opens the
+ * gap — and again on every scheduled tick, so an imbalance opened by any
+ * other route closes itself rather than waiting to be noticed. Best-effort by
+ * design: it never blocks a customer and never throws into a payout path that
+ * has already succeeded.
+ */
+export async function rebalanceClaims(): Promise<{ gapTzs: number; retiredTzs: number } | null> {
+  const gapTzs = await cashClaimGapTzs();
+  if (gapTzs === null || gapTzs <= 0) return null;
+  const { retiredTzs } = await absorbClaims(gapTzs).catch(() => ({ retiredTzs: 0 }));
+  return { gapTzs, retiredTzs };
 }

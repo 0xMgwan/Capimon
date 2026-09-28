@@ -162,9 +162,11 @@ export function LiquidityDesk() {
       <div className="eyebrow">Liquidity{data.admin && " · viewing as CAPX"}</div>
       <h1 className="display mt-2 text-[clamp(1.8rem,5vw,2.8rem)]">Provider desk.</h1>
       <p className="mt-3 max-w-2xl text-sm text-[var(--muted)]">
-        When a customer cashes out and the float is short, the shares they handed back are sold to
-        the standing bid at the published mark. Those shillings pay the customer; the inventory sits
-        here until the next buyer takes it, and the purchase price comes back then.
+        When a customer cashes out, the shillings that pay them come from the balance you have
+        funded here. The standing bid then buys the shares they handed back, at the published mark,
+        so what you put in becomes a position rather than a loan the float still owes you.
+        You hold that position until you sell it — nothing unwinds it for you — and that is where
+        the return is: you bought at the mark on a day somebody needed to exit.
       </p>
 
       {!data.providers.length && (
@@ -217,7 +219,7 @@ export function LiquidityDesk() {
                 <h3 className="text-sm font-medium">Position</h3>
                 <p className="mt-1 text-xs text-[var(--muted)]">
                   What the bid has taken on, at cost and at today&apos;s marks. The difference is
-                  unrealised: it turns into shillings when the next customer buys the inventory.
+                  unrealised — it becomes shillings when you sell, which is yours to decide.
                 </p>
                 <div className="mt-3 overflow-x-auto">
                   <table className="w-full min-w-[520px] text-sm">
@@ -259,8 +261,9 @@ export function LiquidityDesk() {
               <h3 className="text-sm font-medium">Fills</h3>
               {!p.fills.length ? (
                 <p className="mt-1 text-xs text-[var(--muted)]">
-                  The bid has not been called on. That is the normal state: it is only used when a
-                  cash-out arrives that the float cannot cover on its own.
+                  The bid has not been called on. That is the normal state: it fires only when the
+                  shillings owed across the book exceed the shillings held, which a cash-out is the
+                  usual way of causing.
                 </p>
               ) : (
                 <ul className="mt-3 divide-y hairline text-sm">

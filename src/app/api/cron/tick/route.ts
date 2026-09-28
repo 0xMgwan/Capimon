@@ -96,6 +96,19 @@ export async function GET(req: Request) {
   }
 
   /*
+   * And the other direction: inventory back into the pool while the float can
+   * carry the claim it creates. Absorbing without releasing is a one-way
+   * ratchet that ends with a provider holding everything and nobody able to
+   * buy it.
+   */
+  try {
+    const { releaseInventory } = await import("@/lib/liquidity");
+    did.released = await releaseInventory();
+  } catch (e) {
+    did.released = { error: e instanceof Error ? e.message : "failed" };
+  }
+
+  /*
    * The people who were told their withdrawal would follow.
    *
    * Every tick, because a queued payout is money somebody is waiting on and

@@ -789,6 +789,27 @@ export async function migrate() {
              face is recognisable before the sentence is read. */
           "actor text",
         ],
+        lp_fills: [
+          /*
+           * Which way the fill went.
+           *
+           * The table was written when a provider could only buy. Now they
+           * release inventory too, and the two must be told apart: the daily
+           * limit counts what they were asked to absorb, not what they sold
+           * back, and cost basis is buys net of sells rather than the sum of
+           * both. Defaulting to 'buy' is correct for every row that predates
+           * selling.
+           */
+          "side text not null default 'buy'",
+        ],
+        liquidity_providers: [
+          /*
+           * The mark a provider will not sell below, as a percentage above
+           * what they paid. Null means no floor agreed, so the standing offer
+           * releases at whatever the published mark is.
+           */
+          "min_margin_pct numeric(6,2)",
+        ],
       };
       for (const [table, columns] of Object.entries(lateColumns)) {
         for (const col of columns) {

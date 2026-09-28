@@ -21,11 +21,11 @@ import { useCallback, useEffect, useState } from "react";
  */
 
 type Holding = { symbol: string; qty: number; markTzs: number; valueTzs: number; paidTzs: number };
-type Fill = { symbol: string; qty: number; tzs: number; at: string };
+type Fill = { symbol: string; qty: number; tzs: number; side: "buy" | "sell"; at: string };
 type Provider = {
   id: string; name: string; active: boolean;
   committedTzs: number | null; maxDailyTzs: number | null;
-  floorTzs: number; bandPct: number | null;
+  floorTzs: number; bandPct: number | null; minMarginPct: number | null;
   availableTzs: number; cashTzs: number; inventoryTzs: number; drawnTodayTzs: number;
   reason: string | null;
   holdings: Holding[]; fills: Fill[];
@@ -50,7 +50,8 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 
 export function LiquidityDesk() {
   const [token, setToken] = useState("");
-  const [data, setData] = useState<{ admin: boolean; providers: Provider[] } | null>(null);
+  const [data, setData] = useState<{ admin: boolean; providers: Provider[];
+                                     releasableTzs: number | null } | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -60,7 +61,7 @@ export function LiquidityDesk() {
       const r = await fetch(`/api/lp?token=${encodeURIComponent(t)}`, { cache: "no-store" });
       const j = await r.json();
       if (!j.ok) throw new Error(j.code === "unauthorised" ? "That token was not accepted." : j.error);
-      setData({ admin: !!j.admin, providers: j.providers ?? [] });
+      setData({ admin: !!j.admin, providers: j.providers ?? [], releasableTzs: j.releasableTzs ?? null });
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not open the desk.");
     } finally {
@@ -117,6 +118,27 @@ export function LiquidityDesk() {
     }
   };
 
+  const [released, setReleased] = useState<string | null>(null);
+
+  const release = async () => {
+    setBusy(true); setErr(null); setReleased(null);
+    try {
+      const r = await fetch("/api/lp", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "release" }),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error ?? "Could not release inventory.");
+      setReleased(j.note);
+      await load(token);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not release inventory.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const setActive = async (p: Provider, active: boolean) => {
     setBusy(true);
     try {
@@ -165,13 +187,43 @@ export function LiquidityDesk() {
         When a customer cashes out, the shillings that pay them come from the balance you have
         funded here. The standing bid then buys the shares they handed back, at the published mark,
         so what you put in becomes a position rather than a loan the float still owes you.
-        You hold that position until you sell it — nothing unwinds it for you — and that is where
-        the return is: you bought at the mark on a day somebody needed to exit.
+        You hold that position until it is sold back. That happens on its own whenever the float
+        has room to carry the shilling claim it creates — scarcest security first, since inventory
+        customers cannot buy is inventory doing the most harm sitting still — and you can ask for it
+        now with the button below. Your return is the difference: you bought at the mark on a day
+        somebody needed to exit, and sold at the mark on a day somebody wanted in.
       </p>
 
       {!data.providers.length && (
         <p className="mt-8 text-sm text-[var(--muted)]">No providers are set up yet.</p>
       )}
+
+      {!!data.providers.length && (
+        <div className="mt-8 flex flex-wrap items-center gap-4 rounded-2xl border hairline p-4">
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] uppercase tracking-wide text-[var(--muted)]">
+              The float can take back
+            </div>
+            <div className="mt-1 text-lg font-medium tabular-nums">
+              {data.releasableTzs === null
+                ? "—"
+                : data.releasableTzs > 0 ? tzs(data.releasableTzs) : "nothing right now"}
+            </div>
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              Selling inventory back credits you shillings, which the float then owes. It only
+              happens while there is a quarter more cash on hand than is owed, so unwinding can
+              never be the thing that makes the book thin.
+            </p>
+          </div>
+          <button
+            onClick={() => void release()} disabled={busy || !(data.releasableTzs && data.releasableTzs > 0)}
+            className="shrink-0 rounded-full border hairline px-5 py-2.5 text-sm font-medium disabled:opacity-40"
+          >
+            {busy ? "Selling…" : "Release inventory now"}
+          </button>
+        </div>
+      )}
+      {released && <p className="mt-3 text-xs text-[var(--muted)]">{released}</p>}
 
       {data.providers.map((p) => {
         const heldValue = p.holdings.reduce((s, h) => s + h.valueTzs, 0);
@@ -187,7 +239,8 @@ export function LiquidityDesk() {
                     ? p.availableTzs > 0
                       ? `Bidding. Up to ${tzs(p.availableTzs)} can be called on right now.`
                       : `Bidding, but nothing can be called on — ${p.reason}.`
-                    : "Paused. Nothing will be bought until this is switched back on."}
+                    : "Paused. Nothing is bought or sold automatically — what you hold stays yours, "
+                      + "and you can still trade it by hand from your own account."}
                 </p>
               </div>
               <button
@@ -199,7 +252,7 @@ export function LiquidityDesk() {
                     : "bg-[var(--fg)] text-[var(--bg)]"
                 }`}
               >
-                {p.active ? "Pause the bid" : "Resume the bid"}
+                {p.active ? "Pause" : "Resume"}
               </button>
             </div>
 
@@ -270,6 +323,9 @@ export function LiquidityDesk() {
                   {p.fills.map((f, i) => (
                     <li key={`${f.at}-${i}`} className="flex items-baseline justify-between gap-4 py-2.5">
                       <span>
+                        <span className={f.side === "sell" ? "text-[var(--color-up)]" : ""}>
+                          {f.side === "sell" ? "Sold" : "Bought"}
+                        </span>{" "}
                         {f.symbol}
                         <span className="ml-2 text-xs text-[var(--muted)]">
                           {f.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })} shares
@@ -301,6 +357,8 @@ export function LiquidityDesk() {
                         onSave={(v) => void setTerm(p, "floorTzs", v)} busy={busy} />
                   <Term label="Price band (%)" value={p.bandPct}
                         onSave={(v) => void setTerm(p, "bandPct", v)} busy={busy} />
+                  <Term label="Won't sell below cost + (%)" value={p.minMarginPct}
+                        onSave={(v) => void setTerm(p, "minMarginPct", v)} busy={busy} />
                 </div>
               </div>
             )}

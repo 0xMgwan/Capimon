@@ -41,8 +41,9 @@ export async function GET(req: Request) {
     const out = await Promise.all(list.map(async (p) => {
       const cap = await capacityOf(p);
 
-      const fills = await sql<{ symbol: string; qty: string; tzs: string; created_at: string }[]>`
-        select symbol, qty::text, tzs::text, created_at
+      const fills = await sql<{ symbol: string; qty: string; tzs: string;
+                                side: string; created_at: string }[]>`
+        select symbol, qty::text, tzs::text, side, created_at
           from capx.lp_fills where provider_id = ${p.id}::uuid
          order by created_at desc limit 40`;
 
@@ -60,7 +61,8 @@ export async function GET(req: Request) {
         if (!(qty > 0)) continue;
         const mark = await readOraclePrice(sec.symbol).then((q) => q?.price ?? 0).catch(() => 0);
         const [cost] = await sql<{ paid: string }[]>`
-          select coalesce(sum(tzs), 0)::text as paid from capx.lp_fills
+          select coalesce(sum(case when side = 'sell' then -tzs else tzs end), 0)::text as paid
+            from capx.lp_fills
            where provider_id = ${p.id}::uuid and symbol = ${sec.symbol}`;
         holdings.push({
           symbol: sec.symbol, qty, markTzs: mark, valueTzs: qty * mark,
@@ -74,14 +76,17 @@ export async function GET(req: Request) {
         floorTzs: p.floorTzs, bandPct: p.bandPct,
         ...cap,
         holdings,
+        minMarginPct: p.minMarginPct,
         fills: fills.map((f) => ({
-          symbol: f.symbol, qty: Number(f.qty), tzs: Number(f.tzs), at: f.created_at,
+          symbol: f.symbol, qty: Number(f.qty), tzs: Number(f.tzs),
+          side: f.side === "sell" ? "sell" : "buy", at: f.created_at,
         })),
       };
     }));
 
+    const { releasableTzs } = await import("@/lib/liquidity");
     return NextResponse.json(
-      { ok: true, admin: isAdmin, providers: out },
+      { ok: true, admin: isAdmin, providers: out, releasableTzs: await releasableTzs() },
       { headers: { "cache-control": "no-store" } },
     );
   } catch (e) {
@@ -157,6 +162,32 @@ export async function POST(req: Request) {
     const id = me?.id ?? String(body.id ?? "");
     if (!id) return NextResponse.json({ ok: false, code: "bad_request" }, { status: 400 });
 
+    /*
+     * Unwind now, rather than at the next tick.
+     *
+     * The scheduled release runs three times a day, which is right for
+     * something routine and wrong for a provider who has decided they want
+     * their cash back. The same gate applies either way — it will not sell
+     * into a float that cannot carry the claim — so the only thing this
+     * changes is when it is asked.
+     */
+    if (body.action === "release") {
+      const { releaseInventory, releasableTzs } = await import("@/lib/liquidity");
+      const budget = await releasableTzs();
+      const done = await releaseInventory();
+      return NextResponse.json({
+        ok: true,
+        released: done,
+        note: done
+          ? `Sold ${Math.round(done.releasedTzs).toLocaleString()} TZS of inventory back into the pool.`
+          : budget !== null && budget <= 0
+            ? "Nothing was sold: the float cannot carry another shilling claim right now. "
+              + "It will release on its own as soon as it can."
+            : "Nothing was sold — either there is no inventory to release, or every mark is "
+              + "below the margin floor you have set.",
+      });
+    }
+
     if (typeof body.active === "boolean") {
       await sql`update capx.liquidity_providers set active = ${body.active} where id = ${id}::uuid`;
     }
@@ -169,6 +200,7 @@ export async function POST(req: Request) {
       const daily = num(body.maxDailyTzs);
       const floor = num(body.floorTzs);
       const band = num(body.bandPct);
+      const margin = num(body.minMarginPct);
       if (committed !== undefined) {
         await sql`update capx.liquidity_providers set committed_tzs = ${committed} where id = ${id}::uuid`;
       }
@@ -180,6 +212,9 @@ export async function POST(req: Request) {
       }
       if (band !== undefined) {
         await sql`update capx.liquidity_providers set band_pct = ${band} where id = ${id}::uuid`;
+      }
+      if (margin !== undefined) {
+        await sql`update capx.liquidity_providers set min_margin_pct = ${margin} where id = ${id}::uuid`;
       }
     }
 

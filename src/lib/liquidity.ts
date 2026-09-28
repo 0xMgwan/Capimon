@@ -58,12 +58,15 @@ export type Provider = {
   maxDailyTzs: number | null;
   floorTzs: number;
   bandPct: number | null;
+  /** The mark they will not sell below, as a percentage over what they paid. */
+  minMarginPct: number | null;
   active: boolean;
 };
 
 type Row = {
   id: string; name: string; user_id: string; committed_tzs: string | null;
-  max_daily_tzs: string | null; floor_tzs: string; band_pct: string | null; active: boolean;
+  max_daily_tzs: string | null; floor_tzs: string; band_pct: string | null;
+  min_margin_pct: string | null; active: boolean;
 };
 
 const toProvider = (r: Row): Provider => ({
@@ -72,11 +75,12 @@ const toProvider = (r: Row): Provider => ({
   maxDailyTzs: r.max_daily_tzs === null ? null : Number(r.max_daily_tzs),
   floorTzs: Number(r.floor_tzs),
   bandPct: r.band_pct === null ? null : Number(r.band_pct),
+  minMarginPct: r.min_margin_pct === null ? null : Number(r.min_margin_pct),
   active: r.active,
 });
 
 const SELECT = `id::text, name, user_id::text, committed_tzs::text, max_daily_tzs::text,
-                floor_tzs::text, band_pct::text, active`;
+                floor_tzs::text, band_pct::text, min_margin_pct::text, active`;
 
 /** The provider behind a desk token, or null. */
 export async function providerByToken(token: string): Promise<Provider | null> {
@@ -129,7 +133,7 @@ export async function capacityOf(p: Provider): Promise<{
 
   const [today] = await sql<{ total: string }[]>`
     select coalesce(sum(tzs), 0)::text as total from capx.lp_fills
-     where provider_id = ${p.id}::uuid
+     where provider_id = ${p.id}::uuid and side = 'buy'
        and created_at >= date_trunc('day', now() at time zone 'utc')`;
   const drawnTodayTzs = Number(today?.total ?? 0);
 
@@ -316,9 +320,9 @@ export async function absorbClaims(neededTzs: number): Promise<{ retiredTzs: num
       if (!(spent > 0)) continue;
 
       await sql`
-        insert into capx.lp_fills (provider_id, symbol, qty, tzs, order_id)
+        insert into capx.lp_fills (provider_id, symbol, qty, tzs, order_id, side)
         values (${p.id}::uuid, ${s.symbol}, ${qty}, ${spent},
-                ${result.orderId ? `${result.orderId}` : null}::uuid)`.catch(() => {});
+                ${result.orderId ? `${result.orderId}` : null}::uuid, 'buy')`.catch(() => {});
 
       fills.push({ provider: p.name, symbol: s.symbol, qty, tzs: spent });
       retiredTzs += spent;
@@ -403,4 +407,185 @@ export async function rebalanceClaims(): Promise<{ gapTzs: number; retiredTzs: n
   if (gapTzs === null || gapTzs <= 0) return null;
   const { retiredTzs } = await absorbClaims(gapTzs).catch(() => ({ retiredTzs: 0 }));
   return { gapTzs, retiredTzs };
+}
+
+/**
+ * The other half: putting inventory back where customers can buy it.
+ *
+ * Absorbing alone is not a facility, it is a one-way ratchet. A provider who
+ * only ever buys ends with no cash and a growing position, and the shares they
+ * are holding are shares nobody else can buy — `available()` is custody less
+ * what clients are owed, and a provider is a client, so every share they
+ * absorb leaves the pool until they sell it back.
+ *
+ * So this is the mirror. It sells inventory through the same ordinary order
+ * path, which credits the provider shillings and returns the shares to the
+ * pool, and it is gated on the one thing that makes selling safe: the float
+ * has to be able to carry the shilling claim it creates.
+ */
+
+/**
+ * How much cash must remain above what is owed.
+ *
+ * The same 1.25 the redemption tripwire watches for, deliberately: releasing
+ * down to the level that sets off the alarm would be the facility causing the
+ * thing it exists to prevent. Selling stops where the warning starts.
+ */
+const RELEASE_HEADROOM = 1.25;
+
+/**
+ * Shillings that can be credited to providers before the float gets thin.
+ *
+ * The release is itself part of what has to be covered, which is easy to miss
+ * and was: selling inventory back credits the provider shillings, so the
+ * claim it creates lands on the same side of the ratio it is being checked
+ * against. Solving `cash >= (owed + x) * headroom` for x gives the figure
+ * below. Checking against `owed` alone overstated the budget by a quarter of
+ * itself and released the float straight past the level it was protecting.
+ */
+export async function releasableTzs(): Promise<number | null> {
+  try {
+    const { omnibusBalances } = await import("./omnibus");
+    const { totalLiabilities } = await import("./ledger");
+    const [omnibus, liabilities] = await Promise.all([omnibusBalances(), totalLiabilities()]);
+    const owed = liabilities.find((l) => l.asset === "TZS")?.amount ?? 0;
+    return omnibus.tzs / RELEASE_HEADROOM - owed;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What a provider paid for what they are still holding, per share.
+ *
+ * Buys net of sells, so a position part-unwound reports the cost of the part
+ * that remains rather than of everything ever bought. Null when the fills
+ * cannot account for the balance — a provider who also trades by hand has a
+ * cost basis this table never saw, and guessing one to check a margin floor
+ * against would be worse than declining to check it.
+ */
+async function avgCostOf(providerId: string, symbol: string): Promise<number | null> {
+  const sql = db();
+  const [row] = await sql<{ qty: string; tzs: string }[]>`
+    select coalesce(sum(case when side = 'sell' then -qty else qty end), 0)::text as qty,
+           coalesce(sum(case when side = 'sell' then -tzs else tzs end), 0)::text as tzs
+      from capx.lp_fills where provider_id = ${providerId}::uuid and symbol = ${symbol}`;
+  const qty = Number(row?.qty ?? 0);
+  const tzs = Number(row?.tzs ?? 0);
+  if (!(qty > 0) || !(tzs > 0)) return null;
+  return tzs / qty;
+}
+
+export type Release = { provider: string; symbol: string; qty: number; tzs: number };
+
+/**
+ * Sells provider inventory back into the pool while the float can carry it.
+ *
+ * Scarcest security first: a symbol customers cannot currently buy is the one
+ * where the inventory is doing the most harm sitting still. Every refusal is
+ * a reason to skip rather than to stop, because one provider's margin floor
+ * says nothing about the next provider's.
+ */
+export async function releaseInventory(): Promise<{ releasedTzs: number; releases: Release[] } | null> {
+  if (!dbConfigured) return null;
+
+  let budget = await releasableTzs();
+  if (budget === null || budget <= 0) return null;
+
+  await migrate();
+  const sql = db();
+
+  const all = (await providers()).filter((p) => p.active);
+  if (!all.length) return null;
+
+  const { available } = await import("./otc");
+  const { readOraclePrice } = await import("./oracle");
+  const { dseSecurities } = await import("./dseSecurities");
+  const { placeSecurityOrder } = await import("./dseOrders");
+  const { balanceOf } = await import("./ledger");
+
+  const live = (await dseSecurities().catch(() => [])).filter((d) => d.status === "live");
+  const scarcity: { symbol: string; free: number; mark: number }[] = [];
+  for (const sec of live) {
+    const mark = await readOraclePrice(sec.symbol).then((q) => q?.price ?? 0).catch(() => 0);
+    if (!(mark > 0)) continue;
+    scarcity.push({ symbol: sec.symbol, free: await available(sec.symbol).catch(() => 0), mark });
+  }
+  scarcity.sort((a, b) => a.free - b.free);
+
+  const releases: Release[] = [];
+  let releasedTzs = 0;
+
+  for (const p of all) {
+    if (budget <= 0) break;
+
+    const [u] = await sql<{ id: string; email: string; kyc_status: string; name: string | null;
+                            username: string | null; phone: string | null; country: string | null;
+                            nida_number: string | null }[]>`
+      select id::text, email, kyc_status, name, username, phone, country, nida_number
+        from capx.users where id = ${p.userId}::uuid`;
+    if (!u) continue;
+    const seller = {
+      id: u.id, email: u.email, username: u.username, name: u.name, phone: u.phone,
+      country: u.country ?? "TZ", avatar: null, ntzsUserId: null,
+      kycStatus: u.kyc_status, nidaNumber: u.nida_number,
+    } as SessionUser;
+
+    for (const s of scarcity) {
+      if (budget <= 0) break;
+
+      const held = await balanceOf(p.userId, s.symbol).catch(() => 0);
+      if (!(held > 0)) continue;
+
+      /* A stale mark is as bad to sell on as to buy on. */
+      if (!(await withinBand(p, s.symbol, s.mark))) continue;
+
+      /*
+       * Their own floor under the price.
+       *
+       * The bid buys at the mark on a day somebody needed to exit, which is
+       * often a day the mark is low. Selling back at any price would let the
+       * facility book that as a loss automatically and without being asked.
+       * Unset means no floor and it sells at the mark; set and uncheckable
+       * means it does not sell, because an unverifiable floor is not a floor.
+       */
+      if (p.minMarginPct !== null) {
+        const cost = await avgCostOf(p.id, s.symbol);
+        if (cost === null || s.mark < cost * (1 + p.minMarginPct / 100)) continue;
+      }
+
+      const qty = Math.min(held, budget / s.mark);
+      if (!(qty > 0) || qty * s.mark < s.mark) continue;
+
+      const result = await placeSecurityOrder(seller, {
+        security: s.symbol, side: "sell", amount: qty,
+      }).catch(() => null);
+      if (!result?.ok) continue;
+
+      const got = Number(result.tzs ?? 0);
+      const sold = Number(result.qty ?? 0);
+      if (!(got > 0)) continue;
+
+      await sql`
+        insert into capx.lp_fills (provider_id, symbol, qty, tzs, order_id, side)
+        values (${p.id}::uuid, ${s.symbol}, ${sold}, ${got},
+                ${result.orderId ? `${result.orderId}` : null}::uuid, 'sell')`.catch(() => {});
+
+      releases.push({ provider: p.name, symbol: s.symbol, qty: sold, tzs: got });
+      releasedTzs += got;
+      budget -= got;
+      s.free += sold;
+    }
+  }
+
+  /*
+   * No mail for a release.
+   *
+   * Absorbing is mailed because it happens when something is wrong and
+   * somebody should know. This happens when things are going well, and a
+   * notification every time the book is healthy is the fastest way to teach
+   * a desk to ignore its own alerts. It is on the provider's page and in the
+   * fills, where it belongs.
+   */
+  return releases.length ? { releasedTzs, releases } : null;
 }

@@ -758,7 +758,8 @@ export function WalletSection({ holdings }: {
                  * this much.
                  */
                 ...(() => {
-                  const trades = new Map<string, { at: string; kind: string; asset: string; qty: number; cash: number; price: number | null }>();
+                  const trades = new Map<string, { at: string; kind: string; asset: string; qty: number;
+                                                   cash: number; cashAsset: string | null; price: number | null }>();
                   const loose: typeof rows = [];
                   type Row = {
                     key: string; at: string; inFlight: boolean; glyph: string; asset: string | null;
@@ -776,9 +777,11 @@ export function WalletSection({ holdings }: {
 
                     if (e.orderId && (e.kind === "buy" || e.kind === "sell")) {
                       const tr = trades.get(e.orderId) ?? {
-                        at: e.created_at, kind: e.kind, asset: "", qty: 0, cash: 0, price: null,
+                        at: e.created_at, kind: e.kind, asset: "", qty: 0, cash: 0,
+                        cashAsset: null as string | null, price: null,
                       };
-                      if (cash) tr.cash = Math.abs(amount);
+                      /* Which money it was, kept rather than assumed. */
+                      if (cash) { tr.cash = Math.abs(amount); tr.cashAsset = e.asset; }
                       else { tr.asset = e.asset; tr.qty = Math.abs(amount); }
                       if (e.price) tr.price = e.price;
                       // The earliest timestamp of the pair, so the trade sits
@@ -807,7 +810,19 @@ export function WalletSection({ holdings }: {
                       sub: tr.price
                         ? `${tr.price.toLocaleString()} ${dseLogoOf(dse, tr.asset) !== undefined ? "TZS" : "USD"} a share`
                         : null,
-                      main: `${bought ? "−" : "+"}${tr.cash.toLocaleString("en-TZ", { maximumFractionDigits: 2 })} TZS`,
+                      /*
+                       * The currency the cash leg was actually in.
+                       *
+                       * This said TZS regardless, so a US share bought with
+                       * dollars read "−0.4 TZS" — a number that is right, an
+                       * amount that is wrong by a factor of two and a half
+                       * thousand, and a currency the trade never touched. The
+                       * price line beside it had always picked its unit from
+                       * the security; the amount never did.
+                       */
+                      main: tr.cashAsset === "USDC"
+                        ? `${bought ? "−" : "+"}${usd(tr.cash, tr.cash < 1 ? 4 : 2)}`
+                        : `${bought ? "−" : "+"}${tr.cash.toLocaleString("en-TZ", { maximumFractionDigits: 2 })} TZS`,
                       extra: `${bought ? "+" : "−"}${tr.qty.toLocaleString("en-US", { maximumFractionDigits: 8 })} ${tr.asset}`,
                       tone: bought ? "down" : "up",
                     });

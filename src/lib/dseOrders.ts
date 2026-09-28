@@ -1,6 +1,6 @@
 import "server-only";
 import { db, migrate } from "./db";
-import { balanceOf, record } from "./ledger";
+import { balanceOf, recordTrade } from "./ledger";
 import { assertSolvent } from "./solvency";
 import { notify } from "./notify";
 import { dseMarket, quoteBuyTzs, quoteSellQty, sellQtyOrAll } from "./dseTrading";
@@ -160,25 +160,46 @@ export async function placeSecurityOrder(
   const orderId = orders[0].id;
 
   try {
-    await record(
-      side === "buy"
-        ? [
-            { userId: user.id, kind: "buy", asset: "TZS", amount: (-quote.tzs).toString(),
-              ref: `${orderId}:cash`,
-              metadata: { orderId, price: quote.price, fee: quote.fee, feeBps: quote.feeBps } },
-            { userId: user.id, kind: "buy", asset: SEC, amount: quote.qty.toString(),
-              ref: `${orderId}:asset`,
-              metadata: { orderId, price: quote.price, currency: "TZS" } },
-          ]
-        : [
-            { userId: user.id, kind: "sell", asset: SEC, amount: (-quote.qty).toString(),
-              ref: `${orderId}:asset`,
-              metadata: { orderId, price: quote.price, currency: "TZS" } },
-            { userId: user.id, kind: "sell", asset: "TZS", amount: quote.tzs.toString(),
-              ref: `${orderId}:cash`,
-              metadata: { orderId, price: quote.price, fee: quote.fee, feeBps: quote.feeBps } },
-          ],
-    );
+    /*
+     * Written as a balanced trade, so it cannot be written wrong.
+     *
+     * The customer's two legs are exactly what they were. What is new is that
+     * CAPX's own side is stated alongside them — the shillings that stay in
+     * the float, the fee that was taken, the inventory that changed hands —
+     * and the write is refused outright unless every asset nets to zero.
+     *
+     * A buy: the customer pays `tzs`, of which `fee` becomes fee income and
+     * `netTzs` stays in the float, and `qty` shares leave inventory for them.
+     * A sell is the same identity read backwards.
+     */
+    const meta = { orderId, price: quote.price, fee: quote.fee, feeBps: quote.feeBps };
+    await recordTrade(orderId, side === "buy"
+      ? [
+          { side: "customer", userId: user.id, kind: "buy", asset: "TZS",
+            amount: -quote.tzs, ref: `${orderId}:cash`, metadata: meta },
+          { side: "customer", userId: user.id, kind: "buy", asset: SEC,
+            amount: quote.qty, ref: `${orderId}:asset`,
+            metadata: { orderId, price: quote.price, currency: "TZS" } },
+          { side: "house", account: "fee", asset: "TZS",
+            amount: quote.fee, ref: `${orderId}:house-fee`, metadata: meta },
+          { side: "house", account: "float", asset: "TZS",
+            amount: quote.netTzs, ref: `${orderId}:house-cash`, metadata: meta },
+          { side: "house", account: "inventory", asset: SEC,
+            amount: -quote.qty, ref: `${orderId}:house-asset`, metadata: meta },
+        ]
+      : [
+          { side: "customer", userId: user.id, kind: "sell", asset: SEC,
+            amount: -quote.qty, ref: `${orderId}:asset`,
+            metadata: { orderId, price: quote.price, currency: "TZS" } },
+          { side: "customer", userId: user.id, kind: "sell", asset: "TZS",
+            amount: quote.tzs, ref: `${orderId}:cash`, metadata: meta },
+          { side: "house", account: "fee", asset: "TZS",
+            amount: quote.fee, ref: `${orderId}:house-fee`, metadata: meta },
+          { side: "house", account: "float", asset: "TZS",
+            amount: -quote.netTzs, ref: `${orderId}:house-cash`, metadata: meta },
+          { side: "house", account: "inventory", asset: SEC,
+            amount: quote.qty, ref: `${orderId}:house-asset`, metadata: meta },
+        ]);
 
     await sql`update capx.orders set status = 'settled', settled_at = now() where id = ${orderId}`;
 

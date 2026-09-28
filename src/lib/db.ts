@@ -97,6 +97,35 @@ export async function migrate() {
           created_at   timestamptz not null default now()
         )`;
       // One row per external reference makes every money-moving write idempotent.
+      /*
+       * The other side of a trade.
+       *
+       * capx.ledger_entries records what a person is owed, and that is the
+       * only thing thirty-odd queries in this codebase read it for. Adding
+       * CAPX's own legs to it would silently change every one of those sums —
+       * liabilities, solvency, the claim gap, the daily net flow — so the
+       * house side of a trade is written here instead, keyed to the same
+       * trade id.
+       *
+       * It is one journal in two tables rather than two books: recordTrade
+       * refuses to write anything at all unless every asset across both sides
+       * nets to zero, which is the property that was missing. Splitting it
+       * this way buys that guarantee without putting a migration through
+       * every aggregate query in the application on the same day.
+       */
+      await sql`
+        create table if not exists capx.journal_legs (
+          id         bigserial primary key,
+          trade_id   text not null,
+          /* inventory | fee | float | provider — whose side of the house. */
+          account    text not null,
+          asset      text not null,
+          amount     numeric(38,8) not null,
+          ref        text,
+          metadata   jsonb not null default '{}'::jsonb,
+          created_at timestamptz not null default now()
+        )`;
+
       await sql`
         create table if not exists capx.orders (
           id            uuid primary key default gen_random_uuid(),
@@ -789,6 +818,16 @@ export async function migrate() {
              face is recognisable before the sentence is read. */
           "actor text",
         ],
+        withdrawal_queue: [
+          /*
+           * What has already gone out against this row.
+           *
+           * A short float is now shared out rather than spent on whoever
+           * asked first, so a row can be part paid and stay queued for the
+           * rest. Without this the retry would send the full amount again.
+           */
+          "paid_tzs numeric(38,2) not null default 0",
+        ],
         lp_fills: [
           /*
            * Which way the fill went.
@@ -878,6 +917,9 @@ export async function migrate() {
                   on capx.comments(parent_id, created_at) where parent_id is not null`;
       await sql`create index if not exists lp_fills_provider_idx
                   on capx.lp_fills(provider_id, created_at desc)`;
+      await sql`create index if not exists journal_trade_idx on capx.journal_legs(trade_id)`;
+      await sql`create unique index if not exists journal_ref_idx
+                  on capx.journal_legs(ref) where ref is not null`;
       await sql`create index if not exists withdrawal_queue_open_idx
                   on capx.withdrawal_queue(status, created_at) where status = 'queued'`;
       await sql`create unique index if not exists wallet_links_address_idx

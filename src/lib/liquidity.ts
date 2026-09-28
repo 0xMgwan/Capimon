@@ -181,23 +181,38 @@ export async function capacityOf(p: Provider): Promise<{
     };
   }
 
+  const { availableTzs, reason } = capacityFrom(p, { cashTzs, inventoryTzs, drawnTodayTzs });
+  return { availableTzs, cashTzs, inventoryTzs, drawnTodayTzs, reason };
+}
+
+/**
+ * The limit arithmetic on its own, with nothing to read.
+ *
+ * Separated from capacityOf so it can be tested directly. What it decides —
+ * whether a provider can be called on, and which of their terms stops them —
+ * is the part that has to be right; the balances it decides on are read
+ * somewhere else and are not interesting to a test.
+ */
+export function capacityFrom(
+  p: Pick<Provider, "active" | "floorTzs" | "committedTzs" | "maxDailyTzs">,
+  held: { cashTzs: number; inventoryTzs: number; drawnTodayTzs: number },
+): { availableTzs: number; reason: string | null } {
+  if (!p.active) return { availableTzs: 0, reason: "paused by the provider" };
+
   /* The binding constraint, whichever it is. */
   const limits: { room: number; reason: string }[] = [
-    { room: cashTzs - p.floorTzs, reason: "balance is at the agreed floor" },
+    { room: held.cashTzs - p.floorTzs, reason: "balance is at the agreed floor" },
   ];
   if (p.committedTzs !== null) {
-    limits.push({ room: p.committedTzs - inventoryTzs, reason: "committed size is fully drawn" });
+    limits.push({ room: p.committedTzs - held.inventoryTzs, reason: "committed size is fully drawn" });
   }
   if (p.maxDailyTzs !== null) {
-    limits.push({ room: p.maxDailyTzs - drawnTodayTzs, reason: "daily limit reached" });
+    limits.push({ room: p.maxDailyTzs - held.drawnTodayTzs, reason: "daily limit reached" });
   }
 
   const tightest = limits.reduce((a, b) => (b.room < a.room ? b : a));
   const availableTzs = Math.max(0, tightest.room);
-  return {
-    availableTzs, cashTzs, inventoryTzs, drawnTodayTzs,
-    reason: availableTzs > 0 ? null : tightest.reason,
-  };
+  return { availableTzs, reason: availableTzs > 0 ? null : tightest.reason };
 }
 
 /**
@@ -401,6 +416,8 @@ export async function absorbClaims(neededTzs: number): Promise<{ retiredTzs: num
  * exists to clear. Null when it cannot be read, and a null must never be
  * read as zero: not knowing is not the same as being square.
  */
+export const claimGapOf = (owedTzs: number, cashTzs: number) => owedTzs - cashTzs;
+
 export async function cashClaimGapTzs(): Promise<number | null> {
   try {
     const { omnibusBalances } = await import("./omnibus");
@@ -463,13 +480,16 @@ const RELEASE_HEADROOM = 1.25;
  * below. Checking against `owed` alone overstated the budget by a quarter of
  * itself and released the float straight past the level it was protecting.
  */
+export const releaseBudgetOf = (owedTzs: number, cashTzs: number) =>
+  cashTzs / RELEASE_HEADROOM - owedTzs;
+
 export async function releasableTzs(): Promise<number | null> {
   try {
     const { omnibusBalances } = await import("./omnibus");
     const { totalLiabilities } = await import("./ledger");
     const [omnibus, liabilities] = await Promise.all([omnibusBalances(), totalLiabilities()]);
     const owed = liabilities.find((l) => l.asset === "TZS")?.amount ?? 0;
-    return omnibus.tzs / RELEASE_HEADROOM - owed;
+    return releaseBudgetOf(owed, omnibus.tzs);
   } catch {
     return null;
   }

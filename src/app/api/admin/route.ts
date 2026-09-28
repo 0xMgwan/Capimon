@@ -177,6 +177,32 @@ export async function GET(req: Request) {
          facility, as distinct from the stress figure above it. */
       import("@/lib/netFlow").then((m) => m.netFlow(30)).catch(() => null),
     ]);
+
+    /*
+     * Who is waiting to be paid, and what the standing bid can cover.
+     *
+     * These belong next to each other: a queue with capacity behind it drains
+     * on the next tick and needs nobody; a queue with none is a person waiting
+     * on a decision only CAPX can make.
+     */
+    const [queue, facility] = await Promise.all([
+      sql<{ waiting: number; owed: string; oldest: string | null; failed: number }[]>`
+        select count(*) filter (where status = 'queued')::int as waiting,
+               coalesce(sum(amount_tzs) filter (where status = 'queued'), 0)::text as owed,
+               min(created_at) filter (where status = 'queued')::text as oldest,
+               count(*) filter (where status = 'failed')::int as failed
+          from capx.withdrawal_queue`.catch(() => []),
+      import("@/lib/liquidity").then(async (m) => {
+        const list = await m.providers();
+        const rows = await Promise.all(list.map(async (p) => ({
+          name: p.name, active: p.active, ...(await m.capacityOf(p)),
+        })));
+        return {
+          providers: rows,
+          availableTzs: rows.reduce((t, r) => t + r.availableTzs, 0),
+        };
+      }).catch(() => null),
+    ]);
     const fees = { position: feePos, sweeps };
 
     return NextResponse.json({
@@ -189,6 +215,11 @@ export async function GET(req: Request) {
                (select count(*)::int from capx.deposits where status = 'settled') as deposits`,
       redemption,
       flow,
+      queue: queue[0]
+        ? { waiting: queue[0].waiting, owedTzs: Number(queue[0].owed),
+            oldest: queue[0].oldest, failed: queue[0].failed }
+        : null,
+      facility,
       totals: {
         users: totals[0]?.users ?? 0,
         pendingDeposits: totals[0]?.pending ?? 0,

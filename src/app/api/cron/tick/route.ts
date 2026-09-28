@@ -81,6 +81,20 @@ export async function GET(req: Request) {
   }
 
   /*
+   * The people who were told their withdrawal would follow.
+   *
+   * Every tick, because a queued payout is money somebody is waiting on and
+   * the float refills whenever anybody deposits or buys. Cheap when the queue
+   * is empty, which is the normal case: one indexed query returning nothing.
+   */
+  try {
+    const { reconcileQueue } = await import("@/lib/withdrawalQueue");
+    did.withdrawalQueue = await reconcileQueue();
+  } catch (e) {
+    did.withdrawalQueue = { error: e instanceof Error ? e.message : "failed" };
+  }
+
+  /*
    * Dividends and splits, once each morning.
    *
    * A multiplier moves rarely and never urgently, so this belongs on the

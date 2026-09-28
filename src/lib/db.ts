@@ -500,6 +500,98 @@ export async function migrate() {
         )`;
 
       await sql`
+        /*
+         * Whoever stands ready to buy inventory so a customer can be paid.
+         *
+         * A redemption needs shillings, and the shillings arrive when
+         * somebody buys the tokens the seller handed back. Usually that is
+         * the next customer. When it is not, it is one of these: an account
+         * that keeps a funded balance and has agreed, in advance, to be the
+         * buyer.
+         *
+         * It is a row rather than an environment variable because there will
+         * be more than one. FIMCO first, since they already custody the
+         * underlying and a claim on CAPX against their own shares is
+         * circular in their favour — but nothing here is specific to them.
+         *
+         * Every limit is nullable and every null means "no limit yet". The
+         * shape is here so the terms can be written down the day they are
+         * agreed, rather than the schema having to change then.
+         */
+        create table if not exists capx.liquidity_providers (
+          id            uuid primary key default gen_random_uuid(),
+          name          text not null,
+          /* The CAPX account holding their shillings and their inventory.
+             Their money sits in the omnibus like everybody else's, and this
+             is what records that it is theirs. */
+          user_id       uuid not null references capx.users(id) on delete cascade,
+          /* Their own login for the desk, stored as a digest. */
+          token_hash    text unique,
+          /* The most inventory they will hold, valued at the mark. Null until
+             a size is agreed. */
+          committed_tzs numeric(38,2),
+          /* The most they will be asked for in one day, so a bad week cannot
+             drain them in an afternoon. */
+          max_daily_tzs numeric(38,2),
+          /* Stop buying before the balance reaches zero: a facility that
+             fails gracefully is worth more than one that fails completely. */
+          floor_tzs     numeric(38,2) not null default 0,
+          /* Refuse to buy when the published mark is further than this from
+             the exchange's own close. Buying blind is how an automatic bid
+             becomes a blank cheque. */
+          band_pct      numeric(6,2),
+          /* Their switch, not ours. */
+          active        boolean not null default true,
+          created_at    timestamptz not null default now()
+        )`;
+
+      await sql`
+        /*
+         * A payout waiting for the shillings to arrive.
+         *
+         * Refusing a withdrawal is honest and unpleasant: the customer did
+         * nothing wrong, their balance is real, and being told to come back
+         * later reads as a broken promise. Queueing says the same thing
+         * without the refusal — it is accepted, it is waiting, and it will be
+         * sent.
+         *
+         * Only reached when the float is short and no provider could cover
+         * it, which with a funded standing bid should be rare. The row is the
+         * record that somebody is owed money and that CAPX knows it.
+         */
+        create table if not exists capx.withdrawal_queue (
+          id           uuid primary key default gen_random_uuid(),
+          user_id      uuid not null references capx.users(id) on delete cascade,
+          amount_tzs   numeric(38,2) not null,
+          /* Where it is going, as the withdrawal route understood it. */
+          destination  jsonb not null default '{}'::jsonb,
+          /* queued | sent | cancelled | failed */
+          status       text not null default 'queued',
+          attempts     integer not null default 0,
+          last_error   text,
+          created_at   timestamptz not null default now(),
+          sent_at      timestamptz
+        )`;
+
+      await sql`
+        /*
+         * What a provider was asked for and what they bought.
+         *
+         * The daily limit is enforced from this rather than from a counter on
+         * the provider row, because a counter has to be reset by something
+         * and a sum does not.
+         */
+        create table if not exists capx.lp_fills (
+          id          uuid primary key default gen_random_uuid(),
+          provider_id uuid not null references capx.liquidity_providers(id) on delete cascade,
+          symbol      text not null,
+          qty         numeric(38,8) not null,
+          tzs         numeric(38,2) not null,
+          order_id    uuid,
+          created_at  timestamptz not null default now()
+        )`;
+
+      await sql`
         create table if not exists capx.job_runs (
           job        text primary key,
           ran_at     timestamptz not null default now(),
@@ -756,6 +848,10 @@ export async function migrate() {
       await sql`create index if not exists comments_user_idx on capx.comments(user_id)`;
       await sql`create index if not exists comments_parent_idx
                   on capx.comments(parent_id, created_at) where parent_id is not null`;
+      await sql`create index if not exists lp_fills_provider_idx
+                  on capx.lp_fills(provider_id, created_at desc)`;
+      await sql`create index if not exists withdrawal_queue_open_idx
+                  on capx.withdrawal_queue(status, created_at) where status = 'queued'`;
       await sql`create unique index if not exists wallet_links_address_idx
                   on capx.wallet_links (lower(address)) where revoked_at is null`;
       await sql`create index if not exists wallet_links_user_idx on capx.wallet_links(user_id)`;

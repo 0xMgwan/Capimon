@@ -65,6 +65,12 @@ type Admin = {
     totalValueTzs: number; totalPaidTzs: number; unrealisedTzs: number;
     cashTzs: number; owedCashTzs: number; coverPct: number | null; shortfallTzs: number;
   } | null;
+  queue: { waiting: number; owedTzs: number; oldest: string | null; failed: number } | null;
+  facility: {
+    providers: { name: string; active: boolean; availableTzs: number; cashTzs: number;
+                 inventoryTzs: number; drawnTodayTzs: number; reason: string | null }[];
+    availableTzs: number;
+  } | null;
   flow: {
     days: { day: string; depositsTzs: number; withdrawalsTzs: number; netCashTzs: number;
             claimsCreatedTzs: number; claimsSpentTzs: number }[];
@@ -753,6 +759,81 @@ export function AdminPanel() {
           </div>
         );
       })()}
+
+      {/*
+        * Who is waiting to be paid, and who can cover it.
+        *
+        * A queued withdrawal is not an error state — it is CAPX keeping a
+        * promise it made out loud, and it drains on its own as soon as the
+        * float or the standing bid can cover it. What matters on the desk is
+        * whether it is draining. A queue with capacity behind it needs
+        * nobody; a queue with none is somebody waiting on a decision only
+        * CAPX can take.
+        */}
+      {((data.queue && (data.queue.waiting > 0 || data.queue.failed > 0)) || data.facility?.providers.length) && (
+        <div id="liquidity" className="mt-4 scroll-mt-24 rounded-2xl border hairline p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <div>
+              <div className="eyebrow">Waiting to be paid</div>
+              <div className={`tnum mt-1.5 text-2xl font-medium ${
+                (data.queue?.waiting ?? 0) > 0 ? "text-[#b45309]" : ""}`}>
+                {Math.round(data.queue?.owedTzs ?? 0).toLocaleString()} TZS
+              </div>
+              <div className="mt-1 text-[12px] text-[var(--muted)]">
+                {(data.queue?.waiting ?? 0) === 0
+                  ? "Nobody is queued."
+                  : `${data.queue?.waiting} withdrawal${data.queue?.waiting === 1 ? "" : "s"}, oldest ${
+                      data.queue?.oldest ? new Date(data.queue.oldest).toLocaleString("en-GB", {
+                        day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+                      }) : "—"}`}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="eyebrow">Standing bid can cover</div>
+              <div className={`tnum mt-1.5 text-2xl font-medium ${
+                (data.facility?.availableTzs ?? 0) >= (data.queue?.owedTzs ?? 0)
+                  ? "text-[var(--color-up)]" : "text-[#b45309]"}`}>
+                {Math.round(data.facility?.availableTzs ?? 0).toLocaleString()} TZS
+              </div>
+              <div className="mt-1 text-[12px] text-[var(--muted)]">
+                <a href="/lp" className="underline underline-offset-2">Provider desk</a>
+              </div>
+            </div>
+          </div>
+
+          {data.queue && data.queue.failed > 0 && (
+            <p className="mt-3 text-[12px] text-[var(--color-down)]">
+              {data.queue.failed} payout{data.queue.failed === 1 ? " has" : "s have"} stopped
+              retrying and need a person — the destination or the rail is refusing them. The
+              balances were refunded and are intact.
+            </p>
+          )}
+
+          {!data.facility?.providers.length ? (
+            <p className="mt-3 text-[12px] leading-relaxed text-[var(--muted)]">
+              No liquidity provider is set up. Until one is, a cash-out larger than the float waits
+              for a deposit or for inventory to be sold on the exchange.
+            </p>
+          ) : (
+            <div className="mt-4 grid gap-1.5">
+              {data.facility.providers.map((p) => (
+                <div key={p.name} className="flex items-center gap-3 rounded-xl surface px-3.5 py-2 text-[12px]">
+                  <span className="w-24 shrink-0 font-medium">{p.name}</span>
+                  <span className="shrink-0 text-[var(--muted)]">
+                    {p.active ? (p.reason ?? "bidding") : "paused"}
+                  </span>
+                  <span className="tnum ml-auto shrink-0 text-[var(--muted)]">
+                    {Math.round(p.inventoryTzs).toLocaleString()} held
+                  </span>
+                  <span className="tnum w-28 shrink-0 text-right">
+                    {Math.round(p.availableTzs).toLocaleString()} TZS
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/*
         * What a redemption would cost, which solvency does not answer.

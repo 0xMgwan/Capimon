@@ -7,38 +7,11 @@ import { balanceOf, record } from "@/lib/ledger";
 import { notify } from "@/lib/notify";
 import { requireDb, bad, notConfigured } from "@/lib/apiHelpers";
 import { omnibusUserId, capabilities } from "@/lib/omnibus";
+import { spendableTzs, chooseRail, executePayout } from "@/lib/payout";
 
 export const dynamic = "force-dynamic";
 
 const MIN_TZS = 5_000;
-
-/**
- * What the account can actually withdraw, in shillings.
- *
- * A deposit settles as TZS on the wallet routes and as USDC on the ramp, so an
- * account may hold either. Checking TZS alone told a fully funded ramp customer
- * their balance was zero.
- */
-async function spendableTzs(userId: string) {
-  const [tzs, usdc] = await Promise.all([
-    balanceOf(userId, "TZS"),
-    balanceOf(userId, "USDC"),
-  ]);
-  if (usdc <= 0) return { tzs, usdc, totalTzs: tzs, usdcPerTzs: null as number | null };
-
-  // Value the USDC leg at the live shilling rate; without one, only the TZS
-  // balance is offered rather than guessing at a conversion.
-  let usdcPerTzs: number | null = null;
-  try {
-    const r = await getSwapRate("NTZS", "USDC", 100_000);
-    const out = Number(r.expectedOutput ?? 0);
-    if (out > 0) usdcPerTzs = out / 100_000;
-  } catch { /* fall back to shillings only */ }
-
-  const totalTzs = tzs + (usdcPerTzs ? usdc / usdcPerTzs : 0);
-  return { tzs, usdc, totalTzs, usdcPerTzs };
-}
-
 
 /**
  * Whether CAPX can presently fund this payout, said before it is attempted.
@@ -57,10 +30,110 @@ async function spendableTzs(userId: string) {
  * proceeds. Blocking a good payout because a balance could not be read would
  * be the worse mistake, and the rails refuse honestly on their own.
  */
-async function capacityRefusal(amountTzs: number) {
+async function capacityRefusal(amountTzs: number, userId: string, dest: PayoutDest, label: string) {
   const { payoutCapacityTzs } = await import("@/lib/ntzsFunding");
-  const capacity = await payoutCapacityTzs();
+  let capacity = await payoutCapacityTzs();
   if (capacity === null || amountTzs <= capacity) return null;
+
+  /*
+   * Ask the standing bid before telling anybody no.
+   *
+   * The float is short precisely because customers sold: their tokens are
+   * sitting in inventory and the shillings that were in the float went out
+   * with the last payout. Selling that inventory to a provider who has
+   * agreed to buy it turns it straight back into shillings — and because
+   * their balance already sits in the omnibus, the purchase is a ledger
+   * reassignment rather than a transfer, so it is done by the time this line
+   * returns.
+   *
+   * This is the ordinary path once a provider is funded. Everything below is
+   * what happens when there is none, or theirs is exhausted.
+   */
+  try {
+    const { raiseLiquidity } = await import("@/lib/liquidity");
+    const { raisedTzs } = await raiseLiquidity(amountTzs - capacity);
+    if (raisedTzs > 0) {
+      const again = await payoutCapacityTzs();
+      if (again === null || amountTzs <= again) return null;
+      capacity = again;
+    }
+  } catch {
+    /* A provider failing is not a reason to lose the payout; it queues. */
+  }
+
+  /*
+   * Queued rather than refused.
+   *
+   * The customer did nothing wrong, their balance is real, and telling them
+   * to come back later reads as a broken promise. This says the same thing
+   * without the refusal: accepted, waiting, and it will be sent. The row is
+   * the record that somebody is owed money and that CAPX knows it.
+   */
+  {
+    const { db, migrate } = await import("@/lib/db");
+    await migrate();
+    const sql = db();
+
+    /*
+     * A queued row is not a debit.
+     *
+     * The balance is only taken when the payout actually goes out, which is
+     * right — the customer keeps their money while they wait. It also means
+     * the balance check that guarded this request cannot see what is already
+     * queued, so the same shillings could be promised twice and the second
+     * one would be cancelled by the scheduler after the customer had been
+     * told it was accepted. Counting what is already waiting closes that.
+     */
+    const [waiting] = await sql<{ total: string }[]>`
+      select coalesce(sum(amount_tzs), 0)::text as total from capx.withdrawal_queue
+       where user_id = ${userId}::uuid and status = 'queued'`;
+    const alreadyQueued = Number(waiting?.total ?? 0);
+    if (alreadyQueued > 0) {
+      const { spendableTzs } = await import("@/lib/payout");
+      const funds = await spendableTzs(userId).catch(() => null);
+      if (funds && alreadyQueued + amountTzs > funds.totalTzs + 1) {
+        return bad(
+          `You already have ${Math.round(alreadyQueued).toLocaleString()} TZS queued for payout, `
+          + `which is most of your balance. That will be sent shortly — wait for it before asking `
+          + `for more.`,
+          "already_queued",
+          409,
+        );
+      }
+    }
+
+    const queued = await sql<{ id: string }[]>`
+      insert into capx.withdrawal_queue (user_id, amount_tzs, destination)
+      values (${userId}::uuid, ${amountTzs}, ${sql.json({ ...dest, label } as never)})
+      returning id::text`.catch(() => [] as { id: string }[]);
+
+    if (queued.length) {
+      const { notify } = await import("@/lib/notify");
+      await notify({
+        userId, kind: "withdrawal", ref: `queued:${queued[0].id}`,
+        title: "Your withdrawal is queued",
+        body: `${Math.round(amountTzs).toLocaleString()} TZS to ${label} is on its way. It will be sent shortly.`,
+        url: "/activity",
+      }).catch(() => {});
+
+      const { sendMail } = await import("@/lib/mail");
+      await sendMail({
+        subject: "CAPX: a withdrawal is queued for want of shillings",
+        text:
+          `${Math.round(amountTzs).toLocaleString()} TZS is queued. The float can presently fund ` +
+          `${Math.round(capacity).toLocaleString()} TZS and the standing bid could not close the ` +
+          `gap.\n\nThe customer's balance is real and is not in question — what is short is ` +
+          `shillings, because the value is sitting in inventory rather than in the float. Either ` +
+          `fund a provider, or sell inventory on the exchange.`,
+      }).catch(() => {});
+
+      return NextResponse.json({
+        ok: true, queued: true,
+        note: "Your withdrawal is accepted and queued. It will be sent shortly — "
+          + "your balance is safe and unchanged in the meantime.",
+      });
+    }
+  }
 
   /*
    * The desk hears about it immediately. A customer hitting this is the first
@@ -83,37 +156,6 @@ async function capacityRefusal(amountTzs: number) {
     "payout_capacity",
     409,
   );
-}
-
-/**
- * Which rail pays this out.
- *
- * Shillings first, whenever the omnibus is holding enough of them.
- *
- * The ramp pays from the USDC float, so using it means sending dollars to the
- * float and having them converted back into shillings at the other end. For
- * someone who sold a shilling-priced share, holds shillings, and is being paid
- * in shillings, that is a round trip through a currency nobody involved asked
- * for — and it is charged a spread on both legs.
- *
- * The ramp used to be preferred unconditionally because the disbursement rail
- * refuses to quote more than the omnibus is holding. That is a real limit, but
- * it is a balance that can be read rather than a reason to avoid the rail
- * entirely. So: disburse when the shillings are already there, and fall back to
- * the ramp when they are not.
- */
-async function chooseRail(amountTzs: number, rampAvailable: boolean) {
-  if (!rampAvailable) return false;
-  try {
-    const { omnibusBalances } = await import("@/lib/omnibus");
-    const omnibus = await omnibusBalances();
-    // A small margin, so a payout is not routed to a balance that a concurrent
-    // trade is about to spend.
-    if (omnibus.tzs >= amountTzs * 1.02) return false;
-  } catch {
-    /* cannot read the omnibus: the ramp can always fund itself */
-  }
-  return true;
 }
 
 /**
@@ -170,8 +212,21 @@ export async function GET(req: Request) {
     if (amountTzs > funds.totalTzs) {
       return bad(`Your balance is ${Math.floor(funds.totalTzs).toLocaleString()} TZS.`, "insufficient_balance");
     }
-    const noCapacity = await capacityRefusal(amountTzs);
-    if (noCapacity) return noCapacity;
+    /*
+     * Pricing is not committing, so nothing here spends or promises anything.
+     *
+     * The capacity check used to run on this leg too, and once it grew the
+     * power to call the standing bid and to write a queue row, running it here
+     * meant that merely typing an amount into the field could buy a provider's
+     * inventory and enrol somebody in a queue they had not agreed to join. The
+     * check belongs on the leg where the customer presses the button.
+     *
+     * What this leg owes them is warning, not silence: if the float is short
+     * the quote still prices, and says the payout will be queued.
+     */
+    const { payoutCapacityTzs } = await import("@/lib/ntzsFunding");
+    const capacity = await payoutCapacityTzs();
+    const willQueue = capacity !== null && amountTzs > capacity;
 
     const caps = await capabilities();
     // Ramp pays phones only, so a bank payout always takes the disbursement rail.
@@ -225,6 +280,11 @@ export async function GET(req: Request) {
       // Fail-soft: no name available is normal, never a reason to block.
       recipientName: quote.recipientName ?? recipient.name ?? null,
       phoneNumber, destination: parsed.label,
+      willQueue,
+      queueNote: willQueue
+        ? "The float is short of shillings right now, so this will be accepted and queued rather "
+          + "than sent immediately. Your balance stays yours until it goes out."
+        : undefined,
     }, { headers: { "cache-control": "no-store" } });
   } catch (e) {
     const err = e instanceof NtzsError ? e : null;
@@ -255,109 +315,25 @@ export async function POST(req: Request) {
     const parsed = readDest((k) => (body[k] == null ? null : String(body[k])), null);
     if ("error" in parsed) return bad(parsed.error);
     const { dest, label } = parsed;
-    const phoneNumber = dest.phoneNumber ?? "";
 
     // Re-check against the ledger: the quote may be seconds old.
     const funds = await spendableTzs(user.id);
     if (amountTzs > funds.totalTzs) {
       return bad(`Your balance is ${Math.floor(funds.totalTzs).toLocaleString()} TZS.`, "insufficient_balance");
     }
-    const noCapacity = await capacityRefusal(amountTzs);
+    const noCapacity = await capacityRefusal(amountTzs, user.id, dest, label);
     if (noCapacity) return noCapacity;
 
-    // Same rail choice as the quote, for the same reasons.
-    const caps = await capabilities();
-    const viaRamp = dest.bankCode ? false : await chooseRail(amountTzs, caps.ramp.available);
-
     /*
-     * Debit before paying out, and refund if the payout does not happen.
-     *
-     * Paying first and recording after leaves one ordering where money reaches
-     * the customer and the ledger never learns of it — which is exactly what
-     * happened: an off-ramp settled, the bookkeeping after it threw, and the
-     * balance went on claiming funds that had already left. A debit that gets
-     * reversed is recoverable; money out with no debit is not.
-     *
-     * Keyed to the quote, which exists before the payout does, so a retry after
-     * an uncertain response cannot debit twice.
+     * The debit, the rail and the refund rule all live in one place, so the
+     * scheduler retrying a queued payout cannot drift from what a request
+     * does. The quote id is the idempotency key: an uncertain response can
+     * be retried without debiting the same person twice.
      */
-    const fromTzs = Math.min(funds.tzs, amountTzs);
-    const remainderTzs = amountTzs - fromTzs;
-    const fromUsdc = remainderTzs > 0 && funds.usdcPerTzs ? remainderTzs * funds.usdcPerTzs : 0;
-    const rail = viaRamp ? "ramp" : "disbursement";
-
-    await record([
-      ...(fromTzs > 0
-        ? [{ userId: user.id, kind: "withdrawal" as const, asset: "TZS", amount: (-fromTzs).toString(),
-             ref: `withdrawal:${quoteId}`, metadata: { destination: label, ...dest, quoteId, rail } }]
-        : []),
-      ...(fromUsdc > 0
-        ? [{ userId: user.id, kind: "withdrawal" as const, asset: "USDC", amount: (-fromUsdc).toString(),
-             ref: `withdrawal:${quoteId}:usdc`, metadata: { destination: label, ...dest, quoteId, amountTzs: remainderTzs } }]
-        : []),
-    ]);
-
-    let result: { id?: string; status?: string };
-    try {
-      /*
-       * Fund first, quote second, spend immediately.
-       *
-       * A ramp quote is locked for about a minute. Funding the float is a chain
-       * transfer that takes seconds to tens of seconds, and it used to run
-       * between the quote being priced and the payout being requested — so the
-       * quote the customer had read was routinely dead by the time it was
-       * spent, and the payout came back "expired, already used, or not an
-       * off-ramp quote". The quote shown in the panel is indicative; the one
-       * that actually pays is fetched here, moments before it is used.
-       *
-       * The customer's original quote id still keys the ledger entries, so a
-       * retry after an uncertain response cannot debit the same person twice.
-       */
-      if (viaRamp) {
-        const { fundRampFloat } = await import("@/lib/ntzsFunding");
-        await fundRampFloat(amountTzs, phoneNumber);
-
-        const fresh = await rampQuote({ direction: "offramp", amount: amountTzs, phoneNumber });
-        const freshId = String(fresh.quoteId ?? fresh.id ?? fresh.quote_id ?? fresh.reference ?? "");
-        if (!freshId) throw new NtzsError("quote_unavailable", "Could not price the payout just before sending it.", 502);
-
-        result = await rampOfframp({ quoteId: freshId, phoneNumber });
-      } else {
-        const { ensureNtzsHasTzs } = await import("@/lib/ntzsFunding");
-        await ensureNtzsHasTzs(amountTzs);
-
-        const omnibus = await omnibusUserId();
-        const fresh = await withdrawalQuote({ userId: omnibus, amountTzs, ...dest });
-        const freshId = fresh.quoteId ?? quoteId;
-
-        result = await createWithdrawal({
-          userId: omnibus, quoteId: freshId, amountTzs, ...dest,
-        });
-      }
-    } catch (payoutError) {
-      /*
-       * Refund only when the payout certainly did not happen. An uncertain
-       * outcome — a timeout, a 5xx — may still have moved money, so the debit
-       * stands and the row is left for reconciliation rather than handing back
-       * funds that already left.
-       */
-      const err = payoutError instanceof NtzsError ? payoutError : null;
-      const uncertain = err?.retry === "verify";
-      if (!uncertain) {
-        await record([
-          ...(fromTzs > 0
-            ? [{ userId: user.id, kind: "adjustment" as const, asset: "TZS", amount: fromTzs.toString(),
-                 ref: `withdrawal:${quoteId}:refund`, metadata: { quoteId, reason: "payout did not execute" } }]
-            : []),
-          ...(fromUsdc > 0
-            ? [{ userId: user.id, kind: "adjustment" as const, asset: "USDC", amount: fromUsdc.toString(),
-                 ref: `withdrawal:${quoteId}:refund-usdc`, metadata: { quoteId, reason: "payout did not execute" } }]
-            : []),
-        ]).catch(() => null);
-      }
-      throw payoutError;
-    }
-    const ref = String(result.id ?? quoteId);
+    const result = await executePayout({
+      userId: user.id, amountTzs, dest, label, key: quoteId,
+    });
+    const ref = result.ref;
 
     await notify({
       userId: user.id, kind: "withdrawal", ref: `withdrawal:${ref}`,
@@ -365,7 +341,7 @@ export async function POST(req: Request) {
       body: `On its way to ${label}.`,
     });
     return NextResponse.json({
-      ok: true, withdrawalId: ref, amountTzs, status: result.status ?? "submitted",
+      ok: true, withdrawalId: ref, amountTzs, status: result.status,
       note: dest.bankCode ? `On its way to your ${label}.` : "On its way to your mobile money account.",
     });
   } catch (e) {

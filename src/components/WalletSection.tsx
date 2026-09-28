@@ -140,7 +140,8 @@ export function WalletSection({ holdings }: {
   const [banks, setBanks] = useState<{ code: string; name: string }[]>([]);
   /* For the banks nTZS reaches but does not list. */
   const [otherBank, setOtherBank] = useState(false);
-  const [quote, setQuote] = useState<{ quoteId: string; feeTzs: number; recipientName: string | null; destination?: string } | null>(null);
+  const [quote, setQuote] = useState<{ quoteId: string; feeTzs: number; recipientName: string | null;
+                                      destination?: string; queueNote?: string } | null>(null);
 
   const loadDeposits = useCallback(async () => {
     try {
@@ -281,7 +282,8 @@ export function WalletSection({ holdings }: {
       const r = await fetch(`/api/ntzs/withdraw?amountTzs=${wdAmount}&${dest}`, { cache: "no-store" });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error);
-      setQuote({ quoteId: j.quoteId, feeTzs: j.feeTzs ?? 0, recipientName: j.recipientName ?? null, destination: j.destination });
+      setQuote({ quoteId: j.quoteId, feeTzs: j.feeTzs ?? 0, recipientName: j.recipientName ?? null,
+                 destination: j.destination, queueNote: j.queueNote });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not price that withdrawal");
     } finally {
@@ -668,12 +670,20 @@ export function WalletSection({ holdings }: {
                       <div className="tnum mt-1.5 flex justify-between gap-3 border-t hairline pt-1.5">
                         <span className="text-[var(--muted)]">{t("They receive")}</span><span>{TZS(wdAmount)}</span>
                       </div>
+                      {/* Said before the button, not after it: somebody who
+                          needs the money today deserves to know it will be
+                          queued while they can still change their mind. */}
+                      {quote.queueNote && (
+                        <p className="mt-2.5 rounded-lg bg-[var(--fg)]/5 p-2.5 text-[11px] leading-relaxed text-[var(--muted)]">
+                          {quote.queueNote}
+                        </p>
+                      )}
                       <button
                         onClick={confirmWithdraw}
                         disabled={busy}
                         className="mt-3 w-full rounded-full bg-[var(--fg)] py-3 text-sm font-medium text-[var(--bg)] disabled:opacity-50"
                       >
-                        {busy ? "Sending…" : "Confirm withdrawal"}
+                        {busy ? "Sending…" : quote.queueNote ? "Confirm and queue" : "Confirm withdrawal"}
                       </button>
                     </div>
                   ) : (

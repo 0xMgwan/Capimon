@@ -369,11 +369,14 @@ export function WalletSection({ holdings }: {
                 ].filter(Boolean) as string[];
                 if (!parts.length) return null;
                 return (
-                  <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11.5px] text-[var(--muted)] lg:mb-0">
-                    <NtzsIcon className="h-4 w-4" />
-                    <span className="tnum text-[var(--fg)]">{parts.join(" + ")}</span>
-                    {parts.length > 1 && <span>{t("each spent in its own currency")}</span>}
-                    {account.equity > 0 && <span>· {usd(account.equity)} {t("in shares")}</span>}
+                  <>
+                    <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11.5px] text-[var(--muted)] lg:mb-0">
+                      <NtzsIcon className="h-4 w-4" />
+                      <span className="tnum text-[var(--fg)]">{parts.join(" + ")}</span>
+                      {parts.length > 1 && <span>{t("each spent in its own currency")}</span>}
+                      {account.equity > 0 && <span>· {usd(account.equity)} {t("in shares")}</span>}
+                    </div>
+
                     {/*
                       * The way back out of dollars.
                       *
@@ -382,20 +385,43 @@ export function WalletSection({ holdings }: {
                       * recorded as USDC and there was no way to return it —
                       * so an account whose whole balance is shillings, whose
                       * intention was CRDB, was left holding a currency it
-                      * never chose. Offered only when there is a dollar
-                      * balance to move, because at any other time it would be
-                      * a currency desk, and CAPX is not one.
+                      * never chose.
+                      *
+                      * It was an eleven-pixel pill at the end of a muted line,
+                      * which is the smallest thing on the page for a decision
+                      * about the whole of somebody's balance. It says what the
+                      * money is, what it is worth today, and the two things
+                      * that can be done with it — because the useful answer is
+                      * often "nothing, you can withdraw it as it is".
+                      *
+                      * Offered only when there is a dollar balance to move. At
+                      * any other time it would be a currency desk, and CAPX is
+                      * not one.
                       */}
                     {account.cash >= 0.01 && (
-                      <button
-                        onClick={() => void convertToTzs()}
-                        disabled={converting}
-                        className="rounded-full border hairline px-2.5 py-0.5 text-[11px] font-medium transition-colors hover:surface disabled:opacity-50"
-                      >
-                        {converting ? t("Converting…") : `${t("Convert")} ${usd(account.cash)} → TZS`}
-                      </button>
+                      <div className="mt-3 rounded-2xl border hairline p-3.5 lg:mt-4">
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                          <span className="eyebrow">{t("Dollars in your account")}</span>
+                          <span className="tnum text-[11.5px] text-[var(--muted)]">
+                            {account.cashTzs ? `≈ ${TZS(account.cashTzs)} ${t("today")}` : null}
+                          </span>
+                        </div>
+                        <div className="tnum mt-1 text-2xl font-medium">{usd(account.cash)}</div>
+                        <p className="mt-1.5 text-[11.5px] leading-relaxed text-[var(--muted)]">
+                          {t("This buys US shares as it is. You can also withdraw it straight to mobile money — it converts on the way out at the same rate, so there is nothing to do first.")}
+                        </p>
+                        <button
+                          onClick={() => void convertToTzs()}
+                          disabled={converting}
+                          className="mt-3 w-full rounded-full border hairline py-2.5 text-[12.5px] font-medium transition-colors hover:surface disabled:opacity-50 sm:w-auto sm:px-5"
+                        >
+                          {converting
+                            ? t("Converting…")
+                            : `${t("Convert to shillings")}${account.cashTzs ? ` · ${TZS(account.cashTzs)}` : ""}`}
+                        </button>
+                      </div>
                     )}
-                  </div>
+                  </>
                 );
               })()}
             </div>

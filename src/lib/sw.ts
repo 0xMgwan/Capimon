@@ -825,4 +825,7 @@ export const SW: Record<string, string> = {
   "Choose": "Chagua",
   /* Tap feedback on an iPhone. */
   "A short click, played where an iPhone cannot vibrate. Safari can only reach the Taptic Engine from a tap, never from a gesture like pulling down to refresh — so this is the only feedback available there. It is sound rather than vibration, and turning it off is remembered.": "Mlio mfupi, unaochezwa pale iPhone isipoweza kutetema. Safari inaweza kufikia Taptic Engine kwa kugusa tu, kamwe si kwa ishara kama kuvuta chini kuonyesha upya — hivyo huu ndio mrejesho pekee unaopatikana hapo. Ni sauti badala ya mtetemo, na ukizima tutakumbuka.",
+  "Dollars in your account": "Dola kwenye akaunti yako",
+  "This buys US shares as it is. You can also withdraw it straight to mobile money \u2014 it converts on the way out at the same rate, so there is nothing to do first.": "Hii inanunua hisa za Marekani kama ilivyo. Unaweza pia kuitoa moja kwa moja kwenda kwenye simu \u2014 inabadilishwa wakati wa kutoka kwa kiwango kile kile, hivyo hakuna cha kufanya kwanza.",
+  "Convert to shillings": "Badilisha kuwa shilingi",
 };

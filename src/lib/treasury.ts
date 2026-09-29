@@ -6,7 +6,7 @@ import { publicClient } from "./chain";
 import { b20Abi } from "./abis";
 import { ASSETS, USDC_BASE, BY_SYMBOL } from "./assets";
 import { getRoute, buildRoute } from "./aggregator";
-import { feeParams } from "./fees";
+import { feeParams, FEE_BPS, feeEnabled } from "./fees";
 import { getMarkets } from "./markets";
 import type { Log } from "viem";
 
@@ -280,7 +280,31 @@ export type Execution = {
   price: number;
   venues: string[];
   impact: number;
+  /**
+   * The platform fee, in USDC, reconstructed rather than read.
+   *
+   * On a US trade the fee is a parameter on the aggregator route: the router
+   * pays the receiver inside the swap the treasury signs. Nothing hands it
+   * back, so it was never recorded anywhere and the receipt showed no fee at
+   * all — for a charge the customer had definitely paid.
+   *
+   * It is exact from what is already in hand, because each side knows which
+   * leg was charged. A buy is charged on the way in, so the fee is a share of
+   * the dollars sent. A sell is charged on the way out, so what arrived is
+   * already net and the fee is the part that did not.
+   */
+  fee: number;
 };
+
+/** The fee taken on the dollars sent into a buy. */
+const buyFee = (grossUsdc: number) =>
+  feeEnabled ? Math.round(grossUsdc * FEE_BPS / 10_000 * 1e6) / 1e6 : 0;
+
+/** The fee already deducted from what a sell delivered. */
+const sellFee = (netUsdc: number) =>
+  feeEnabled && FEE_BPS < 10_000
+    ? Math.round((netUsdc * FEE_BPS / (10_000 - FEE_BPS)) * 1e6) / 1e6
+    : 0;
 
 /**
  * Buys shares into the treasury on a user's behalf and reports exactly what
@@ -333,7 +357,7 @@ export async function executeBuy(symbol: string, usdcAmount: number): Promise<Ex
   }
 
   return { txHash, qty, usdc: usdcAmount, price: qty > 0 ? usdcAmount / qty : 0,
-    venues: route.venues, impact };
+    venues: route.venues, impact, fee: buyFee(usdcAmount) };
 }
 
 /** Sells a user's shares back to USDC. Mirror of the buy path. */
@@ -374,7 +398,8 @@ export async function executeSell(symbol: string, qty: number): Promise<Executio
     );
   }
 
-  return { txHash, qty, usdc, price: qty > 0 ? usdc / qty : 0, venues: route.venues, impact };
+  return { txHash, qty, usdc, price: qty > 0 ? usdc / qty : 0, venues: route.venues, impact,
+    fee: sellFee(usdc) };
 }
 
 /**

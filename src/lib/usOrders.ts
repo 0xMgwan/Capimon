@@ -374,7 +374,8 @@ export async function placeUsOrder(
 
       await sql`
         update capx.orders set status = 'settled', tx_hash = ${exec.txHash}, price = ${exec.price},
-               qty = ${exec.qty}, usdc_amount = ${exec.usdc}, settled_at = now()
+               qty = ${exec.qty}, usdc_amount = ${exec.usdc}, fee_usdc = ${exec.fee},
+               settled_at = now()
          where id = ${orderId}`;
 
       await notify({

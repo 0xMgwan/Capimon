@@ -92,9 +92,13 @@ export async function userActivity(userId: string, limit = 120): Promise<Activit
     sql<{ id: string; side: string; symbol: string; usdc_amount: string | null; qty: string | null;
           status: string; tx_hash: string | null; price: string | null; fee_usdc: string;
           error: string | null; created_at: string; settled_at: string | null;
-          metadata_tzs: string | null; metadata_fee: string | null }[]>`
+          metadata_tzs: string | null; metadata_fee: string | null;
+          swap_tzs: string | null; swap_usdc: string | null }[]>`
       select o.id::text, o.side, o.symbol, o.usdc_amount::text, o.qty::text, o.status,
              o.tx_hash, o.price::text, o.fee_usdc::text, o.error, o.created_at, o.settled_at,
+             /* What a shilling-funded order converted, so a dollar fee can be
+                shown in the currency the row is actually denominated in. */
+             o.swap_tzs::text, o.swap_usdc::text,
              /*
               * The shilling leg, where there was one.
               *
@@ -172,7 +176,25 @@ export async function userActivity(userId: string, limit = 120): Promise<Activit
       amount: tzs ?? num(o.usdc_amount),
       currency: tzs !== null ? "TZS" : "USDC",
       price: num(o.price),
-      fee: num(o.metadata_fee) ?? num(o.fee_usdc),
+      /*
+       * The fee, in the same money as the row.
+       *
+       * A DSE order carries it in shillings on the cash leg's metadata. A US
+       * order carries it in dollars on the order row — and when that order was
+       * paid for in shillings, the row reads in shillings, so a dollar figure
+       * beside it would be a third number in a second currency. The swap this
+       * order actually did is recorded, so it converts at the rate the
+       * customer really got rather than at today's.
+       */
+      fee: (() => {
+        const inMetadata = num(o.metadata_fee);
+        if (inMetadata !== null) return inMetadata;
+        const feeUsdc = num(o.fee_usdc);
+        if (feeUsdc === null || tzs === null) return feeUsdc;
+        const swapTzs = num(o.swap_tzs);
+        const swapUsdc = num(o.swap_usdc);
+        return swapTzs && swapUsdc ? feeUsdc * (swapTzs / swapUsdc) : null;
+      })(),
       error: o.error,
       refs,
       note: null,

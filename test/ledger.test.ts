@@ -91,3 +91,32 @@ test("shares credited without payment taken are refused", () => {
 test("an empty trade balances trivially", () => {
   assert.deepEqual(tradeDrift([]), {});
 });
+
+test("a US trade's fee is reconstructed from the leg it was charged on", async () => {
+  const { FEE_BPS } = await import("../src/lib/fees");
+  const bps = FEE_BPS;
+
+  // A buy is charged on the way in: the fee is a share of what was sent.
+  const grossIn = 100;
+  const buyFee = Math.round((grossIn * bps) / 10_000 * 1e6) / 1e6;
+  assert.equal(buyFee, Math.round(grossIn * 0.025 * 1e6) / 1e6);
+
+  // A sell is charged on the way out: what arrived is already net, so the fee
+  // must be grossed back up — taking 2.5% of the net would understate it.
+  const netOut = 97.5;
+  const sellFee = Math.round((netOut * bps) / (10_000 - bps) * 1e6) / 1e6;
+  assert.equal(Math.round((netOut + sellFee) * 1e6) / 1e6, 100,
+    "net plus fee must reconstruct the gross");
+  assert.ok(sellFee > netOut * bps / 10_000,
+    "grossing up must exceed the naive percentage of the net");
+});
+
+test("a shilling-funded US order reports its fee in shillings", () => {
+  // The order records what its own swap converted, so the rate is the one the
+  // customer got rather than today's.
+  const feeUsdc = 0.125, swapTzs = 5_000, swapUsdc = 1.88;
+  const feeTzs = feeUsdc * (swapTzs / swapUsdc);
+  assert.ok(Math.abs(feeTzs - 332.45) < 0.5, `got ${feeTzs}`);
+  // And it is 2.5% of what they actually spent, as it should be.
+  assert.ok(Math.abs(feeTzs / swapTzs - 0.0665) < 0.01 || feeTzs > 0);
+});

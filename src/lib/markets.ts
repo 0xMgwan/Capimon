@@ -56,7 +56,44 @@ async function history(feed: `0x${string}`, latestRound: bigint, count: number):
 /**
  * contractURI is effectively static, so logos are fetched once and kept for the
  * life of the server process rather than on every market poll.
+ *
+ * It is read on-chain and then followed, because the token itself is the only
+ * thing that can say where its own metadata lives. What it points at changed:
+ * it used to be a `data:` URI with the JSON inlined in base64, and it is now
+ * an https endpoint. Only the base64 form was handled, so every logo silently
+ * became null and the whole US board fell back to two-letter initials — a
+ * failure that looks like a design choice rather than a parse that stopped
+ * matching.
+ *
+ * Both forms are read now. A URL that cannot be fetched still yields null and
+ * still falls back to initials, which is the right outcome for a missing logo
+ * and the wrong one to arrive at by accident.
  */
+const LOGO_FETCH_TIMEOUT_MS = 4_000;
+
+async function imageFromUri(uri: string): Promise<string | null> {
+  try {
+    if (uri.includes("base64,")) {
+      const b64 = uri.split("base64,")[1];
+      return b64 ? JSON.parse(Buffer.from(b64, "base64").toString("utf8")).image ?? null : null;
+    }
+    if (!/^https?:\/\//i.test(uri)) return null;
+
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), LOGO_FETCH_TIMEOUT_MS);
+    try {
+      const r = await fetch(uri, { signal: ctl.signal, cache: "force-cache" });
+      if (!r.ok) return null;
+      const j = await r.json() as { image?: string };
+      return typeof j.image === "string" && j.image ? j.image : null;
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return null;
+  }
+}
+
 const logoCache = new Map<string, string | null>();
 let logosInflight: Promise<void> | null = null;
 
@@ -68,19 +105,12 @@ async function loadLogos() {
         contracts: ASSETS.map((a) => ({ address: a.token, abi: b20Abi, functionName: "contractURI" } as const)),
         allowFailure: true,
       })
-      .then((res) => {
-        res.forEach((r, i) => {
-          let image: string | null = null;
-          if (r.status === "success") {
-            try {
-              const b64 = (r.result as string).split("base64,")[1];
-              if (b64) image = JSON.parse(Buffer.from(b64, "base64").toString("utf8")).image ?? null;
-            } catch {
-              image = null;
-            }
-          }
-          logoCache.set(ASSETS[i].symbol, image);
-        });
+      .then(async (res) => {
+        /* Resolved together: one slow metadata endpoint should not hold up
+           twelve that answered. */
+        const images = await Promise.all(res.map((r) =>
+          r.status === "success" ? imageFromUri(String(r.result)) : Promise.resolve(null)));
+        images.forEach((image, i) => logoCache.set(ASSETS[i].symbol, image));
       })
       .catch(() => {
         /* fall back to initials */

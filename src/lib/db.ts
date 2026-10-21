@@ -98,6 +98,101 @@ export async function migrate() {
         )`;
       // One row per external reference makes every money-moving write idempotent.
       /*
+       * Companies that resell CAPX to their own customers.
+       *
+       * A partner is a business with an API key, not a person with a login.
+       * Their customers become ordinary CAPX users carrying a partner_id, so
+       * every balance, every order and every share they hold passes through
+       * exactly the same ledger, custody and solvency checks as a customer who
+       * signed up directly. There is no second book and no parallel path —
+       * which is the only reason this can be offered at all.
+       */
+      await sql`
+        create table if not exists capx.partners (
+          id             uuid primary key default gen_random_uuid(),
+          name           text not null,
+          slug           text not null,
+          /* pending | approved | suspended | rejected */
+          status         text not null default 'pending',
+          contact_name   text,
+          contact_email  text not null,
+          contact_phone  text,
+          company_reg    text,
+          country        text not null default 'TZ',
+          website        text,
+          /* What they intend to build, in their own words. Read at approval. */
+          use_case       text,
+          expected_users integer,
+          /* Their share of the platform fee on orders they bring, in bps. */
+          fee_bps        integer not null default 0,
+          /* Ceilings, nullable, same meaning as everywhere else here: unset
+             means no limit agreed and nothing refused on that ground. */
+          max_order_tzs  numeric(38,2),
+          max_daily_tzs  numeric(38,2),
+          webhook_url    text,
+          webhook_secret text,
+          notes          text,
+          created_at     timestamptz not null default now(),
+          reviewed_at    timestamptz,
+          reviewed_by    text
+        )`;
+
+      /*
+       * Keys, in their own table so they can be rotated.
+       *
+       * Only the hash is stored, so a key is readable exactly once — at the
+       * moment it is issued. A partner who loses one rotates it; nobody,
+       * including CAPX, can recover it. Live and test are separate rows so a
+       * partner can integrate against test without a key that moves money.
+       */
+      await sql`
+        create table if not exists capx.partner_keys (
+          id          uuid primary key default gen_random_uuid(),
+          partner_id  uuid not null references capx.partners(id) on delete cascade,
+          /* live | test */
+          mode        text not null default 'test',
+          label       text,
+          key_hash    text not null,
+          /* The visible stub, so a dashboard can say which key is which. */
+          key_prefix  text not null,
+          last_used_at timestamptz,
+          created_at  timestamptz not null default now(),
+          revoked_at  timestamptz
+        )`;
+
+      /*
+       * A partner's request, remembered by its key.
+       *
+       * Partners retry. Without this a dropped response on an order means
+       * either a customer who was charged twice or a partner afraid to retry
+       * at all, and both are worse than a table.
+       */
+      await sql`
+        create table if not exists capx.partner_requests (
+          id             uuid primary key default gen_random_uuid(),
+          partner_id     uuid not null references capx.partners(id) on delete cascade,
+          idempotency_key text not null,
+          route          text not null,
+          status_code    integer not null,
+          response       jsonb not null,
+          created_at     timestamptz not null default now()
+        )`;
+
+      /* What was sent to a partner's webhook, and whether it landed. */
+      await sql`
+        create table if not exists capx.partner_events (
+          id          uuid primary key default gen_random_uuid(),
+          partner_id  uuid not null references capx.partners(id) on delete cascade,
+          kind        text not null,
+          payload     jsonb not null default '{}'::jsonb,
+          delivered   boolean not null default false,
+          attempts    integer not null default 0,
+          last_error  text,
+          created_at  timestamptz not null default now(),
+          delivered_at timestamptz
+        )`;
+
+      /*
        * The other side of a trade.
        *
        * capx.ledger_entries records what a person is owed, and that is the
@@ -745,6 +840,12 @@ export async function migrate() {
           "swap_usdc numeric(38,6)",
         ],
         users: [
+          /* Which partner introduced this customer, if any. Null is a customer
+             who came to CAPX directly, which is most of them. */
+          "partner_id uuid references capx.partners(id)",
+          /* The partner's own id for them, so reconciliation needs no mapping
+             table on either side. */
+          "partner_ref text",
           /*
            * Whether this account's trading is public.
            *
@@ -930,6 +1031,18 @@ export async function migrate() {
       await sql`create index if not exists lp_fills_provider_idx
                   on capx.lp_fills(provider_id, created_at desc)`;
       await sql`create index if not exists journal_trade_idx on capx.journal_legs(trade_id)`;
+      await sql`create unique index if not exists partners_slug_idx on capx.partners(lower(slug))`;
+      await sql`create unique index if not exists partner_keys_hash_idx on capx.partner_keys(key_hash)`;
+      await sql`create index if not exists partner_keys_owner_idx on capx.partner_keys(partner_id)`;
+      /* One partner, one idempotency key, one answer — forever. */
+      await sql`create unique index if not exists partner_requests_idem_idx
+                  on capx.partner_requests(partner_id, idempotency_key)`;
+      await sql`create index if not exists partner_events_open_idx
+                  on capx.partner_events(partner_id, delivered, created_at)`;
+      await sql`create index if not exists users_partner_idx on capx.users(partner_id)`;
+      /* A partner's own reference is unique within that partner, not globally. */
+      await sql`create unique index if not exists users_partner_ref_idx
+                  on capx.users(partner_id, partner_ref) where partner_ref is not null`;
       await sql`create unique index if not exists journal_ref_idx
                   on capx.journal_legs(ref) where ref is not null`;
       await sql`create index if not exists withdrawal_queue_open_idx

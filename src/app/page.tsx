@@ -1,5 +1,6 @@
 import { Hero } from "@/components/Hero";
 import { HomeGate } from "@/components/HomeGate";
+import { SandboxNotice } from "@/components/SandboxNotice";
 import {
   StackStrip, DseSection, ProductsSection, AutoInvestBand, LiveBoard, StatsBand, BeliefSection, PillarsSection, ClosingCTA,
 } from "@/components/HomeSections";
@@ -7,6 +8,14 @@ import {
 export default function Home() {
   return (
     <HomeGate>
+      {/*
+       * Said before anything else, because it changes what the rest of the
+       * page means: both CAPX and nTZS operate under sandbox authorisations,
+       * and somebody deciding whether to put money in should know that while
+       * they are deciding rather than afterwards.
+       */}
+      <SandboxNotice />
+
       {/*
        * The phone gets the short version: arrive, see it is real, buy, leave.
        * The ticket is inside the hero now, so buying is the first screen

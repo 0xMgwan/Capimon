@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import { usePathname } from "next/navigation";
 import { Lockup } from "./Logo";
 import { useT } from "@/lib/i18n";
@@ -93,25 +94,34 @@ export function Footer() {
 
   return (
     <footer className="border-t hairline">
-      <div className="mx-auto max-w-[1400px] px-5 py-10 sm:px-8 sm:py-16">
+      <div className="mx-auto max-w-[1400px] px-5 py-10 sm:px-8 sm:py-12">
         {/*
-          * Three short link lists stacked on a phone is a lot of scrolling for
-          * nine links. They sit side by side instead, which is what the eye
-          * expects of a footer and what the column widths can easily take.
+          * Short link lists stacked on a phone is a lot of scrolling, so they
+          * sit side by side — which is what the eye expects of a footer and
+          * what the column widths can easily take.
+          *
+          * The column count follows COLS rather than being written out. It
+          * was fixed at two, so adding a third list silently pushed one of
+          * them onto a second row and doubled the footer's height on a wide
+          * screen: a layout that was correct only for the number of columns
+          * that happened to exist when it was written.
           */}
-        <div className="grid gap-8 md:grid-cols-[2fr_repeat(2,1fr)] md:gap-10">
+        <div
+          className="grid gap-8 md:gap-10 md:[grid-template-columns:1.4fr_repeat(var(--footer-cols),minmax(0,1fr))]"
+          style={{ "--footer-cols": COLS.length } as CSSProperties}
+        >
           <div>
             <Lockup />
-            <p className="mt-3 max-w-xs text-[15px] leading-snug text-[var(--muted)] sm:text-[17px]">
+            <p className="mt-3 max-w-xs text-[14px] leading-snug text-[var(--muted)] sm:text-[15px]">
               {t("Public markets, rebuilt as open infrastructure. Priced by live oracles, held in your own wallet.")}
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 md:contents">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:contents">
           {COLS.map((c) => (
             <div key={c.title}>
               <div className="eyebrow">{t(c.title)}</div>
-              <ul className="mt-2.5 space-y-1.5 md:mt-4 md:space-y-2.5">
+              <ul className="mt-2.5 space-y-1.5 md:mt-3.5 md:space-y-2">
                 {c.links.map((l) => (
                   <li key={l.label}>
                     {"ext" in l && l.ext ? (
@@ -132,11 +142,11 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="mt-14 border-t hairline pt-6">
+        <div className="mt-10 border-t hairline pt-5">
           <p className="max-w-3xl text-[11px] leading-relaxed text-[var(--muted)]">
-            {t("CAPX lets you buy shares listed on the Dar es Salaam Stock Exchange, and US shares, with Tanzanian shillings. Shares bought through a CAPX account are held on your behalf by CAPX with a licensed DSE broker. What you hold is a representation of the underlying share on the blockchain, held by a custodian or a special purpose vehicle, rather than registered shareholding. Tanzanian shares carry no dividend entitlement; US shares reflect dividends through the token's on-chain multiplier. Neither carries voting or other shareholder rights. CAPX is not an exchange or an investment adviser, and nothing here is investment advice. Share prices can fall as well as rise. US shares are not available to US persons.")}
+            {t("CAPX operates in a regulatory sandbox for Tanzanian and Dar es Salaam Stock Exchange assets, and nTZS, the shilling stablecoin CAPX settles in, operates in the Bank of Tanzania regulatory sandbox. A sandbox is supervised, time-limited testing rather than a full licence, and can carry limits on participants and transaction sizes. CAPX lets you buy shares listed on the Dar es Salaam Stock Exchange, and US shares, with Tanzanian shillings. Shares bought through a CAPX account are held on your behalf by CAPX with a licensed DSE broker. What you hold is a representation of the underlying share on the blockchain, held by a custodian or a special purpose vehicle, rather than registered shareholding. Tanzanian shares carry no dividend entitlement; US shares reflect dividends through the token's on-chain multiplier. Neither carries voting or other shareholder rights. CAPX is not an exchange or an investment adviser, and nothing here is investment advice. Share prices can fall as well as rise. US shares are not available to US persons.")}
           </p>
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <span className="tnum text-xs text-[var(--muted)]">CAPX © {new Date().getFullYear()}</span>
             <span className="eyebrow">{t("Capital in Motion")}</span>
           </div>

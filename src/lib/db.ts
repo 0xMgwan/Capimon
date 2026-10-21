@@ -858,6 +858,16 @@ export async function migrate() {
              opened before there were any, which is a fact worth keeping rather
              than back-filling with a date nobody chose. */
           "terms_accepted_at timestamptz",
+          /*
+           * When this person accepted the sandbox disclosure.
+           *
+           * Separate from terms_accepted_at on purpose. The terms are the
+           * contract; this is an acknowledgement that CAPX and nTZS are both
+           * operating under regulatory sandbox authorisations with the limits
+           * that implies. They can change independently, and a regulator
+           * asking when somebody was told is asking about this column.
+           */
+          "sandbox_accepted_at timestamptz",
           /* Which document the number in `nida_number` belongs to. The column
              is named for the one Tanzanians mostly carry, but a passport or a
              licence is just as valid and storing one under a NIDA label made

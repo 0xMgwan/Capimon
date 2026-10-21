@@ -59,3 +59,51 @@ test("webhook signatures are an HMAC of the exact bytes sent", async () => {
   assert.notEqual(createHmac("sha256", "wrong").update(body).digest("hex"), sig);
   assert.notEqual(createHmac("sha256", secret).update(body + " ").digest("hex"), sig);
 });
+
+test("a deposit is only creditable once its block is safe, not merely mined", async () => {
+  const { finalityFrom } = await import("../src/lib/stablecoinDeposits");
+
+  // Mined, many confirmations deep, but the batch has not reached Ethereum.
+  // Confirmations are built by the same sequencer a reorg would replace, so
+  // depth alone must not be enough.
+  const deep = finalityFrom({ blockNumber: 1000n, latest: 1100n, safeHead: 900n });
+  assert.equal(deep.safe, false, "100 confirmations must not override an unsafe head");
+  assert.equal(deep.confirmations, 101);
+  assert.match(deep.waitingFor ?? "", /Ethereum/);
+
+  // Safe head has passed it: creditable.
+  const safe = finalityFrom({ blockNumber: 1000n, latest: 1100n, safeHead: 1000n });
+  assert.equal(safe.safe, true, "the safe head reaching the block exactly is enough");
+  assert.equal(safe.waitingFor, null);
+
+  assert.equal(finalityFrom({ blockNumber: 1000n, latest: 1005n, safeHead: 1200n }).safe, true);
+});
+
+test("without a safe head it falls back to counting, and says so", async () => {
+  const { finalityFrom } = await import("../src/lib/stablecoinDeposits");
+
+  const short = finalityFrom({ blockNumber: 1000n, latest: 1005n, safeHead: null,
+                               minConfirmations: 30 });
+  assert.equal(short.safe, false);
+  assert.equal(short.confirmations, 6);
+  assert.equal(short.waitingFor, "24 more confirmations");
+
+  const enough = finalityFrom({ blockNumber: 1000n, latest: 1040n, safeHead: null,
+                                minConfirmations: 30 });
+  assert.equal(enough.safe, true);
+  assert.equal(enough.waitingFor, null);
+
+  // An unreadable head must never read as confirmed.
+  const blind = finalityFrom({ blockNumber: 1000n, latest: null, safeHead: null,
+                               minConfirmations: 30 });
+  assert.equal(blind.safe, false, "not knowing must never mean yes");
+  assert.equal(blind.confirmations, 0);
+});
+
+test("a block ahead of the head never reads as confirmed", async () => {
+  const { finalityFrom } = await import("../src/lib/stablecoinDeposits");
+  const ahead = finalityFrom({ blockNumber: 2000n, latest: 1000n, safeHead: null,
+                               minConfirmations: 30 });
+  assert.equal(ahead.confirmations, 0, "a negative depth must clamp, not go negative");
+  assert.equal(ahead.safe, false);
+});

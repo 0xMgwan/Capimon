@@ -27,6 +27,25 @@ import { NTZS_BASE, USDC_BASE } from "./assets";
  * index on the hash means resubmitting the same transaction credits nobody
  * twice, which is the same guard `otc.ts` puts on `funding_tx` and for the
  * same reason.
+ *
+ * ## Waiting for the block to be safe
+ *
+ * Base is an L2, so a transaction being mined is not the same as it being
+ * final. The sequencer's unsafe head can be reorged, and a balance credited
+ * from a transaction that is later reorged out is money CAPX gave away.
+ *
+ * Counting confirmations on the L2 is the obvious guard and the weak one: it
+ * measures how many blocks the same sequencer has built on top, which is
+ * exactly what a reorg replaces. The real line is the `safe` tag, which means
+ * the batch containing this transaction has been posted to Ethereum. On Base
+ * that runs about a minute behind the head — a cost worth paying once, and
+ * invisible on a deposit nobody is watching a spinner for.
+ *
+ * So a transfer that is mined but not yet safe is **recorded and not
+ * credited**: the row claims the hash, so nothing else can use it and the
+ * partner can stop worrying about it, and the scheduled pass credits it the
+ * moment the batch lands. The confirmation count survives only as a fallback
+ * for an RPC that cannot answer `safe` at all.
  */
 
 const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
@@ -38,9 +57,75 @@ const TOKEN: Record<StableToken, { address: `0x${string}`; asset: string }> = {
   USDC: { address: USDC_BASE, asset: "USDC" },
 };
 
+/**
+ * How many L2 blocks to accept instead, when `safe` cannot be read.
+ *
+ * Only a fallback. Base's safe head sits around thirty blocks behind, so this
+ * is the same wait expressed in the weaker unit — chosen to match, not to be
+ * independently meaningful.
+ */
+const FALLBACK_CONFIRMATIONS =
+  Math.max(1, Number(process.env.DEPOSIT_CONFIRMATIONS ?? 30) || 30);
+
+export type Finality = {
+  confirmations: number;
+  safe: boolean;
+  /** Why it is not creditable yet, for a message a person can act on. */
+  waitingFor: string | null;
+};
+
+/**
+ * Whether a mined block can be credited from.
+ *
+ * Asks the chain for its safe head rather than inferring one. If that cannot
+ * be read — an RPC that does not serve the tag — it falls back to counting
+ * confirmations, and says which test it applied rather than reporting a
+ * confidence it did not establish.
+ */
+export function finalityFrom(input: {
+  blockNumber: bigint;
+  latest: bigint | null;
+  safeHead: bigint | null;
+  minConfirmations?: number;
+}): Finality {
+  const { blockNumber, latest, safeHead } = input;
+  const min = input.minConfirmations ?? FALLBACK_CONFIRMATIONS;
+  const confirmations = latest === null ? 0 : Math.max(0, Number(latest - blockNumber) + 1);
+
+  if (safeHead !== null) {
+    const safe = blockNumber <= safeHead;
+    return {
+      confirmations,
+      safe,
+      waitingFor: safe ? null
+        : `the batch containing it to reach Ethereum — about ${
+            Math.max(1, Number(blockNumber - safeHead) * 2)} seconds`,
+    };
+  }
+
+  const enough = confirmations >= min;
+  return {
+    confirmations,
+    safe: enough,
+    waitingFor: enough ? null : `${min - confirmations} more confirmations`,
+  };
+}
+
+export async function finalityOf(blockNumber: bigint): Promise<Finality> {
+  const [latest, safeHead] = await Promise.all([
+    publicClient.getBlockNumber().catch(() => null),
+    publicClient.getBlock({ blockTag: "safe" })
+      .then((b) => (b?.number ?? null)).catch(() => null),
+  ]);
+  return finalityFrom({ blockNumber, latest, safeHead });
+}
+
 export type CreditResult =
   | { ok: true; depositId: string; token: StableToken; asset: string; amount: number;
-      txHash: string; duplicate?: boolean }
+      txHash: string; duplicate?: boolean;
+      /** "credited" once the block is safe; "pending" while it is not. */
+      state: "credited" | "pending";
+      confirmations?: number; waitingFor?: string | null }
   | { ok: false; code: string; error: string; status: number };
 
 const refuse = (code: string, error: string, status = 400): CreditResult =>
@@ -85,8 +170,8 @@ export async function creditStablecoinTransfer(input: {
   /* Already credited? Say so plainly rather than failing — a partner retrying
      after a dropped response is asking a reasonable question. */
   const [seen] = await sql<{ id: string; user_id: string; amount_tzs: string;
-                             usdc_credited: string | null }[]>`
-    select id::text, user_id::text, amount_tzs::text, usdc_credited::text
+                             usdc_credited: string | null; status: string }[]>`
+    select id::text, user_id::text, amount_tzs::text, usdc_credited::text, status
       from capx.deposits where lower(funding_tx) = ${txHash}`;
   if (seen) {
     if (seen.user_id !== input.userId) {
@@ -95,7 +180,8 @@ export async function creditStablecoinTransfer(input: {
     }
     return { ok: true, depositId: seen.id, token: input.token, asset: spec.asset,
       amount: input.token === "USDC" ? Number(seen.usdc_credited ?? 0) : Number(seen.amount_tzs),
-      txHash, duplicate: true };
+      txHash, duplicate: true,
+      state: seen.status === "settled" ? "credited" : "pending" };
   }
 
   const { omnibusBalances } = await import("./omnibus");
@@ -144,6 +230,16 @@ export async function creditStablecoinTransfer(input: {
   }
 
   /*
+   * Safe yet?
+   *
+   * Asked after the amount is known, so a transfer that is mined but not yet
+   * batched to Ethereum is recorded with everything it needs and simply not
+   * credited. The row claims the hash either way, which is what stops the
+   * same transaction being offered again while it waits.
+   */
+  const finality = await finalityOf(receipt.blockNumber);
+
+  /*
    * The row carries the hash, and the unique index on it is what makes this
    * safe to call twice. Written before the ledger entry, so a crash between
    * the two leaves a settled deposit with no credit — recoverable — rather
@@ -155,12 +251,19 @@ export async function creditStablecoinTransfer(input: {
     values (${input.userId}::uuid,
             ${input.token === "NTZS" ? amount : 0},
             ${input.token === "USDC" ? amount : null},
-            '', 'settled', now(), ${txHash},
+            '', ${finality.safe ? "settled" : "pending"},
+            ${finality.safe ? sql`now()` : null}, ${txHash},
             ${input.partnerId ?? null}, ${sql.json({
               route: "stablecoin-transfer", token: input.token, txHash,
               paymentMethod: "stablecoin_transfer",
+              block: receipt.blockNumber.toString(),
             } as never)})
     returning id::text`;
+
+  if (!finality.safe) {
+    return { ok: true, depositId: row.id, token: input.token, asset: spec.asset, amount, txHash,
+      state: "pending", confirmations: finality.confirmations, waitingFor: finality.waitingFor };
+  }
 
   await record([{
     userId: input.userId, kind: "deposit", asset: spec.asset, amount: amount.toString(),
@@ -168,5 +271,89 @@ export async function creditStablecoinTransfer(input: {
     metadata: { route: "stablecoin-transfer", token: input.token, txHash },
   }]);
 
-  return { ok: true, depositId: row.id, token: input.token, asset: spec.asset, amount, txHash };
+  return { ok: true, depositId: row.id, token: input.token, asset: spec.asset, amount, txHash,
+    state: "credited", confirmations: finality.confirmations };
+}
+
+/**
+ * Credits the transfers that were mined but not yet safe when they arrived.
+ *
+ * Runs on the scheduled tick. Everything it needs is already on the row — the
+ * amount was read from the Transfer log at submission, so this re-checks
+ * finality and nothing else, and the ledger write is keyed to the deposit id
+ * exactly as the live path keys it. Running twice credits nobody twice.
+ *
+ * A transaction that has disappeared from the chain entirely — the case this
+ * whole gate exists for — is marked failed rather than credited, and the desk
+ * is told, because it means a reorg took money CAPX was about to hand over.
+ */
+export async function settleStablecoinDeposits(): Promise<{
+  checked: number; credited: number; waiting: number; vanished: number;
+}> {
+  const out = { checked: 0, credited: 0, waiting: 0, vanished: 0 };
+  await migrate();
+  const sql = db();
+
+  const rows = await sql<{ id: string; user_id: string; funding_tx: string;
+                           amount_tzs: string; usdc_credited: string | null;
+                           token: string | null }[]>`
+    select id::text, user_id::text, funding_tx, amount_tzs::text, usdc_credited::text,
+           metadata->>'token' as token
+      from capx.deposits
+     where status = 'pending' and funding_tx is not null
+       and metadata->>'route' = 'stablecoin-transfer'
+     order by created_at limit 50`;
+
+  for (const r of rows) {
+    out.checked++;
+    const token: StableToken = r.token === "USDC" ? "USDC" : "NTZS";
+    const asset = TOKEN[token].asset;
+    const amount = token === "USDC" ? Number(r.usdc_credited ?? 0) : Number(r.amount_tzs);
+
+    let receipt;
+    try {
+      receipt = await publicClient.getTransactionReceipt({ hash: r.funding_tx as `0x${string}` });
+    } catch {
+      /*
+       * Gone from the chain. It was mined when it was submitted, so this is
+       * the reorg the gate was built for — the row stays claimed so the hash
+       * cannot be reused, and a person is told.
+       */
+      await sql`update capx.deposits set status = 'failed',
+                error = 'transaction no longer on chain — reorged before it was safe'
+               where id = ${r.id}::uuid`;
+      out.vanished++;
+      const { sendMail } = await import("./mail");
+      await sendMail({
+        subject: "CAPX: a stablecoin deposit vanished before it was credited",
+        text:
+          `${amount} ${asset} was recorded against ${r.funding_tx} and that transaction can no ` +
+          `longer be read on Base.\n\nNothing was credited, which is the gate working. The row ` +
+          `is marked failed and keeps the hash so it cannot be resubmitted. If the sender ` +
+          `believes it settled, check the hash before crediting anything by hand.`,
+      }).catch(() => {});
+      continue;
+    }
+
+    if (receipt.status !== "success") {
+      await sql`update capx.deposits set status = 'failed',
+                error = 'transaction reverted' where id = ${r.id}::uuid`;
+      out.vanished++;
+      continue;
+    }
+
+    const finality = await finalityOf(receipt.blockNumber);
+    if (!finality.safe) { out.waiting++; continue; }
+
+    await record([{
+      userId: r.user_id, kind: "deposit", asset, amount: amount.toString(),
+      ref: `deposit:${r.id}`,
+      metadata: { route: "stablecoin-transfer", token, txHash: r.funding_tx },
+    }]);
+    await sql`update capx.deposits set status = 'settled', settled_at = now()
+               where id = ${r.id}::uuid`;
+    out.credited++;
+  }
+
+  return out;
 }

@@ -106,8 +106,11 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
           ["tx_hash", "required. The Base transaction that moved the tokens to the CAPX omnibus wallet."],
           ["token", "NTZS (default) or USDC"],
         ],
-        returns: "The credited deposit, with the amount read from the transaction itself.",
-        note: "For partners whose customers already hold nTZS — no collection, no prompt. The amount credited is whatever the Transfer log actually carries, never the figure in your request, and the recipient must be the omnibus wallet. Resubmitting the same hash returns the original deposit rather than crediting twice. Nothing is credited on your word; this is read from the chain." },
+        returns: "202 with status pending while the block is not yet safe, then 201 / status settled once it is. The amount is read from the transaction itself.",
+        note: "For partners whose customers already hold nTZS — no collection, no prompt. The amount credited is whatever the Transfer log actually carries, never the figure in your request, and the recipient must be the omnibus wallet. Nothing is credited on your word; this is read from the chain." },
+      { method: "", path: "— on waiting for safety",
+        what: "Base is an L2, so mined is not final.",
+        note: "A transfer is recorded on arrival and credited once the block containing it has been batched to Ethereum — the `safe` tag, about a minute behind the head. Counting confirmations would be the weaker test, since those are built by the same sequencer a reorg would replace. While it waits the deposit reads status pending and the balance is not yet spendable. The hash is claimed from the moment you submit it, so there is nothing to resend and resubmitting returns the same deposit rather than a second one." },
       { method: "POST", path: "/v1/deposits", what: "Or collect from their mobile money, or get bank details for them to push to.",
         body: [
           ["user", "required"], ["amount_tzs", "required"],

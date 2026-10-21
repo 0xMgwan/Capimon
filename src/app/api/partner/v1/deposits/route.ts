@@ -101,7 +101,7 @@ export const POST = partnerRoute(
         return send({ ok: false, ...rest }, status);
       }
 
-      if (!credited.duplicate) {
+      if (!credited.duplicate && credited.state === "credited") {
         const { emit } = await import("@/lib/partners");
         void emit(caller.partner.id, "deposit.credited", {
           deposit_id: credited.depositId, user_id: customer.id, reference: ref,
@@ -109,18 +109,29 @@ export const POST = partnerRoute(
         }).catch(() => {});
       }
 
+      const pending = credited.state === "pending";
       return send({
         ok: true,
         deposit: {
           id: credited.depositId, user_id: customer.id, reference: ref,
-          route: "stablecoin-transfer", status: "settled",
+          route: "stablecoin-transfer",
+          /* "pending" means recorded and not yet spendable. The hash is
+             claimed either way, so there is nothing to resubmit. */
+          status: pending ? "pending" : "settled",
           token: credited.token, asset: credited.asset,
           amount: credited.amount, tx_hash: credited.txHash,
+          confirmations: credited.confirmations ?? null,
         },
         note: credited.duplicate
-          ? "Already credited. This is the original deposit, not a second one."
-          : `Credited ${credited.amount} ${credited.asset} from the transfer.`,
-      }, credited.duplicate ? 200 : 201);
+          ? pending
+            ? "Already recorded and still waiting to be safe. This is the original deposit."
+            : "Already credited. This is the original deposit, not a second one."
+          : pending
+            ? `Recorded ${credited.amount} ${credited.asset}. It is credited once the block `
+              + `containing it is batched to Ethereum — waiting on ${credited.waitingFor}. `
+              + `The transaction is already claimed, so do not send it again.`
+            : `Credited ${credited.amount} ${credited.asset} from the transfer.`,
+      }, credited.duplicate ? 200 : pending ? 202 : 201);
     }
 
     const method = String(body.method ?? "mobile_money") === "bank_transfer"

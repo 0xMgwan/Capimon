@@ -86,12 +86,29 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
     ],
   },
   {
+    title: "Currencies",
+    blurb: "US equities trade in dollars and a USDC balance buys them directly — no conversion, no extra call. The Dar es Salaam board prices and settles in shillings and reads a shilling balance, so a customer holding only dollars must convert before they can buy CRDB.",
+    endpoints: [
+      { method: "POST", path: "/v1/convert", what: "Turn a customer's dollars into shillings.",
+        body: [["user", "required"], ["amount_usdc", "or"], ["all", "true to convert the whole balance"]],
+        returns: "The dollars spent and the shillings credited, at the rate the swap actually reported.",
+        note: "One direction only. Shillings become dollars inside a US buy at the moment it needs them; offering that conversion on its own would make CAPX a currency desk." },
+    ],
+  },
+  {
     title: "Money in and out",
     blurb: "Shillings land in the same omnibus as everybody else's. There is no endpoint that credits a balance directly, and there will not be — a balance that can be written without money arriving is not a balance.",
     endpoints: [
       { method: "GET", path: "/v1/deposits", what: "Funding history, optionally filtered by ?user=." },
-      { method: "POST", path: "/v1/deposits", what: "Not available yet — returns 501.",
-        note: "Rail selection lives inside the customer-facing deposit route. It will be lifted into a shared library before being exposed here; copying it would create a second path for money arriving. Fund customers through the CAPX app meanwhile, or ask us about a settlement account." },
+      { method: "POST", path: "/v1/deposits", what: "Fund a customer from their own mobile money, or get bank details for them to push to.",
+        body: [
+          ["user", "required"], ["amount_tzs", "required"],
+          ["phone", "mobile money number to prompt; defaults to the customer's"],
+          ["method", "mobile_money (default) or bank_transfer"],
+          ["payer_account_number", "required for bank_transfer — this is how the money is matched back to them"],
+        ],
+        returns: "202 with the deposit, its route and status. A bank transfer also returns `bank`: the account, the one-off reference and when it expires.",
+        note: "Mobile money prompts the phone and settles on its own. A bank transfer takes nothing until the customer sends it — show them the reference verbatim, because that is what matches the money to them." },
       { method: "POST", path: "/v1/withdrawals", what: "Pay a customer out to mobile money or a bank.",
         body: [
           ["user", "required"], ["amount_tzs", "required"],

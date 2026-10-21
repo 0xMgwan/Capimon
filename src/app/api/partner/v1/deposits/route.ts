@@ -4,21 +4,16 @@ import { db, migrate } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 /**
- * A customer's funding history.
+ * Funding a partner's customer, and reading what has already landed.
  *
- * Reading is available; starting a collection is not, and the reason is worth
- * stating rather than hiding behind a 404.
+ * The rail choice — ramp, wallet collection or bank transfer, each with its
+ * own minimum and its own failure handling — lives in lib/deposits.ts and is
+ * called here unchanged. There is one path for money arriving, and a partner
+ * uses it rather than a copy of it.
  *
- * Choosing a deposit rail is about two hundred lines living inside the
- * customer-facing route: it picks between the ramp, a wallet collection and a
- * bank transfer depending on which nTZS capabilities are granted, each with
- * its own minimum and its own failure handling. Copying that here to serve
- * partners would be a second implementation of the path money arrives on, and
- * the day the two drifted apart the difference would be somebody's deposit.
- *
- * The fix is to lift that logic into a library the way the payout path was
- * lifted into lib/payout.ts, and have both routes call it. Until that is
- * done, POST answers plainly instead of pretending.
+ * What a partner cannot do, and will not be given, is credit a balance
+ * directly. A balance that can be written without money arriving is not a
+ * balance, and every solvency guarantee downstream rests on the difference.
  */
 export const GET = partnerRoute("GET /v1/deposits", {}, async ({ caller, req }) => {
   const u = new URL(req.url);
@@ -57,10 +52,64 @@ type DepositRow = {
   created_at: string; settled_at: string | null; partner_ref: string | null; user_id: string;
 };
 
-export const POST = partnerRoute("POST /v1/deposits", { movesMoney: true }, async () =>
-  sendFail(fail("not_implemented",
-    "Partner-initiated deposits are not available yet. Rail selection lives inside the "
-    + "customer-facing deposit route and will be lifted into a shared library before it is "
-    + "exposed here — copying it would create a second path for money arriving. Until then, "
-    + "fund a customer through the CAPX app, or talk to us about a bulk settlement account.",
-    501)));
+/**
+ * Starts a collection from the customer's own mobile money, or returns the
+ * bank details for them to push a transfer to.
+ *
+ * Mobile money prompts the phone and settles on its own. A bank transfer
+ * returns a one-off reference and the account to pay into — nothing is taken
+ * until the customer sends it, and the reference is what matches the money
+ * back to them, so show it to them verbatim.
+ */
+export const POST = partnerRoute(
+  "POST /v1/deposits",
+  { movesMoney: true, idempotent: true },
+  async ({ caller, body }) => {
+    const ref = String(body.user ?? body.user_id ?? body.reference ?? "").trim();
+    if (!ref) return sendFail(fail("user_required", "Name the customer with `user`."));
+
+    const customer = await partnerCustomer(caller.partner.id, ref);
+    if (!customer) {
+      return sendFail(fail("unknown_customer", "No customer of yours matches that.", 404));
+    }
+
+    const method = String(body.method ?? "mobile_money") === "bank_transfer"
+      ? "bank_transfer" as const : "mobile_money" as const;
+
+    const { startDeposit } = await import("@/lib/deposits");
+    const result = await startDeposit({
+      userId: customer.id,
+      amountTzs: Number(body.amount_tzs ?? body.amount),
+      phoneNumber: String(body.phone ?? customer.phone ?? ""),
+      method,
+      payerAccountNumber: body.payer_account_number
+        ? String(body.payer_account_number) : undefined,
+    });
+
+    if (!result.ok) {
+      const { status, ok, ...rest } = result;
+      void ok;
+      return send({ ok: false, ...rest }, status);
+    }
+
+    const { emit } = await import("@/lib/partners");
+    void emit(caller.partner.id, "deposit.started", {
+      deposit_id: result.depositId, user_id: customer.id, reference: ref,
+      amount_tzs: Number(body.amount_tzs ?? body.amount), route: result.route,
+    }).catch(() => {});
+
+    return send({
+      ok: true,
+      deposit: {
+        id: result.depositId,
+        user_id: customer.id,
+        reference: ref,
+        route: result.route,
+        status: result.status,
+        /* Present only on the bank route: what the customer must pay into. */
+        bank: result.bank ?? null,
+      },
+      note: result.note ?? null,
+    }, 202);
+  },
+);

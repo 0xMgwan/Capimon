@@ -30,7 +30,7 @@ export default function PartnersPage() {
       <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {[
           { h: "Two boards, one call",
-            b: "CRDB, NMB and the rest of the DSE in shillings. Apple, NVIDIA and the tokenised US board in dollars. Same endpoint, the currency is a field." },
+            b: "CRDB, NMB and the rest of the DSE in shillings. Apple, NVIDIA and the tokenised US board in dollars. Same endpoint, the currency is a field — a customer holding USDC buys US equities directly, and converts once to reach the DSE." },
           { h: "Your customers stay yours",
             b: "You authenticate them. CAPX never issues them a password and has no sign-in path that goes around you. They carry your own reference, so neither side needs a mapping table." },
           { h: "The same book as everyone else",
@@ -39,6 +39,8 @@ export default function PartnersPage() {
             b: "A tokenised equity reflects a dividend by raising its multiplier, so the holder's share count grows rather than their cash. CAPX reads that and credits whoever held the claim. You read it back per customer." },
           { h: "Verification is real",
             b: "You file your customer's documents through the API; CAPX reviews them. Buying is gated on approval, and nothing you can send sets that — the obligation is ours and so is the decision." },
+          { h: "Funding is yours to start",
+            b: "Prompt your customer's mobile money, or hand them a one-off bank reference. The rail is chosen by the same code the CAPX app uses, so there is no second path for money arriving." },
           { h: "Retries are safe",
             b: "Every money endpoint takes an Idempotency-Key and returns the original answer to a repeat. A dropped connection costs you a retry, not a double order." },
         ].map((c) => (

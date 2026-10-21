@@ -27,14 +27,16 @@ export const GET = partnerRoute("GET /v1/deposits", {}, async ({ caller, req }) 
         if (!customer) return [];
         return sql<DepositRow[]>`
           select d.id::text, d.amount_tzs::text, d.status, d.usdc_credited::text,
-                 d.created_at, d.settled_at, u.partner_ref, u.id::text as user_id
+                 d.created_at, d.settled_at, u.partner_ref, u.id::text as user_id,
+                 d.funding_tx, d.metadata->>'route' as route
             from capx.deposits d join capx.users u on u.id = d.user_id
            where d.user_id = ${customer.id}::uuid
            order by d.created_at desc limit 100`;
       })()
     : await sql<DepositRow[]>`
         select d.id::text, d.amount_tzs::text, d.status, d.usdc_credited::text,
-               d.created_at, d.settled_at, u.partner_ref, u.id::text as user_id
+               d.created_at, d.settled_at, u.partner_ref, u.id::text as user_id,
+               d.funding_tx, d.metadata->>'route' as route
           from capx.deposits d join capx.users u on u.id = d.user_id
          where u.partner_id = ${caller.partner.id}::uuid
          order by d.created_at desc limit 100`;
@@ -43,6 +45,7 @@ export const GET = partnerRoute("GET /v1/deposits", {}, async ({ caller, req }) 
     id: r.id, user_id: r.user_id, reference: r.partner_ref,
     amount_tzs: Number(r.amount_tzs), status: r.status,
     usdc_credited: r.usdc_credited === null ? null : Number(r.usdc_credited),
+    route: r.route, tx_hash: r.funding_tx,
     created_at: r.created_at, settled_at: r.settled_at,
   })) });
 });
@@ -50,6 +53,7 @@ export const GET = partnerRoute("GET /v1/deposits", {}, async ({ caller, req }) 
 type DepositRow = {
   id: string; amount_tzs: string; status: string; usdc_credited: string | null;
   created_at: string; settled_at: string | null; partner_ref: string | null; user_id: string;
+  funding_tx: string | null; route: string | null;
 };
 
 /**
@@ -73,6 +77,52 @@ export const POST = partnerRoute(
       return sendFail(fail("unknown_customer", "No customer of yours matches that.", 404));
     }
 
+    /*
+     * A stablecoin transfer is a different act from a collection.
+     *
+     * Nothing is pulled and nothing is prompted — the partner has already
+     * sent nTZS or USDC to the omnibus wallet, and this names who it belongs
+     * to. The amount credited is read from the transaction's own Transfer
+     * log, never from the request, so a wrong figure here credits nothing
+     * wrong.
+     */
+    if (body.tx_hash) {
+      const { creditStablecoinTransfer } = await import("@/lib/stablecoinDeposits");
+      const credited = await creditStablecoinTransfer({
+        userId: customer.id,
+        txHash: String(body.tx_hash),
+        token: String(body.token ?? "NTZS").toUpperCase() === "USDC" ? "USDC" : "NTZS",
+        partnerId: caller.partner.id,
+      });
+
+      if (!credited.ok) {
+        const { status, ok, ...rest } = credited;
+        void ok;
+        return send({ ok: false, ...rest }, status);
+      }
+
+      if (!credited.duplicate) {
+        const { emit } = await import("@/lib/partners");
+        void emit(caller.partner.id, "deposit.credited", {
+          deposit_id: credited.depositId, user_id: customer.id, reference: ref,
+          token: credited.token, amount: credited.amount, tx_hash: credited.txHash,
+        }).catch(() => {});
+      }
+
+      return send({
+        ok: true,
+        deposit: {
+          id: credited.depositId, user_id: customer.id, reference: ref,
+          route: "stablecoin-transfer", status: "settled",
+          token: credited.token, asset: credited.asset,
+          amount: credited.amount, tx_hash: credited.txHash,
+        },
+        note: credited.duplicate
+          ? "Already credited. This is the original deposit, not a second one."
+          : `Credited ${credited.amount} ${credited.asset} from the transfer.`,
+      }, credited.duplicate ? 200 : 201);
+    }
+
     const method = String(body.method ?? "mobile_money") === "bank_transfer"
       ? "bank_transfer" as const : "mobile_money" as const;
 
@@ -91,6 +141,13 @@ export const POST = partnerRoute(
       void ok;
       return send({ ok: false, ...rest }, status);
     }
+
+    /* Stamped with who brought it, so the desk can separate a partner's
+       funding from a customer's own without reconstructing it from a join. */
+    const { db, migrate } = await import("@/lib/db");
+    await migrate();
+    await db()`update capx.deposits set partner_id = ${caller.partner.id}::uuid
+                where id = ${result.depositId}::uuid`.catch(() => {});
 
     const { emit } = await import("@/lib/partners");
     void emit(caller.partner.id, "deposit.started", {

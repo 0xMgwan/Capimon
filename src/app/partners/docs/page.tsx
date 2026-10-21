@@ -97,10 +97,18 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
   },
   {
     title: "Money in and out",
-    blurb: "Shillings land in the same omnibus as everybody else's. There is no endpoint that credits a balance directly, and there will not be — a balance that can be written without money arriving is not a balance.",
+    blurb: "Three ways in: a mobile money collection, a bank push, or a stablecoin transfer you have already made to the omnibus wallet. All of them land in the same omnibus as every other customer's money. There is no endpoint that credits a balance directly, and there will not be — a balance that can be written without money arriving is not a balance.",
     endpoints: [
       { method: "GET", path: "/v1/deposits", what: "Funding history, optionally filtered by ?user=." },
-      { method: "POST", path: "/v1/deposits", what: "Fund a customer from their own mobile money, or get bank details for them to push to.",
+      { method: "POST", path: "/v1/deposits", what: "Credit a customer from a stablecoin transfer you have already sent.",
+        body: [
+          ["user", "required"],
+          ["tx_hash", "required. The Base transaction that moved the tokens to the CAPX omnibus wallet."],
+          ["token", "NTZS (default) or USDC"],
+        ],
+        returns: "The credited deposit, with the amount read from the transaction itself.",
+        note: "For partners whose customers already hold nTZS — no collection, no prompt. The amount credited is whatever the Transfer log actually carries, never the figure in your request, and the recipient must be the omnibus wallet. Resubmitting the same hash returns the original deposit rather than crediting twice. Nothing is credited on your word; this is read from the chain." },
+      { method: "POST", path: "/v1/deposits", what: "Or collect from their mobile money, or get bank details for them to push to.",
         body: [
           ["user", "required"], ["amount_tzs", "required"],
           ["phone", "mobile money number to prompt; defaults to the customer's"],

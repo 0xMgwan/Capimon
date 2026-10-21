@@ -872,6 +872,16 @@ export async function migrate() {
           "avatar text",
         ],
         deposits: [
+          /*
+           * The on-chain transfer that funded this, when a partner paid in
+           * stablecoin rather than through a collection. Uniquely indexed, so
+           * the same transaction can never be credited twice however many
+           * times it is submitted.
+           */
+          "funding_tx text",
+          /* Which partner introduced the deposit, so the desk can tell a
+             partner's funding from a customer's own without a join. */
+          "partner_id uuid references capx.partners(id)",
           "ntzs_status text", "ntzs_reference text", "swap_ref text", "transfer_tx text",
           "rate_tzs_usdc numeric(38,8)", "metadata jsonb not null default '{}'::jsonb",
         ],
@@ -1040,6 +1050,11 @@ export async function migrate() {
       await sql`create index if not exists partner_events_open_idx
                   on capx.partner_events(partner_id, delivered, created_at)`;
       await sql`create index if not exists users_partner_idx on capx.users(partner_id)`;
+      /* One transaction funds one deposit, ever. */
+      await sql`create unique index if not exists deposits_funding_tx_idx
+                  on capx.deposits (lower(funding_tx)) where funding_tx is not null`;
+      await sql`create index if not exists deposits_partner_idx
+                  on capx.deposits(partner_id) where partner_id is not null`;
       /* A partner's own reference is unique within that partner, not globally. */
       await sql`create unique index if not exists users_partner_ref_idx
                   on capx.users(partner_id, partner_ref) where partner_ref is not null`;

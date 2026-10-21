@@ -11,8 +11,13 @@ import { useCallback, useEffect, useState } from "react";
  * dropdown that could be changed by accident while scrolling.
  */
 
-type Usage = { users: number; verified: number; orders: number;
-               volumeTzs: number; volumeUsdc: number } | null;
+type Usage = {
+  users: number; verified: number; orders: number;
+  volumeTzs: number; volumeUsdc: number;
+  funding?: { deposits: number; collectedTzs: number;
+              transferredTzs: number; transferredUsdc: number };
+  holdings?: { asset: string; qty: number; holders: number }[];
+} | null;
 type Partner = {
   id: string; name: string; slug: string; status: string;
   contactName: string | null; contactEmail: string; contactPhone: string | null;
@@ -193,16 +198,71 @@ export function PartnersAdmin() {
           )}
 
           {p.usage && (
-            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[var(--muted)]">
-              <span>{p.usage.users.toLocaleString()} customers</span>
-              <span>{p.usage.verified.toLocaleString()} verified</span>
-              <span>{p.usage.orders.toLocaleString()} orders</span>
-              <span className="tabular-nums">{tzs(p.usage.volumeTzs)}</span>
-              <span className="tabular-nums">
-                ${p.usage.volumeUsdc.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-              </span>
-              {p.webhookUrl && <span>webhook set</span>}
-            </div>
+            <>
+              <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[var(--muted)]">
+                <span>{p.usage.users.toLocaleString()} customers</span>
+                <span>{p.usage.verified.toLocaleString()} verified</span>
+                <span>{p.usage.orders.toLocaleString()} orders</span>
+                <span className="tabular-nums">{tzs(p.usage.volumeTzs)} traded</span>
+                <span className="tabular-nums">
+                  ${p.usage.volumeUsdc.toLocaleString(undefined, { maximumFractionDigits: 2 })} traded
+                </span>
+                {p.webhookUrl && <span>webhook set</span>}
+              </div>
+
+              {/*
+                * How their money arrived, split by rail.
+                *
+                * A partner paying in nTZS is a different operational fact from
+                * their customers running mobile money collections — one is a
+                * transfer the desk can see on chain, the other had to settle
+                * — so the two are never added together here.
+                */}
+              {p.usage.funding && p.usage.funding.deposits > 0 && (
+                <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                  <div className="rounded-xl surface px-3.5 py-2.5">
+                    <div className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                      Collected (mobile money, bank)
+                    </div>
+                    <div className="tnum mt-0.5 text-sm">{tzs(p.usage.funding.collectedTzs)}</div>
+                  </div>
+                  <div className="rounded-xl surface px-3.5 py-2.5">
+                    <div className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                      Transferred in nTZS
+                    </div>
+                    <div className="tnum mt-0.5 text-sm">{tzs(p.usage.funding.transferredTzs)}</div>
+                  </div>
+                  <div className="rounded-xl surface px-3.5 py-2.5">
+                    <div className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                      Transferred in USDC
+                    </div>
+                    <div className="tnum mt-0.5 text-sm">
+                      ${p.usage.funding.transferredUsdc.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!!p.usage.holdings?.length && (
+                <div className="mt-4">
+                  <div className="eyebrow">What their customers hold</div>
+                  <div className="mt-2 grid gap-1.5">
+                    {p.usage.holdings.map((h) => (
+                      <div key={h.asset}
+                           className="flex items-center gap-3 rounded-xl surface px-3.5 py-2 text-[12px]">
+                        <span className="w-16 shrink-0 font-medium">{h.asset}</span>
+                        <span className="tnum shrink-0 text-[var(--muted)]">
+                          {h.holders} holder{h.holders === 1 ? "" : "s"}
+                        </span>
+                        <span className="tnum ml-auto">
+                          {h.qty.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           <div className="mt-5 border-t hairline pt-4">

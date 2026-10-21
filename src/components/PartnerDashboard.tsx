@@ -15,6 +15,9 @@ import { useCallback, useEffect, useState } from "react";
 type Usage = {
   users: number; verified: number; orders: number;
   volumeTzs: number; volumeUsdc: number;
+  funding?: { deposits: number; collectedTzs: number;
+              transferredTzs: number; transferredUsdc: number };
+  holdings?: { asset: string; qty: number; holders: number }[];
   daily: { day: string; orders: number; tzs: number }[];
 };
 type Key = { id: string; mode: string; label: string | null; prefix: string;
@@ -141,6 +144,39 @@ export function PartnerDashboard() {
         <Stat label="Shilling volume" value={tzs(usage.volumeTzs)} hint="Dar es Salaam board" />
         <Stat label="Dollar volume" value={usd(usage.volumeUsdc)} hint="US board" />
       </div>
+
+      {usage.funding && usage.funding.deposits > 0 && (
+        <div className="mt-6 rounded-2xl border hairline p-5">
+          <div className="eyebrow">How your customers are funded</div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <Stat label="Collected" value={tzs(usage.funding.collectedTzs)}
+                  hint="mobile money and bank transfers" />
+            <Stat label="Transferred in nTZS" value={tzs(usage.funding.transferredTzs)}
+                  hint="paid straight to the omnibus wallet" />
+            <Stat label="Transferred in USDC" value={usd(usage.funding.transferredUsdc)} />
+          </div>
+        </div>
+      )}
+
+      {!!usage.holdings?.length && (
+        <div className="mt-6 rounded-2xl border hairline p-5">
+          <div className="eyebrow">What your customers hold</div>
+          <div className="mt-3 grid gap-1.5">
+            {usage.holdings.map((h) => (
+              <div key={h.asset}
+                   className="flex items-center gap-3 rounded-xl surface px-3.5 py-2 text-[12.5px]">
+                <span className="w-16 shrink-0 font-medium">{h.asset}</span>
+                <span className="tabular-nums shrink-0 text-[var(--muted)]">
+                  {h.holders} holder{h.holders === 1 ? "" : "s"}
+                </span>
+                <span className="tabular-nums ml-auto">
+                  {h.qty.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {usage.daily.some((d) => d.tzs > 0) && (
         <div className="mt-8 rounded-2xl border hairline p-5">

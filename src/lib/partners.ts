@@ -237,12 +237,51 @@ export async function usageFor(partnerId: string, days = 30) {
       left join capx.ledger_entries l on l.ref = o.id::text || ':cash' and l.asset = 'TZS'
      group by span.day order by span.day`;
 
+  /*
+   * What this partner's customers are funded with and holding.
+   *
+   * Funding is split by how it arrived, because a partner paying in nTZS is a
+   * different operational fact from their customers running mobile money
+   * collections: one arrives as a stablecoin transfer the desk can see on
+   * chain, the other as a collection that had to settle. The desk should not
+   * have to reconstruct that from metadata.
+   */
+  const [funding] = await sql<{ collected: string; transferred_tzs: string;
+                                transferred_usdc: string; deposits: number }[]>`
+    select
+      coalesce(sum(amount_tzs) filter (
+        where status = 'settled' and coalesce(metadata->>'route','') <> 'stablecoin-transfer'), 0)::text as collected,
+      coalesce(sum(amount_tzs) filter (
+        where status = 'settled' and metadata->>'route' = 'stablecoin-transfer'), 0)::text as transferred_tzs,
+      coalesce(sum(usdc_credited) filter (
+        where status = 'settled' and metadata->>'route' = 'stablecoin-transfer'), 0)::text as transferred_usdc,
+      count(*) filter (where status = 'settled')::int as deposits
+      from capx.deposits where partner_id = ${partnerId}::uuid`;
+
+  /* What their customers hold now, per asset, straight from the ledger. */
+  const holdings = await sql<{ asset: string; qty: string; holders: number }[]>`
+    select l.asset, sum(l.amount)::text as qty, count(distinct l.user_id)::int as holders
+      from capx.ledger_entries l
+      join capx.users u on u.id = l.user_id
+     where u.partner_id = ${partnerId}::uuid
+     group by l.asset having sum(l.amount) <> 0
+     order by l.asset`;
+
   return {
     users: totals?.users ?? 0,
     verified: totals?.verified ?? 0,
     orders: totals?.orders ?? 0,
     volumeTzs: Number(totals?.tzs ?? 0),
     volumeUsdc: Number(totals?.usdc ?? 0),
+    funding: {
+      deposits: funding?.deposits ?? 0,
+      collectedTzs: Number(funding?.collected ?? 0),
+      transferredTzs: Number(funding?.transferred_tzs ?? 0),
+      transferredUsdc: Number(funding?.transferred_usdc ?? 0),
+    },
+    holdings: holdings.map((h) => ({
+      asset: h.asset, qty: Number(h.qty), holders: h.holders,
+    })),
     daily: daily.map((d) => ({ day: d.day, orders: d.orders, tzs: Number(d.tzs) })),
   };
 }

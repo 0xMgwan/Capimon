@@ -24,6 +24,20 @@ const COLS = [
     ],
   },
   {
+    /*
+     * Built on CAPX.
+     *
+     * The partner programme had no way in: every link to it was inside it,
+     * so the only people who could find it were the ones already there.
+     */
+    title: "Build",
+    links: [
+      { label: "Partner programme", href: "/partners" },
+      { label: "API documentation", href: "/partners/docs" },
+      { label: "Partner dashboard", href: "/partners/dashboard" },
+    ],
+  },
+  {
     title: "Company",
     links: [
       { label: "How it works", href: "/how-it-works" },

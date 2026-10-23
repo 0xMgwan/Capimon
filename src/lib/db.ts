@@ -961,6 +961,23 @@ export async function migrate() {
            */
           "paid_tzs numeric(38,2) not null default 0",
         ],
+        partners: [
+          /*
+           * Whether CAPX accepts this partner's own verification.
+           *
+           * Reliance on third-party KYC: the partner has identified their
+           * customer and attests to it, and CAPX takes that rather than
+           * reviewing documents again. A real and ordinary arrangement, and
+           * one that only works when it is granted deliberately — off by
+           * default, because a self-service flag would let anybody who filled
+           * in the registration form mint verified customers who trade.
+           *
+           * CAPX remains responsible either way, which is why every
+           * attestation is recorded with the partner's name on it and can be
+           * overridden from the desk.
+           */
+          "kyc_reliance boolean not null default false",
+        ],
         lp_fills: [
           /*
            * Which way the fill went.
@@ -1000,21 +1017,6 @@ export async function migrate() {
            * kind of inference that is right until it quietly is not.
            */
           "also_broker boolean not null default false",
-          /*
-           * Whether CAPX accepts this partner's own verification.
-           *
-           * Reliance on third-party KYC: the partner has identified their
-           * customer and attests to it, and CAPX takes that rather than
-           * reviewing documents again. A real and ordinary arrangement, and
-           * one that only works when it is granted deliberately — off by
-           * default, because a self-service flag would let anybody who filled
-           * in the registration form mint verified customers who trade.
-           *
-           * CAPX remains responsible either way, which is why every
-           * attestation is recorded with the partner's name on it and can be
-           * overridden from the desk.
-           */
-          "kyc_reliance boolean not null default false",
         ],
       };
       for (const [table, columns] of Object.entries(lateColumns)) {

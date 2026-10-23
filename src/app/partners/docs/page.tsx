@@ -45,7 +45,7 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
   },
   {
     title: "Verification",
-    blurb: "Buying is gated on CAPX approving the customer. You file; we review. Nothing you send sets the status — the obligation is ours, so the decision is too.",
+    blurb: "Buying is gated on the customer being verified. By default you file and CAPX reviews, and nothing you send sets the status. Where CAPX has examined your own onboarding and granted reliance, your attestation verifies the customer immediately — ask us about it. Either way CAPX records who attested and when, and can revoke any single customer.",
     endpoints: [
       { method: "POST", path: "/v1/users/:ref/kyc", what: "File a customer's documents for review.",
         body: [
@@ -54,8 +54,8 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
           ["document_image", "required. base64, a data: URL is fine."],
           ["selfie_image", "required. base64."],
         ],
-        returns: "202, with kyc_status: pending.",
-        note: "The images are required because a review needs something to look at. A filing without them would sit pending forever with nothing in the queue." },
+        returns: "Without reliance: 202 and kyc_status pending. With reliance: 200, kyc_status approved, and the customer can buy immediately. The response carries `source` so you never have to guess which happened.",
+        note: "Images are required when CAPX reviews, because a review needs something to look at. Under reliance they are optional — but send them if you can: the day a regulator asks CAPX to evidence an identification, holding the document is the difference between answering and asking you." },
     ],
   },
   {

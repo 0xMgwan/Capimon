@@ -36,6 +36,8 @@ export type Partner = {
   maxOrderTzs: number | null;
   maxDailyTzs: number | null;
   webhookUrl: string | null;
+  /** CAPX accepts this partner's own verification of their customers. */
+  kycReliance: boolean;
   createdAt: string;
 };
 
@@ -45,7 +47,7 @@ type Row = {
   company_reg: string | null; country: string; website: string | null;
   use_case: string | null; expected_users: number | null; fee_bps: number;
   max_order_tzs: string | null; max_daily_tzs: string | null;
-  webhook_url: string | null; created_at: string;
+  webhook_url: string | null; kyc_reliance: boolean; created_at: string;
 };
 
 const toPartner = (r: Row): Partner => ({
@@ -55,12 +57,13 @@ const toPartner = (r: Row): Partner => ({
   useCase: r.use_case, expectedUsers: r.expected_users, feeBps: Number(r.fee_bps ?? 0),
   maxOrderTzs: r.max_order_tzs === null ? null : Number(r.max_order_tzs),
   maxDailyTzs: r.max_daily_tzs === null ? null : Number(r.max_daily_tzs),
-  webhookUrl: r.webhook_url, createdAt: r.created_at,
+  webhookUrl: r.webhook_url, kycReliance: !!r.kyc_reliance, createdAt: r.created_at,
 });
 
 const SELECT = `id::text, name, slug, status, contact_name, contact_email, contact_phone,
                 company_reg, country, website, use_case, expected_users, fee_bps,
-                max_order_tzs::text, max_daily_tzs::text, webhook_url, created_at`;
+                max_order_tzs::text, max_daily_tzs::text, webhook_url, kyc_reliance,
+                created_at`;
 
 export const hashKey = (key: string) =>
   createHash("sha256").update(key.trim()).digest("hex");
@@ -372,4 +375,101 @@ export async function emit(partnerId: string, kind: string, payload: Record<stri
 export function sameSecret(a: string, b: string) {
   const x = Buffer.from(a), y = Buffer.from(b);
   return x.length === y.length && timingSafeEqual(x, y);
+}
+
+
+/**
+ * One partner's customers, with the detail CAPX needs to answer for them.
+ *
+ * There was no way to see these at all: the desk knew how many customers a
+ * partner had and what they collectively held, and nothing about who they
+ * were. That is fine right up until somebody asks CAPX — who holds the
+ * assets — to account for a particular person, which is a question the
+ * aggregate cannot answer.
+ *
+ * Includes how each one came to be verified and on whose word, because under
+ * reliance that is the only record of why an account was allowed to trade.
+ */
+export type PartnerCustomer = {
+  id: string;
+  reference: string | null;
+  name: string | null;
+  email: string;
+  phone: string | null;
+  country: string;
+  kycStatus: string;
+  kycSource: string | null;
+  kycAttestedBy: string | null;
+  kycAttestedAt: string | null;
+  docType: string | null;
+  createdAt: string;
+  orders: number;
+  lastActivity: string | null;
+  balances: { asset: string; amount: number }[];
+};
+
+export async function customersOf(
+  partnerId: string, opts: { limit?: number; search?: string } = {},
+): Promise<PartnerCustomer[]> {
+  if (!dbConfigured) return [];
+  await migrate();
+  const sql = db();
+  const limit = Math.min(500, Math.max(1, opts.limit ?? 200));
+  const q = (opts.search ?? "").trim().toLowerCase();
+
+  const rows = await sql<{
+    id: string; partner_ref: string | null; name: string | null; email: string;
+    phone: string | null; country: string; kyc_status: string; kyc_source: string | null;
+    kyc_attested_by: string | null; kyc_attested_at: string | null; doc_type: string | null;
+    created_at: string; orders: number; last_activity: string | null;
+  }[]>`
+    select u.id::text, u.partner_ref, u.name, u.email, u.phone, u.country,
+           u.kyc_status, u.kyc_source, u.kyc_attested_by, u.kyc_attested_at::text,
+           u.doc_type, u.created_at,
+           (select count(*)::int from capx.orders o
+             where o.user_id = u.id and o.status = 'settled') as orders,
+           (select max(l.created_at)::text from capx.ledger_entries l
+             where l.user_id = u.id) as last_activity
+      from capx.users u
+     where u.partner_id = ${partnerId}::uuid
+       and (${q === ""} or lower(u.email) like ${"%" + q + "%"}
+            or lower(coalesce(u.name, '')) like ${"%" + q + "%"}
+            or lower(coalesce(u.partner_ref, '')) like ${"%" + q + "%"})
+     order by u.created_at desc
+     limit ${limit}`;
+
+  /* Balances in one query rather than one per customer: a partner with two
+     hundred customers should not cost two hundred round trips to look at. */
+  const ids = rows.map((r) => r.id);
+  const bal = ids.length
+    ? await sql<{ user_id: string; asset: string; amount: string }[]>`
+        select user_id::text, asset, sum(amount)::text as amount
+          from capx.ledger_entries
+         where user_id = any(${ids}::uuid[])
+         group by user_id, asset having sum(amount) <> 0`
+    : [];
+  const byUser = new Map<string, { asset: string; amount: number }[]>();
+  for (const b of bal) {
+    const list = byUser.get(b.user_id) ?? [];
+    list.push({ asset: b.asset, amount: Number(b.amount) });
+    byUser.set(b.user_id, list);
+  }
+
+  return rows.map((r) => ({
+    id: r.id,
+    reference: r.partner_ref,
+    name: r.name,
+    email: r.email,
+    phone: r.phone,
+    country: r.country,
+    kycStatus: r.kyc_status,
+    kycSource: r.kyc_source,
+    kycAttestedBy: r.kyc_attested_by,
+    kycAttestedAt: r.kyc_attested_at,
+    docType: r.doc_type,
+    createdAt: r.created_at,
+    orders: r.orders,
+    lastActivity: r.last_activity,
+    balances: byUser.get(r.id) ?? [],
+  }));
 }

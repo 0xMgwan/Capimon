@@ -868,6 +868,18 @@ export async function migrate() {
            * asking when somebody was told is asking about this column.
            */
           "sandbox_accepted_at timestamptz",
+          /*
+           * Who verified this person, and on whose word.
+           *
+           * "capx" means a human here read the documents. "partner" means a
+           * partner CAPX has granted reliance attested to it. The difference
+           * matters to a regulator asking how an account came to be able to
+           * trade, and it cannot be reconstructed after the fact — so it is
+           * written at the moment of approval.
+           */
+          "kyc_source text",
+          "kyc_attested_by text",
+          "kyc_attested_at timestamptz",
           /* Which document the number in `nida_number` belongs to. The column
              is named for the one Tanzanians mostly carry, but a passport or a
              licence is just as valid and storing one under a NIDA label made
@@ -988,6 +1000,21 @@ export async function migrate() {
            * kind of inference that is right until it quietly is not.
            */
           "also_broker boolean not null default false",
+          /*
+           * Whether CAPX accepts this partner's own verification.
+           *
+           * Reliance on third-party KYC: the partner has identified their
+           * customer and attests to it, and CAPX takes that rather than
+           * reviewing documents again. A real and ordinary arrangement, and
+           * one that only works when it is granted deliberately — off by
+           * default, because a self-service flag would let anybody who filled
+           * in the registration form mint verified customers who trade.
+           *
+           * CAPX remains responsible either way, which is why every
+           * attestation is recorded with the partner's name on it and can be
+           * overridden from the desk.
+           */
+          "kyc_reliance boolean not null default false",
         ],
       };
       for (const [table, columns] of Object.entries(lateColumns)) {

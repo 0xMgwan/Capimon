@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireDb, bad, boom } from "@/lib/apiHelpers";
 import { roleOf } from "@/lib/adminAuth";
-import { partners, usageFor, issueKey, type PartnerStatus } from "@/lib/partners";
+import { partners, usageFor, issueKey, customersOf, type PartnerStatus } from "@/lib/partners";
 import { db, migrate } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -10,11 +10,29 @@ const gateAdmin = (req: Request) =>
   roleOf(req) === "admin" ? null
     : NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
 
-/** Every applicant and every partner, with what they have actually done. */
+/**
+ * Every applicant and every partner, with what they have actually done.
+ *
+ * `?customers=<partner id>` returns that partner's own customers in full.
+ * Kept off the main listing deliberately: loading every customer of every
+ * partner to render a summary is work nobody asked for, and the detail is
+ * only wanted one partner at a time.
+ */
 export async function GET(req: Request) {
   const gate = requireDb(); if (gate) return gate;
   const denied = gateAdmin(req); if (denied) return denied;
   try {
+    const u = new URL(req.url);
+    const wantCustomers = u.searchParams.get("customers");
+    if (wantCustomers) {
+      return NextResponse.json({
+        ok: true,
+        customers: await customersOf(wantCustomers, {
+          search: u.searchParams.get("q") ?? undefined,
+        }),
+      }, { headers: { "cache-control": "no-store" } });
+    }
+
     const list = await partners();
     const withUsage = await Promise.all(list.map(async (p) => ({
       ...p, usage: await usageFor(p.id, 7).catch(() => null),
@@ -96,6 +114,30 @@ export async function POST(req: Request) {
     }
     if (maxDaily !== undefined) {
       await sql`update capx.partners set max_daily_tzs = ${maxDaily} where id = ${id}::uuid`;
+    }
+    if (typeof body.kycReliance === "boolean") {
+      await sql`update capx.partners set kyc_reliance = ${body.kycReliance}
+                 where id = ${id}::uuid`;
+    }
+    /*
+     * Overriding one customer, which reliance makes necessary rather than
+     * optional: accepting somebody else's verification only works if CAPX can
+     * withdraw its acceptance of a particular person without withdrawing it
+     * from the partner wholesale.
+     */
+    if (typeof body.setCustomerKyc === "string" && typeof body.userId === "string") {
+      const status = body.setCustomerKyc;
+      if (!["approved", "pending", "rejected"].includes(status)) {
+        return bad("Customer KYC must be approved, pending or rejected.");
+      }
+      await sql`
+        update capx.users
+           set kyc_status = ${status},
+               kyc_source = 'capx',
+               kyc_attested_by = 'CAPX',
+               kyc_attested_at = now()
+         where id = ${body.userId}::uuid and partner_id = ${id}::uuid`;
+      return NextResponse.json({ ok: true, user_id: body.userId, kyc_status: status });
     }
     if (typeof body.notes === "string") {
       await sql`update capx.partners set notes = ${body.notes.slice(0, 4000)} where id = ${id}::uuid`;

@@ -24,7 +24,15 @@ type Partner = {
   companyReg: string | null; country: string; website: string | null;
   useCase: string | null; expectedUsers: number | null;
   feeBps: number; maxOrderTzs: number | null; maxDailyTzs: number | null;
-  webhookUrl: string | null; createdAt: string; usage: Usage;
+  webhookUrl: string | null; kycReliance: boolean; createdAt: string; usage: Usage;
+};
+
+type Customer = {
+  id: string; reference: string | null; name: string | null; email: string;
+  phone: string | null; country: string; kycStatus: string; kycSource: string | null;
+  kycAttestedBy: string | null; kycAttestedAt: string | null; docType: string | null;
+  createdAt: string; orders: number; lastActivity: string | null;
+  balances: { asset: string; amount: number }[];
 };
 
 const tzs = (n: number) => `${Math.round(n).toLocaleString()} TZS`;
@@ -42,6 +50,21 @@ export function PartnersAdmin() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [issued, setIssued] = useState<{ name: string; key: string } | null>(null);
+  /* Customers are loaded per partner, on demand. */
+  const [open, setOpen] = useState<string | null>(null);
+  const [customers, setCustomers] = useState<Record<string, Customer[]>>({});
+  const [query, setQuery] = useState("");
+
+  const loadCustomers = useCallback(async (p: Partner, q = "") => {
+    setBusy(true);
+    try {
+      const r = await fetch(
+        `/api/admin/partners?token=${encodeURIComponent(token)}&customers=${p.id}` +
+        (q ? `&q=${encodeURIComponent(q)}` : ""), { cache: "no-store" });
+      const j = await r.json();
+      if (j.ok) setCustomers((c) => ({ ...c, [p.id]: j.customers ?? [] }));
+    } finally { setBusy(false); }
+  }, [token]);
 
   const load = useCallback(async (t: string) => {
     setBusy(true); setErr(null);
@@ -265,12 +288,156 @@ export function PartnersAdmin() {
             </>
           )}
 
+          {/*
+            * Who this partner's customers actually are.
+            *
+            * Loaded only when asked for. Under reliance these rows are the
+            * record of why each account was allowed to trade, so the source
+            * and the attestation are shown beside the status rather than
+            * buried behind it.
+            */}
+          <div className="mt-5 border-t hairline pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-sm font-medium">Customers</h3>
+              <button
+                onClick={() => {
+                  const next = open === p.id ? null : p.id;
+                  setOpen(next);
+                  if (next && !customers[p.id]) void loadCustomers(p);
+                }}
+                className="rounded-full border hairline px-4 py-1.5 text-xs"
+              >
+                {open === p.id ? "Hide" : `Show ${p.usage?.users ?? 0}`}
+              </button>
+            </div>
+
+            {open === p.id && (
+              <div className="mt-3">
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") void loadCustomers(p, query); }}
+                  placeholder="Search name, email or their reference — Enter to search"
+                  className="w-full rounded-xl border hairline bg-transparent px-3.5 py-2 text-xs outline-none focus:border-[var(--color-accent)]"
+                />
+
+                {!customers[p.id]?.length ? (
+                  <p className="mt-3 text-xs text-[var(--muted)]">
+                    {busy ? "Loading…" : "No customers match."}
+                  </p>
+                ) : (
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full min-w-[820px] text-[12px]">
+                      <thead className="text-left text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                        <tr>
+                          <th className="pb-2 font-normal">Customer</th>
+                          <th className="pb-2 font-normal">Their ref</th>
+                          <th className="pb-2 font-normal">Verified</th>
+                          <th className="pb-2 text-right font-normal">Orders</th>
+                          <th className="pb-2 text-right font-normal">Holdings</th>
+                          <th className="pb-2 text-right font-normal"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {customers[p.id].map((c) => (
+                          <tr key={c.id} className="border-t hairline align-top">
+                            <td className="py-2.5">
+                              <div className="font-medium">{c.name ?? "—"}</div>
+                              <div className="text-[var(--muted)]">{c.email}</div>
+                              <div className="text-[var(--muted)]">
+                                {c.phone ?? "no phone"} · {c.country}
+                                {c.docType ? ` · ${c.docType}` : ""}
+                              </div>
+                            </td>
+                            <td className="py-2.5 text-[var(--muted)]">{c.reference ?? "—"}</td>
+                            <td className="py-2.5">
+                              <span className={c.kycStatus === "approved"
+                                ? "text-[var(--color-up)]"
+                                : c.kycStatus === "pending" ? "text-[#b45309]" : "text-[var(--muted)]"}>
+                                {c.kycStatus}
+                              </span>
+                              <div className="text-[var(--muted)]">
+                                {c.kycSource === "partner"
+                                  ? `on ${c.kycAttestedBy}'s word`
+                                  : c.kycSource === "capx" ? "CAPX reviewed" : "not filed"}
+                              </div>
+                            </td>
+                            <td className="py-2.5 text-right tabular-nums">{c.orders}</td>
+                            <td className="py-2.5 text-right tabular-nums">
+                              {c.balances.length
+                                ? c.balances.map((b) => (
+                                    <div key={b.asset}>
+                                      {b.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}{" "}
+                                      <span className="text-[var(--muted)]">{b.asset}</span>
+                                    </div>
+                                  ))
+                                : <span className="text-[var(--muted)]">—</span>}
+                            </td>
+                            <td className="py-2.5 text-right">
+                              {c.kycStatus === "approved" ? (
+                                <button
+                                  onClick={() => void act(p, { setCustomerKyc: "rejected", userId: c.id })
+                                    .then(() => loadCustomers(p, query))}
+                                  disabled={busy}
+                                  className="rounded-full border hairline px-3 py-1 text-[11px] disabled:opacity-50"
+                                >
+                                  Revoke
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => void act(p, { setCustomerKyc: "approved", userId: c.id })
+                                    .then(() => loadCustomers(p, query))}
+                                  disabled={busy}
+                                  className="rounded-full border hairline px-3 py-1 text-[11px] disabled:opacity-50"
+                                >
+                                  Approve
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="mt-5 border-t hairline pt-4">
             <h3 className="text-sm font-medium">Terms</h3>
             <p className="mt-1 text-xs text-[var(--muted)]">
               Blank means no limit is agreed and nothing is refused on that ground. Their fee share
               comes out of CAPX&apos;s slice, so it is capped at 250 bps.
             </p>
+            {/*
+              * Granted, never assumed. With this on, this partner's customers
+              * are verified the moment the partner says so — which is only
+              * safe for a partner whose own onboarding CAPX has examined.
+              */}
+            <div className="mt-3 rounded-2xl border hairline p-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[11px] uppercase tracking-wide text-[var(--muted)]">
+                    Accept their verification
+                  </div>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    {p.kycReliance
+                      ? "On. Their customers can trade as soon as this partner attests to them. Every attestation is recorded against their name, and you can revoke any single customer above."
+                      : "Off. Their filings land in the CAPX review queue and their customers cannot buy until somebody here approves them."}
+                  </p>
+                </div>
+                <button
+                  onClick={() => void act(p, { kycReliance: !p.kycReliance })}
+                  disabled={busy || p.status !== "approved"}
+                  className={`shrink-0 rounded-full px-4 py-2 text-xs font-medium disabled:opacity-40 ${
+                    p.kycReliance ? "border hairline" : "bg-[var(--fg)] text-[var(--bg)]"}`}
+                >
+                  {p.kycReliance ? "Withdraw reliance" : "Grant reliance"}
+                </button>
+              </div>
+            </div>
+
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
               {term(p, "fee_bps", "Fee share (bps, max 250)", p.feeBps)}
               {term(p, "max_order_tzs", "Max single order (TZS)", p.maxOrderTzs)}

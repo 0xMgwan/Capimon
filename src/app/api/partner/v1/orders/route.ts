@@ -65,16 +65,13 @@ export const POST = partnerRoute(
       if (refusal) return sendFail(refusal);
     }
 
-    const result = isDse
-      ? await (await import("@/lib/dseOrders")).placeSecurityOrder(customer,
-          { security, side, amount })
-      : await (await import("@/lib/usOrders")).placeUsOrder(customer,
-          { symbol: security, side, amount, currency });
+    const { placeOrderFor } = await import("@/lib/placeOrder");
+    const result = await placeOrderFor(customer, { security, side, amount, currency });
 
     if (!result.ok) {
-      const { status, ok, ...rest } = result as { status?: number; ok: false } & Record<string, unknown>;
+      const { status, ok, ...rest } = result;
       void ok;
-      return send({ ok: false, ...rest }, status ?? 400);
+      return send({ ok: false, ...rest }, status);
     }
 
     const { emit } = await import("@/lib/partners");
@@ -86,12 +83,8 @@ export const POST = partnerRoute(
     return send({ ok: true, order: {
       id: result.orderId, user_id: customer.id, reference: ref,
       security, side, qty: result.qty, price: result.price,
-      amount: "tzs" in result ? result.tzs : result.usdc,
-      currency: isDse ? "TZS" : currency,
-      /* The DSE path quotes its fee; the US path takes it inside the swap and
-         reports it on the order row instead. */
-      fee: "fee" in result ? result.fee : null,
-      status: "settled",
+      amount: result.amount, currency: result.currency, venue: result.venue,
+      fee: result.fee, status: "settled",
     } }, 201);
   },
 );

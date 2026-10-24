@@ -901,6 +901,22 @@ export async function migrate() {
            * times it is submitted.
            */
           "funding_tx text",
+          /*
+           * An order to place the moment this deposit is credited.
+           *
+           * A partner can hand over the transfer and the trade in one call.
+           * It is held rather than executed because the money is not CAPX's
+           * to trade against until its block is safe — buying first and
+           * hoping the transfer sticks is the one thing the finality gate
+           * exists to prevent.
+           *
+           * Keyed to the deposit, so it executes once however many times the
+           * settlement sweep passes over the row.
+           */
+          "on_arrival jsonb",
+          "on_arrival_status text",
+          "on_arrival_order_id uuid",
+          "on_arrival_error text",
           /* Which partner introduced the deposit, so the desk can tell a
              partner's funding from a customer's own without a join. */
           "partner_id uuid references capx.partners(id)",

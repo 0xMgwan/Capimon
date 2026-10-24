@@ -105,12 +105,32 @@ export const POST = partnerRoute(
      * wrong.
      */
     if (body.tx_hash) {
+      /*
+       * The trade, handed over with the transfer.
+       *
+       * Held rather than executed when the block is not yet safe — the money
+       * is not CAPX's to trade against until then — and run the instant it
+       * is, either here or on the sweep that credits it.
+       */
+      const oa = body.buy_on_arrival as Record<string, unknown> | undefined;
+      const onArrival = oa && typeof oa === "object" && oa.security
+        ? {
+            security: String(oa.security),
+            side: oa.side === "sell" ? "sell" as const : "buy" as const,
+            amount: Number.isFinite(Number(oa.amount)) && Number(oa.amount) > 0
+              ? Number(oa.amount) : undefined,
+            currency: String(oa.currency ?? "").toUpperCase() === "USDC"
+              ? "USDC" as const : undefined,
+          }
+        : undefined;
+
       const { creditStablecoinTransfer } = await import("@/lib/stablecoinDeposits");
       const credited = await creditStablecoinTransfer({
         userId: customer.id,
         txHash: String(body.tx_hash),
         token: String(body.token ?? "NTZS").toUpperCase() === "USDC" ? "USDC" : "NTZS",
         partnerId: caller.partner.id,
+        onArrival,
       });
 
       if (!credited.ok) {
@@ -139,8 +159,20 @@ export const POST = partnerRoute(
           token: credited.token, asset: credited.asset,
           amount: credited.amount, tx_hash: credited.txHash,
           confirmations: credited.confirmations ?? null,
+          /*
+           * Null while the deposit waits; then "done" with the order, or
+           * "failed" with the reason. A failed order never costs the deposit
+           * — the money is credited and stays as the customer's cash.
+           */
+          buy_on_arrival: onArrival
+            ? (credited.arrival ?? { status: "pending" })
+            : null,
         },
-        note: credited.duplicate
+        note: onArrival && credited.state === "pending"
+          ? `Recorded ${credited.amount} ${credited.asset}. It is credited and the order placed `
+            + `once the block is batched to Ethereum — waiting on ${credited.waitingFor}. `
+            + `The fill is at the price when it executes, not now.`
+          : credited.duplicate
           ? pending
             ? "Already recorded and still waiting to be safe. This is the original deposit."
             : "Already credited. This is the original deposit, not a second one."

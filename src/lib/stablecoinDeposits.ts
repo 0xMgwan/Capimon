@@ -125,7 +125,10 @@ export type CreditResult =
       txHash: string; duplicate?: boolean;
       /** "credited" once the block is safe; "pending" while it is not. */
       state: "credited" | "pending";
-      confirmations?: number; waitingFor?: string | null }
+      confirmations?: number; waitingFor?: string | null;
+      /** The outcome of a buy_on_arrival, once there was one to run. */
+      arrival?: { status: string; order_id?: string; qty?: number; price?: number;
+                  error?: string } | null }
   | { ok: false; code: string; error: string; status: number };
 
 const refuse = (code: string, error: string, status = 400): CreditResult =>
@@ -156,6 +159,9 @@ export async function creditStablecoinTransfer(input: {
   txHash: string;
   token: StableToken;
   partnerId?: string;
+  /** An order to place the moment this is credited. */
+  onArrival?: { security: string; side?: "buy" | "sell"; amount?: number;
+                currency?: "TZS" | "USDC" };
 }): Promise<CreditResult> {
   const txHash = input.txHash.trim().toLowerCase();
   if (!/^0x[0-9a-f]{64}$/.test(txHash)) {
@@ -247,7 +253,8 @@ export async function creditStablecoinTransfer(input: {
    */
   const [row] = await sql<{ id: string }[]>`
     insert into capx.deposits
-      (user_id, amount_tzs, usdc_credited, phone, status, settled_at, funding_tx, partner_id, metadata)
+      (user_id, amount_tzs, usdc_credited, phone, status, settled_at, funding_tx, partner_id,
+       metadata, on_arrival, on_arrival_status)
     values (${input.userId}::uuid,
             ${input.token === "NTZS" ? amount : 0},
             ${input.token === "USDC" ? amount : null},
@@ -257,7 +264,9 @@ export async function creditStablecoinTransfer(input: {
               route: "stablecoin-transfer", token: input.token, txHash,
               paymentMethod: "stablecoin_transfer",
               block: receipt.blockNumber.toString(),
-            } as never)})
+            } as never)},
+            ${input.onArrival ? sql.json(input.onArrival as never) : null},
+            ${input.onArrival ? "pending" : null})
     returning id::text`;
 
   if (!finality.safe) {
@@ -271,8 +280,80 @@ export async function creditStablecoinTransfer(input: {
     metadata: { route: "stablecoin-transfer", token: input.token, txHash },
   }]);
 
+  /* Already safe, so there is nothing to wait for: the trade happens now. */
+  const arrival = input.onArrival
+    ? await runArrivalOrder(row.id, input.userId, amount, spec.asset)
+    : null;
+
   return { ok: true, depositId: row.id, token: input.token, asset: spec.asset, amount, txHash,
-    state: "credited", confirmations: finality.confirmations };
+    state: "credited", confirmations: finality.confirmations, arrival };
+}
+
+/**
+ * Places the order a deposit was told to place once it landed.
+ *
+ * Spends the whole deposit unless an amount was named, because "here is the
+ * money, buy the thing" is what a partner means and asking them to restate
+ * the figure they just transferred invites the two to disagree.
+ *
+ * A failure here is never a lost deposit. The money is already credited and
+ * stays as the customer's cash — the order is what failed, the reason is
+ * recorded against the row, and the partner is told. Anything else would make
+ * a halted market or an unverified customer into a reason to lose somebody's
+ * transfer.
+ *
+ * Marked before it runs, so a sweep passing twice cannot place it twice.
+ */
+async function runArrivalOrder(
+  depositId: string, userId: string, credited: number, asset: string,
+): Promise<{ status: string; order_id?: string; qty?: number; price?: number; error?: string } | null> {
+  const sql = db();
+
+  const [claimed] = await sql<{ on_arrival: { security: string; side?: "buy" | "sell";
+                                              amount?: number; currency?: "TZS" | "USDC" } }[]>`
+    update capx.deposits set on_arrival_status = 'running'
+     where id = ${depositId}::uuid and on_arrival_status = 'pending'
+     returning on_arrival`;
+  if (!claimed?.on_arrival) return null;
+  const intent = claimed.on_arrival;
+
+  const [u] = await sql<{ id: string; email: string; username: string | null; name: string | null;
+                          phone: string | null; country: string | null; kyc_status: string;
+                          nida_number: string | null }[]>`
+    select id::text, email, username, name, phone, country, kyc_status, nida_number
+      from capx.users where id = ${userId}::uuid`;
+  if (!u) return null;
+
+  const { placeOrderFor } = await import("./placeOrder");
+  const result = await placeOrderFor({
+    id: u.id, email: u.email, username: u.username, name: u.name, phone: u.phone,
+    country: u.country ?? "TZ", avatar: null, ntzsUserId: null,
+    kycStatus: u.kyc_status, nidaNumber: u.nida_number,
+  } as import("./auth").SessionUser, {
+    security: intent.security,
+    side: intent.side ?? "buy",
+    amount: intent.amount ?? credited,
+    currency: intent.currency ?? (asset === "USDC" ? "USDC" : "TZS"),
+  }).catch((e) => ({ ok: false as const, code: "order_threw",
+                     error: e instanceof Error ? e.message : "failed", status: 500 }));
+
+  if (!result.ok) {
+    await sql`update capx.deposits
+                 set on_arrival_status = 'failed', on_arrival_error = ${result.error.slice(0, 400)}
+               where id = ${depositId}::uuid`;
+    await notifyPartner(depositId, "order.failed",
+      { security: intent.security, error: result.error, via: "buy_on_arrival",
+        note: "The deposit is credited and stays as the customer's cash." });
+    return { status: "failed", error: result.error };
+  }
+
+  await sql`update capx.deposits
+               set on_arrival_status = 'done', on_arrival_order_id = ${result.orderId}::uuid
+             where id = ${depositId}::uuid`;
+  await notifyPartner(depositId, "order.settled",
+    { order_id: result.orderId, qty: result.qty, price: result.price,
+      security: intent.security, via: "buy_on_arrival" });
+  return { status: "done", order_id: result.orderId, qty: result.qty, price: result.price };
 }
 
 /**
@@ -361,7 +442,34 @@ export async function settleStablecoinDeposits(onlyUserId?: string): Promise<{
     await sql`update capx.deposits set status = 'settled', settled_at = now()
                where id = ${r.id}::uuid`;
     out.credited++;
+
+    /* The trade this deposit was told to make, now that the money is real. */
+    await runArrivalOrder(r.id, r.user_id, amount, asset).catch(() => null);
   }
 
   return out;
+}
+
+
+/**
+ * Tells the partner that brought a deposit what became of its order.
+ *
+ * A buy_on_arrival that runs a minute after the call returned has no response
+ * left to report into, so the webhook is the only way the partner learns of
+ * it. A failure especially: the money is credited and sitting as cash, which
+ * looks identical to a deposit nobody asked to trade unless somebody says so.
+ */
+async function notifyPartner(depositId: string, kind: string, data: Record<string, unknown>) {
+  try {
+    const sql = db();
+    const [row] = await sql<{ partner_id: string | null; user_id: string;
+                              partner_ref: string | null }[]>`
+      select d.partner_id::text, d.user_id::text, u.partner_ref
+        from capx.deposits d join capx.users u on u.id = d.user_id
+       where d.id = ${depositId}::uuid`;
+    if (!row?.partner_id) return;
+    const { emit } = await import("./partners");
+    await emit(row.partner_id, kind,
+      { ...data, deposit_id: depositId, user_id: row.user_id, reference: row.partner_ref });
+  } catch { /* the row records it either way */ }
 }

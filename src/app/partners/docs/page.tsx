@@ -19,6 +19,11 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
     title: "Markets",
     blurb: "What your customers can buy. Both boards come back in one list, each labelled with the currency it actually trades in.",
     endpoints: [
+      { method: "GET", path: "/v1/markets/:symbol/history",
+        what: "Price history for charting, on either board.",
+        body: [["days", "optional, up to 1825. Defaults to 365."]],
+        returns: "candles[] of { t, open, high, low, close } with t in seconds, plus venue, currency and source. The same series CAPX draws its own charts from, so a partner's chart and ours cannot disagree.",
+        note: "The two boards differ and the response says so rather than flattening them. A DSE series is in shillings, one point per session the exchange printed. A US series is in dollars from the Chainlink feed's own rounds, and is total-return — the price already carries the token's multiplier, so a split or dividend leaves no step in the line. Read `source`: \"dse\" is live from the exchange, while \"saved\" or \"oracle\" means the exchange was unreachable and this is the last good series or the oracle's own record." },
       { method: "GET", path: "/v1/markets",
         what: "Every tradeable security, Dar es Salaam and US.",
         returns: "symbol, name, venue, currency (TZS or USD), price, logo, tradable. US entries also carry onchain_supply — a token nobody has minted cannot be routed to, whatever its price feed says." },
@@ -93,6 +98,16 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
         body: [["user", "required"], ["amount_usdc", "or"], ["all", "true to convert the whole balance"]],
         returns: "The dollars spent and the shillings credited, at the rate the swap actually reported.",
         note: "One direction only. Shillings become dollars inside a US buy at the moment it needs them; offering that conversion on its own would make CAPX a currency desk." },
+    ],
+  },
+  {
+    title: "Settlement",
+    blurb: "Where to send stablecoin, and in what. Read it rather than hardcoding the address — it is served live from the omnibus account, and a copy in your config is the one field where being out of date means sending money somewhere CAPX is not watching.",
+    endpoints: [
+      { method: "GET", path: "/v1/settlement",
+        what: "The CAPX omnibus address on Base, and the tokens it accepts.",
+        returns: "chain, omnibus_address, tokens[] with contract addresses and decimals, and the steps to credit a customer.",
+        note: "Send only NTZS or USDC on Base. Anything else is not credited and cannot be returned automatically. omnibus_address is null if it could not be read — try again rather than falling back to a cached value." },
     ],
   },
   {

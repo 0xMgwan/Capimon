@@ -39,6 +39,19 @@ export const POST = partnerRoute(
         "No customer of yours matches that id or reference.", 404));
     }
 
+    /*
+     * Credit anything of theirs that has become final since it arrived.
+     *
+     * A partner's natural sequence is deposit then buy, and between the two
+     * sits the minute a Base block takes to be batched to Ethereum. Checking
+     * here means that minute is spent on the partner's own round trip rather
+     * than on waiting for a sweep, and a buy that would otherwise fail for
+     * insufficient balance against money already sitting in the omnibus
+     * simply works.
+     */
+    const { settleStablecoinDeposits } = await import("@/lib/stablecoinDeposits");
+    await settleStablecoinDeposits(customer.id).catch(() => null);
+
     const { dseSecurities } = await import("@/lib/dseSecurities");
     const dse = await dseSecurities().catch(() => []);
     const isDse = dse.some((d) => d.symbol.toUpperCase() === security);

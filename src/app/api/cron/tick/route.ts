@@ -152,20 +152,6 @@ export async function GET(req: Request) {
   }
 
   /*
-   * Stablecoin transfers that were mined but not yet batched to Ethereum.
-   *
-   * They are recorded on arrival and credited here once the block is safe,
-   * so a reorg cannot take money CAPX has already handed over. Cheap when
-   * there is nothing waiting, which is the normal case.
-   */
-  try {
-    const { settleStablecoinDeposits } = await import("@/lib/stablecoinDeposits");
-    did.stablecoinDeposits = await settleStablecoinDeposits();
-  } catch (e) {
-    did.stablecoinDeposits = { error: e instanceof Error ? e.message : "failed" };
-  }
-
-  /*
    * The people who were told their withdrawal would follow.
    *
    * Every tick, because a queued payout is money somebody is waiting on and

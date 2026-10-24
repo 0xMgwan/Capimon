@@ -278,7 +278,14 @@ export async function creditStablecoinTransfer(input: {
 /**
  * Credits the transfers that were mined but not yet safe when they arrived.
  *
- * Runs on the scheduled tick. Everything it needs is already on the row — the
+ * Runs on the fifteen-minute settlement sweep, and again — scoped to one
+ * customer — whenever a partner reads their deposits or places an order. The
+ * sweep is the right cadence for catching everything and a poor one for
+ * somebody who has just paid: a transfer is safe about a minute after it is
+ * mined, and waiting for the next sweep to notice is time nobody needs to
+ * spend. Scoped to a single account the same work costs one query.
+ *
+ * Everything it needs is already on the row — the
  * amount was read from the Transfer log at submission, so this re-checks
  * finality and nothing else, and the ledger write is keyed to the deposit id
  * exactly as the live path keys it. Running twice credits nobody twice.
@@ -287,7 +294,7 @@ export async function creditStablecoinTransfer(input: {
  * whole gate exists for — is marked failed rather than credited, and the desk
  * is told, because it means a reorg took money CAPX was about to hand over.
  */
-export async function settleStablecoinDeposits(): Promise<{
+export async function settleStablecoinDeposits(onlyUserId?: string): Promise<{
   checked: number; credited: number; waiting: number; vanished: number;
 }> {
   const out = { checked: 0, credited: 0, waiting: 0, vanished: 0 };
@@ -302,6 +309,7 @@ export async function settleStablecoinDeposits(): Promise<{
       from capx.deposits
      where status = 'pending' and funding_tx is not null
        and metadata->>'route' = 'stablecoin-transfer'
+       and (${onlyUserId ?? null}::uuid is null or user_id = ${onlyUserId ?? null}::uuid)
      order by created_at limit 50`;
 
   for (const r of rows) {

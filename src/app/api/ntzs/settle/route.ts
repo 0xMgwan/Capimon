@@ -294,6 +294,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
   }
   const settled = await settlePending();
+
+  /*
+   * Stablecoin transfers waiting on finality.
+   *
+   * These belong on this sweep and not on the thrice-daily tick, where they
+   * were: a transfer is safe about a minute after it is mined, so a cron that
+   * runs at five, six and three in the afternoon could leave a credited-in-
+   * principle deposit sitting for the better part of a day. Fifteen minutes
+   * is the right outer bound, and a partner reading their deposits settles
+   * their own sooner still.
+   */
+  const { settleStablecoinDeposits } = await import("@/lib/stablecoinDeposits");
+  const stablecoin = await settleStablecoinDeposits().catch(
+    (e) => ({ error: e instanceof Error ? e.message : "failed" }));
+
   /*
    * Also finish any order that failed after its shillings were converted. That
    * unwind is the missing half of an interrupted order, so it belongs here
@@ -303,7 +318,7 @@ export async function POST(req: Request) {
   const { reconcileSwapDrift } = await import("@/lib/reconcile");
   const repaired = await reconcileSwapDrift().catch(
     (e) => ({ applied: false, reason: e instanceof Error ? e.message : "reconcile failed" }));
-  return NextResponse.json({ ok: true, ...settled, repaired },
+  return NextResponse.json({ ok: true, stablecoin, ...settled, repaired },
     { headers: { "cache-control": "no-store" } });
 }
 

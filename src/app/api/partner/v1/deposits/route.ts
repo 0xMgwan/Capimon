@@ -21,6 +21,24 @@ export const GET = partnerRoute("GET /v1/deposits", {}, async ({ caller, req }) 
 
   await migrate();
   const sql = db();
+
+  /*
+   * Settle this partner's waiting transfers before answering.
+   *
+   * A stablecoin transfer is safe about a minute after it is mined, and the
+   * sweep that notices runs every fifteen. Reading the deposits is the moment
+   * somebody actually wants to know, so the same check runs here first —
+   * scoped to this partner's customers, which costs one query. Without it a
+   * partner polls and is told "pending" about money that has been creditable
+   * for fourteen minutes.
+   */
+  const { settleStablecoinDeposits } = await import("@/lib/stablecoinDeposits");
+  if (ref) {
+    const who = await partnerCustomer(caller.partner.id, ref);
+    if (who) await settleStablecoinDeposits(who.id).catch(() => null);
+  } else {
+    await settleStablecoinDeposits().catch(() => null);
+  }
   const rows = ref
     ? await (async () => {
         const customer = await partnerCustomer(caller.partner.id, ref);

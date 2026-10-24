@@ -51,21 +51,43 @@ export async function priceHistory(
   const sym = symbol.trim().toUpperCase();
   const days = Math.min(1825, Math.max(1, opts.days ?? 365));
 
+  /*
+   * Decide which board this is from the static registries first.
+   *
+   * An earlier version asked the DSE lookup and, on null, fell through to the
+   * US path — which calls getMarkets and costs thousands of eth_calls at any
+   * real depth. So a symbol that was not a DSE listing, or a lookup that
+   * merely failed, silently became the most expensive query in the codebase,
+   * and the route that had always answered in milliseconds timed out at sixty
+   * seconds. Resolving the venue from data already in memory costs nothing and
+   * cannot turn a miss into a stampede.
+   */
+  const { ASSETS } = await import("./assets");
+  const us = ASSETS.find(
+    (a) => a.symbol.toUpperCase() === sym || a.ticker.toUpperCase() === sym);
+
+  if (us) {
+    /*
+     * Bounded independently of what the caller asked for. Round history is
+     * read from the chain one call at a time, so `days` is a request, not an
+     * instruction — a partner asking for five years must not be able to spend
+     * a minute of compute to be told so.
+     */
+    const { getMarkets } = await import("./markets");
+    const markets = await getMarkets({ depth: Math.min(120, days) }).catch(() => []);
+    const m = markets.find((x) => x.symbol === us.symbol);
+    if (!m) return null;
+    return {
+      symbol: m.symbol, venue: "US", currency: "USD",
+      candles: (m.history ?? []) as Candle[],
+      source: "chainlink", cachedAt: null,
+    };
+  }
+
   const { dseSecurity } = await import("./dseSecurities");
   const sec = await dseSecurity(sym).catch(() => null);
-  if (sec) return dseSeries(sec.symbol, days, opts.sync !== false);
-
-  /* Not a DSE listing, so try the US board. */
-  const { getMarkets } = await import("./markets");
-  const markets = await getMarkets({ depth: Math.min(365, days) }).catch(() => []);
-  const m = markets.find((x) => x.symbol.toUpperCase() === sym || x.ticker.toUpperCase() === sym);
-  if (!m) return null;
-
-  return {
-    symbol: m.symbol, venue: "US", currency: "USD",
-    candles: (m.history ?? []) as Candle[],
-    source: "chainlink", cachedAt: null,
-  };
+  if (!sec) return null;
+  return dseSeries(sec.symbol, days, opts.sync !== false);
 }
 
 async function dseSeries(symbol: string, days: number, sync: boolean): Promise<PriceHistory> {

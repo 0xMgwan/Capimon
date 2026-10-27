@@ -835,4 +835,7 @@ export const SW: Record<string, string> = {
   "I have read, understood and accept the above, including that CAPX and nTZS operate under regulatory sandbox authorisations.": "Nimesoma, nimeelewa na ninakubali yaliyo hapo juu, ikiwa ni pamoja na kwamba CAPX na nTZS zinafanya kazi chini ya idhini za sandbox ya kiudhibiti.",
   "Accept and continue": "Kubali na uendelee",
   "Tokenised Dar es Salaam Stock Exchange assets are offered by CAPX under a regulatory sandbox arrangement in Tanzania. A sandbox is supervised, time-limited testing — not a full licence — and it can carry caps on how many people take part and how much they transact.": "Hisa za Soko la Hisa la Dar es Salaam zilizowekwa kwenye tokeni zinatolewa na CAPX chini ya mpango wa sandbox ya kiudhibiti nchini Tanzania. Sandbox ni majaribio yanayosimamiwa na yenye muda maalum — si leseni kamili — na inaweza kuwa na vikomo vya idadi ya watu na kiasi cha miamala.",
+  "Connected apps": "Programu zilizounganishwa",
+  "These apps can see your balances and holdings and can buy and sell on your behalf. They cannot change your password or withdraw to an account you have not set up. Disconnecting takes effect immediately.": "Programu hizi zinaweza kuona salio na hisa zako na zinaweza kununua na kuuza kwa niaba yako. Haziwezi kubadilisha nenosiri lako wala kutoa fedha kwenda akaunti ambayo hujaiweka. Kutenganisha kunaanza kufanya kazi mara moja.",
+  "connected": "iliunganishwa",
 };

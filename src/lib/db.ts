@@ -138,6 +138,46 @@ export async function migrate() {
         )`;
 
       /*
+       * An existing CAPX customer letting a partner act for them.
+       *
+       * A person who signed up here directly cannot simply be claimed by a
+       * partner — POST /v1/users refuses an email already on CAPX, and must,
+       * because adopting an account on a caller's say-so would hand them
+       * somebody else's balance and holdings.
+       *
+       * But a real person with a CAPX account should be able to reach it from
+       * inside NEDApay, so this is the consent. The partner asks, the account
+       * holder is emailed a code, and the link exists only once they have
+       * typed it back. The decision is the customer's, taken in a channel the
+       * partner does not control.
+       *
+       * Deliberately separate from users.partner_id. That column records who
+       * introduced a customer and stays null for somebody who came to CAPX
+       * directly — reclassifying them as a partner's customer because they
+       * granted access would be a different and untrue claim. A link is an
+       * access grant, it is revocable, and there can be several.
+       */
+      await sql`
+        create table if not exists capx.partner_links (
+          id           uuid primary key default gen_random_uuid(),
+          partner_id   uuid not null references capx.partners(id) on delete cascade,
+          user_id      uuid not null references capx.users(id) on delete cascade,
+          /* The partner's own id for this person. */
+          reference    text not null,
+          /* pending | active | revoked | expired */
+          status       text not null default 'pending',
+          /* Only the hash of the code is kept, so a leaked row is not a key. */
+          code_hash    text,
+          expires_at   timestamptz,
+          attempts     integer not null default 0,
+          requested_by text,
+          consented_at timestamptz,
+          revoked_at   timestamptz,
+          revoked_by   text,
+          created_at   timestamptz not null default now()
+        )`;
+
+      /*
        * Keys, in their own table so they can be rotated.
        *
        * Only the hash is stored, so a key is readable exactly once — at the
@@ -1105,6 +1145,13 @@ export async function migrate() {
       await sql`create index if not exists partner_events_open_idx
                   on capx.partner_events(partner_id, delivered, created_at)`;
       await sql`create index if not exists users_partner_idx on capx.users(partner_id)`;
+      /* One live link per partner per customer, and per partner per reference. */
+      await sql`create unique index if not exists partner_links_pair_idx
+                  on capx.partner_links(partner_id, user_id) where status <> 'revoked'`;
+      await sql`create unique index if not exists partner_links_ref_idx
+                  on capx.partner_links(partner_id, reference) where status <> 'revoked'`;
+      await sql`create index if not exists partner_links_user_idx
+                  on capx.partner_links(user_id) where status = 'active'`;
       /* One transaction funds one deposit, ever. */
       await sql`create unique index if not exists deposits_funding_tx_idx
                   on capx.deposits (lower(funding_tx)) where funding_tx is not null`;

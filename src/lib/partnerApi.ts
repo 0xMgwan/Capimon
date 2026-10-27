@@ -116,14 +116,34 @@ export async function partnerCustomer(
   await migrate();
   const sql = db();
   const byUuid = /^[0-9a-f-]{36}$/i.test(ref);
+  const uuid = byUuid ? ref : "00000000-0000-0000-0000-000000000000";
+
+  /*
+   * Two ways a person can be this partner's to act for, and both are checked
+   * here rather than at the call sites.
+   *
+   * Introduced: the partner created them, and users.partner_id says so.
+   * Linked: they already had a CAPX account and consented to this partner
+   * reaching it, which lives in partner_links and leaves partner_id alone —
+   * an access grant is not a change of whose customer somebody is.
+   *
+   * Scoped to the partner on the way in either way, so there is no ordering
+   * of these lines in which one partner reads another's book, and a revoked
+   * link stops resolving the moment it is revoked.
+   */
   const [u] = await sql<{ id: string; email: string; username: string | null; name: string | null;
                           phone: string | null; country: string | null; kyc_status: string;
                           nida_number: string | null }[]>`
-    select id::text, email, username, name, phone, country, kyc_status, nida_number
-      from capx.users
-     where partner_id = ${partnerId}::uuid
-       and (${byUuid} and id = ${byUuid ? ref : "00000000-0000-0000-0000-000000000000"}::uuid
-            or partner_ref = ${ref})`;
+    select u.id::text, u.email, u.username, u.name, u.phone, u.country, u.kyc_status,
+           u.nida_number
+      from capx.users u
+      left join capx.partner_links l
+        on l.user_id = u.id and l.partner_id = ${partnerId}::uuid and l.status = 'active'
+     where (u.partner_id = ${partnerId}::uuid or l.id is not null)
+       and (${byUuid} and u.id = ${uuid}::uuid
+            or u.partner_ref = ${ref}
+            or l.reference = ${ref})
+     limit 1`;
   if (!u) return null;
   return {
     id: u.id, email: u.email, username: u.username, name: u.name, phone: u.phone,

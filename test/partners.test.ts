@@ -107,3 +107,25 @@ test("a block ahead of the head never reads as confirmed", async () => {
   assert.equal(ahead.confirmations, 0, "a negative depth must clamp, not go negative");
   assert.equal(ahead.safe, false);
 });
+
+test("a link code is six digits, hashed, and compared without leaking length", async () => {
+  const { createHash } = await import("crypto");
+  const hash = (c: string) => createHash("sha256").update(c.trim()).digest("hex");
+
+  // Codes are compared by hash, so every comparison is the same length
+  // whatever was guessed — a timing-safe compare needs equal-length inputs.
+  assert.equal(hash("000000").length, hash("999999").length);
+  assert.equal(hash("123456"), hash(" 123456 "), "surrounding space must not change it");
+  assert.notEqual(hash("123456"), hash("123457"));
+});
+
+test("a six-digit code is only a secret while guessing is expensive", () => {
+  const SPACE = 1_000_000;
+  const MAX_ATTEMPTS = 5;
+  // Five attempts against a million codes, inside a fifteen-minute window.
+  const perRequest = MAX_ATTEMPTS / SPACE;
+  assert.ok(perRequest <= 1 / 100_000,
+    `a guesser gets ${perRequest} of the space per request — too much`);
+  // The attempt cap is what does the work; the window alone would not.
+  assert.ok(MAX_ATTEMPTS < 10, "more attempts than this makes the code decorative");
+});

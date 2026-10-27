@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { KycPrompt } from "./KycPrompt";
 import { LinkedWallets } from "./LinkedWallets";
+import { ConnectedApps } from "./ConnectedApps";
 import { PushToggle } from "./PushToggle";
 import { useRef, useState, useEffect } from "react";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
@@ -418,6 +419,10 @@ export function SettingsView() {
       </section>
 
       <LinkedWallets />
+
+      {/* Sits beside the wallets, because both answer the same question: what
+          else can reach this account, and how do I stop it. */}
+      <ConnectedApps />
 
       <PasswordChange />
 

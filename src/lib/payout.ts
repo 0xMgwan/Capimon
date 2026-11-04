@@ -132,7 +132,9 @@ export type PayoutRequest = {
  * Throws on failure, carrying the rail's own error where there is one, because
  * the caller needs to distinguish "did not happen" from "may have happened".
  */
-export async function executePayout(req: PayoutRequest): Promise<{ ref: string; status: string }> {
+export async function executePayout(
+  req: PayoutRequest,
+): Promise<{ ref: string; status: string; feeTzs: number | null }> {
   const { userId, amountTzs, dest, label, key } = req;
   const phoneNumber = dest.phoneNumber ?? "";
 
@@ -215,5 +217,20 @@ export async function executePayout(req: PayoutRequest): Promise<{ ref: string; 
     throw payoutError;
   }
 
-  return { ref: String(result.id ?? key), status: String(result.status ?? "submitted") };
+  /*
+   * The rail's own fee, carried back rather than discarded.
+   *
+   * It is priced upstream and is never ours to recompute, so the only honest
+   * figure is whatever the payout reported. A partner showing their customer
+   * "you will receive X" needs it, and it was being dropped on the floor.
+   */
+  const feeTzs = Number(
+    (result as { totalFeeTzs?: number; feeTzs?: number }).totalFeeTzs
+    ?? (result as { feeTzs?: number }).feeTzs ?? NaN);
+
+  return {
+    ref: String(result.id ?? key),
+    status: String(result.status ?? "submitted"),
+    feeTzs: Number.isFinite(feeTzs) ? feeTzs : null,
+  };
 }

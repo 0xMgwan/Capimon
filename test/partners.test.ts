@@ -129,3 +129,31 @@ test("a six-digit code is only a secret while guessing is expensive", () => {
   // The attempt cap is what does the work; the window alone would not.
   assert.ok(MAX_ATTEMPTS < 10, "more attempts than this makes the code decorative");
 });
+
+test("a quote's fee and net reconstruct the amount, on both sides", async () => {
+  const { quoteBuyTzs, quoteSellQty } = await import("../src/lib/dseTrading");
+
+  // A buy: what leaves the balance is the net invested plus the fee. A
+  // confirm screen showing fee and total must add up to what is debited.
+  const buy = quoteBuyTzs(2940, 50_000);
+  assert.equal(Math.round((buy.netTzs + buy.fee) * 100) / 100, buy.tzs,
+    "net + fee must equal what the customer pays");
+  assert.ok(buy.fee > 0 && buy.qty > 0);
+
+  // A sell: the fee comes off the proceeds, so gross minus fee is received.
+  const sell = quoteSellQty(2940, 10);
+  assert.equal(Math.round((sell.tzs + sell.fee) * 100) / 100, sell.netTzs,
+    "received + fee must equal the gross");
+});
+
+test("the published rate is the one the trades use, not a copy", async () => {
+  const { FEE_BPS, BROKER_FEE_BPS, CAPX_FEE_BPS } = await import("../src/lib/fees");
+  const { quoteBuyTzs } = await import("../src/lib/dseTrading");
+
+  // The fee endpoint reads these same constants, so a rate card cannot drift
+  // from what is actually charged.
+  assert.equal(quoteBuyTzs(1000, 10_000).feeBps, FEE_BPS);
+  assert.equal(BROKER_FEE_BPS + CAPX_FEE_BPS, FEE_BPS,
+    "the split must account for the whole fee and no more");
+  assert.ok(BROKER_FEE_BPS <= FEE_BPS, "a split cannot pay out more than was collected");
+});

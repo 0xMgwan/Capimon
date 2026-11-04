@@ -70,8 +70,14 @@ export const POST = partnerRoute(
         userId: customer.id, amountTzs, dest, label,
         key: `partner:${caller.partner.id}:${Date.now()}`,
       });
-      return send({ ok: true, status: "sent", withdrawal_id: result.ref,
-        rail_status: result.status });
+      return send({
+        ok: true, status: "sent", withdrawal_id: result.ref, rail_status: result.status,
+        /* Charged by the payout rail, not by CAPX, and quoted per payout —
+           so it is whatever the rail reported rather than a rate we apply.
+           Null when the rail did not state one. */
+        fee_tzs: result.feeTzs,
+        amount_tzs: amountTzs,
+      });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "The payout did not go through.";
       return sendFail(fail("withdrawal_failed", msg, 502));

@@ -77,6 +77,24 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
     ],
   },
   {
+    title: "Fees",
+    blurb: "Everything CAPX charges, and what it would charge for a specific order. Both read the same constants the trades are priced with, so neither can drift from what is actually taken.",
+    endpoints: [
+      { method: "GET", path: "/v1/quote",
+        what: "What an order would cost, for a confirm screen.",
+        body: [
+          ["security", "required"], ["side", "buy or sell"], ["amount", "required"],
+          ["currency", "TZS or USDC — US board only"],
+        ],
+        returns: "price, qty, amount, fee, fee_currency, fee_bps, fee_percent and net. On a buy, `amount` is what leaves the balance and `net` is what is actually invested; on a sell, `amount` is what arrives.",
+        note: "Priced through the same functions that run the trade, so a preview cannot disagree with the fill. Indicative all the same: quote immediately before confirming. Prices move, and a shilling order on the US board converts at whatever rate the swap reports when it runs." },
+      { method: "GET", path: "/v1/fees",
+        what: "The rate card, including your own share.",
+        returns: "Trading bps with how it is charged on each board, the broker/CAPX/your split, and what is charged on conversion, deposits and withdrawals — which is nothing from CAPX in all three.",
+        note: "Your share comes out of CAPX's slice, not on top of the customer's fee. Conversion and payout costs are named rather than omitted: CAPX adds nothing, but the nTZS swap carries a spread and the payout rail charges per payout, and a partner who sees no line for them will tell their customer there is no cost." },
+    ],
+  },
+  {
     title: "Orders",
     blurb: "One endpoint, both boards. The security decides the venue; a DSE symbol prices in shillings, a US ticker in dollars.",
     endpoints: [
@@ -88,7 +106,7 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
           ["amount", "shillings on a buy; shares on a sell"],
           ["currency", "TZS or USDC. US board only; ignored on the DSE."],
         ],
-        returns: "The settled order with qty, price, amount, currency and fee.",
+        returns: "The settled order with qty, price, amount, currency, venue, fee and fee_currency. The fee is what was actually taken — on the US board it is in dollars even when the order was paid for in shillings, which is why the currency is stated rather than assumed.",
         note: "Send an Idempotency-Key. These go through the same code a CAPX customer's own order does, so every refusal applies: unverified accounts cannot buy, halted markets stay halted, and inventory that is not held is not sold." },
       { method: "GET", path: "/v1/orders", what: "Your customers' orders, newest first." },
     ],
@@ -157,7 +175,7 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
           ["user", "required"], ["amount_tzs", "required"],
           ["phone", "mobile money"], ["bank_code + account_number", "bank payout"],
         ],
-        returns: "status: sent, or status: queued when the float is short.",
+        returns: "status: sent or queued, with amount_tzs and fee_tzs. The fee is charged by the payout rail and quoted per payout, so it is whatever the rail reported rather than a rate CAPX applies — null when it did not state one.",
         note: "Read the status. A queued payout is accepted and goes out automatically, oldest first — showing your customer 'sent' when the body says queued would be misreporting it." },
     ],
   },

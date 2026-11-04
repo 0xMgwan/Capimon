@@ -30,6 +30,20 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
     ],
   },
   {
+    title: "Backing and attestation",
+    blurb: "What stands behind a security, and whether everything CAPX owes is actually held. The same checks the public proof page runs and the same one that pauses trading when it fails — not a separate reassurance computed for partners, which would be worth nothing to the people asking.",
+    endpoints: [
+      { method: "GET", path: "/v1/markets/:symbol",
+        what: "One security, with the evidence behind it.",
+        returns: "The security with its token address, decimals and price, `available_to_trade`, and a `backing` block.",
+        note: "The two boards are backed differently and the response says which. A DSE security is a token CAPX issued against shares a licensed broker holds and attests to — you get the custodian, what they confirm holding, how much is earmarked against tokens, the ratio, and when the attestation expires. Evidence goes stale: read `fresh` and `expires_at`, because a statement from six months ago does not say the shares are there today. A US equity is a Coinbase-issued B20 token CAPX buys and holds, so CAPX attests to nothing — the backing CAPX answers for is its own treasury balance against what its customers are owed, and both are on Base for you to check. Size orders against `available_to_trade`, never `issued` or `onchain_supply`: that is custody less what customers are already owed, less anything an open quote has reserved." },
+      { method: "GET", path: "/v1/attestation",
+        what: "Whether everything CAPX owes is held, right now.",
+        returns: "status covered | shortfall | unavailable, per-security held against owed in shares, dollar totals, and where the cash sits.",
+        note: "Shares are compared against shares, per security, because that is the only unit in which the question has an answer — a price move cannot leave a position unbacked, only a missing share can. `unavailable` means the check could not be run: treat it as unknown, not as a pass or a fail. When it reports a shortfall CAPX pauses buying on its own, so you do not need to gate on it, though you may want to show it." },
+    ],
+  },
+  {
     title: "Customers",
     blurb: "Your customers become ordinary CAPX accounts carrying your id for them. You authenticate them; CAPX never issues them a password.",
     endpoints: [

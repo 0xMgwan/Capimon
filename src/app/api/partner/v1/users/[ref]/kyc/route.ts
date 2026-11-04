@@ -78,16 +78,45 @@ export const POST = partnerRoute("POST /v1/users/:ref/kyc", { idempotent: true }
     await migrate();
     const sql = db();
 
+    /*
+     * Who this account already was, before the partner said anything.
+     *
+     * It matters in two ways that an unconditional update got wrong.
+     *
+     * A customer CAPX itself verified must not have that provenance
+     * rewritten: a partner attesting afterwards would erase the record that a
+     * person here read the documents, which is precisely the record a
+     * regulator asks for. An existing approval stands and keeps its source.
+     *
+     * And an account that predates the partner has details the partner did
+     * not supply. Writing nida_number from this filing nulled a NIDA already
+     * on file whenever the partner sent anything else — data loss on somebody
+     * else's account, caused by a form they did not fill in.
+     */
+    const [before] = await sql<{ kyc_status: string; kyc_source: string | null;
+                                 introduced: boolean }[]>`
+      select kyc_status, kyc_source,
+             (partner_id = ${caller.partner.id}::uuid) as introduced
+        from capx.users where id = ${customer.id}::uuid`;
+
+    const alreadyCapx = before?.kyc_status === "approved" && before?.kyc_source === "capx";
+    const preExisting = before ? !before.introduced : false;
+    const nida = docType === "nida" ? docNumber : null;
+
     await sql`
       update capx.users
          set kyc_status = ${relied ? "approved" : sql`case when kyc_status = 'approved'
                                                            then 'approved' else 'pending' end`},
              name = coalesce(nullif(${fullName}, ''), name),
              doc_type = ${docType},
-             nida_number = ${docType === "nida" ? docNumber : null},
-             kyc_source = ${relied ? "partner" : "capx"},
-             kyc_attested_by = ${relied ? caller.partner.name : null},
-             kyc_attested_at = ${relied ? sql`now()` : null}
+             /* Only ever set, never cleared: a filing that is not a NIDA says
+                nothing about a NIDA already held. */
+             nida_number = coalesce(${nida}, nida_number),
+             kyc_source = ${alreadyCapx ? sql`kyc_source` : (relied ? "partner" : "capx")},
+             kyc_attested_by = ${alreadyCapx ? sql`kyc_attested_by`
+                                             : (relied ? caller.partner.name : null)},
+             kyc_attested_at = ${alreadyCapx ? sql`kyc_attested_at`
+                                             : (relied ? sql`now()` : null)}
        where id = ${customer.id}::uuid`;
 
     /* Stored whenever it is sent, so the evidence exists either way. */
@@ -101,7 +130,9 @@ export const POST = partnerRoute("POST /v1/users/:ref/kyc", { idempotent: true }
                 ${relied ? "approved" : "pending"},
                 ${relied
                   ? `Accepted on ${caller.partner.name}'s attestation (reliance)`
-                  : `Filed via partner ${caller.partner.name}`})`;
+                    + (preExisting ? " — pre-existing CAPX account, reached by link" : "")
+                  : `Filed via partner ${caller.partner.name}`
+                    + (preExisting ? " — pre-existing CAPX account, reached by link" : "")})`;
     }
 
     /*
@@ -117,7 +148,12 @@ export const POST = partnerRoute("POST /v1/users/:ref/kyc", { idempotent: true }
       text:
         `${fullName} (${customer.email})\n` +
         `Partner reference: ${ref}\n` +
-        `Document: ${docType} ${docNumber}\n\n` +
+        `Document: ${docType} ${docNumber}\n` +
+        (preExisting
+          ? `This is a pre-existing CAPX account the customer linked to ${caller.partner.name}, ` +
+            `not one they introduced.\n`
+          : "") +
+        `\n` +
         (relied
           ? `Approved on ${caller.partner.name}'s own attestation, under the reliance CAPX has ` +
             `granted them. They can trade now. ${doc && selfie ? "Documents were supplied and " +
@@ -135,7 +171,10 @@ export const POST = partnerRoute("POST /v1/users/:ref/kyc", { idempotent: true }
       ok: true,
       user_id: customer.id,
       kyc_status: relied ? "approved" : "pending",
-      source: relied ? "partner" : "capx",
+      source: alreadyCapx ? "capx" : (relied ? "partner" : "capx"),
+      /* True when CAPX had already verified them, so your attestation was
+         recorded but did not replace the existing one. */
+      already_verified_by_capx: alreadyCapx,
       note: relied
         ? "Accepted on your attestation. This customer can buy now."
         : "Filed for review. Buying stays blocked until CAPX approves it.",

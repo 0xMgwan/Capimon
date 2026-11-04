@@ -72,8 +72,8 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
           ["document_image", "required. base64, a data: URL is fine."],
           ["selfie_image", "required. base64."],
         ],
-        returns: "Without reliance: 202 and kyc_status pending. With reliance: 200, kyc_status approved, and the customer can buy immediately. The response carries `source` so you never have to guess which happened.",
-        note: "Images are required when CAPX reviews, because a review needs something to look at. Under reliance they are optional — but send them if you can: the day a regulator asks CAPX to evidence an identification, holding the document is the difference between answering and asking you." },
+        returns: "Without reliance: 202 and kyc_status pending. With reliance: 200, kyc_status approved, and the customer can buy immediately. The response carries `source`, and `already_verified_by_capx` when CAPX had verified them before you — your attestation is recorded but does not replace theirs.",
+        note: "Images are required when CAPX reviews, because a review needs something to look at. Under reliance they are optional — but send them if you can: the day a regulator asks CAPX to evidence an identification, holding the document is the difference between answering and asking you. This works for linked customers too: somebody who already had a CAPX account but never completed verification is verified by your attestation like anyone else. Two things it will not do to an account that predates you — it never rewrites an approval CAPX itself made, and it never clears a document number already on file that your filing did not mention." },
     ],
   },
   {

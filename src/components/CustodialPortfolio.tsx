@@ -9,6 +9,7 @@ import { WalletSection } from "./WalletSection";
 import { KycPrompt } from "./KycPrompt";
 import { WalletLinkPrompt } from "./WalletLinkPrompt";
 import { RecurringBuys } from "./RecurringBuys";
+import { SendShares } from "./SendShares";
 import { useDse } from "@/lib/useDse";
 import { useMarkets } from "@/lib/useMarkets";
 import { usd, costLabel } from "@/lib/format";
@@ -239,6 +240,11 @@ export function CustodialPortfolio() {
                         </Link>
                       ))}
                     </div>
+
+                    {/* Under the holdings, because sending starts with
+                        looking at what you hold. */}
+                    <SendShares positions={positions.map((p) => ({
+                      symbol: p.symbol, ticker: p.ticker, qty: p.qty }))} />
                   </Reveal>
         ) : null}
       />

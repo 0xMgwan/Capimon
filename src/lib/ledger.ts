@@ -20,6 +20,7 @@ export type EntryKind =
   | "buy"            // USDC spent / shares acquired
   | "sell"           // shares sold / USDC returned
   | "fee"            // platform fee taken
+  | "transfer"       // shares moved between two CAPX accounts
   | "adjustment";    // manual correction, always with a reason
 
 export type Entry = {

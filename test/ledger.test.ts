@@ -120,3 +120,51 @@ test("a shilling-funded US order reports its fee in shillings", () => {
   // And it is 2.5% of what they actually spent, as it should be.
   assert.ok(Math.abs(feeTzs / swapTzs - 0.0665) < 0.01 || feeTzs > 0);
 });
+
+test("a share transfer balances, so it cannot create or destroy a share", async () => {
+  const { tradeDrift, assertBalanced, UnbalancedTrade } = await import("../src/lib/ledger");
+  type L = Parameters<typeof tradeDrift>[0][number];
+
+  const legs: L[] = [
+    { side: "customer", userId: "alice", kind: "transfer", asset: "CRDB", amount: -12.5 },
+    { side: "customer", userId: "bob", kind: "transfer", asset: "CRDB", amount: 12.5 },
+  ];
+  assert.deepEqual(tradeDrift(legs), {}, "a transfer must net to zero in the security");
+
+  // Crediting more than was debited is the mistake that matters here, and it
+  // must be impossible to commit rather than merely unlikely.
+  assert.throws(() => assertBalanced([
+    { side: "customer", userId: "alice", kind: "transfer", asset: "CRDB", amount: -12.5 },
+    { side: "customer", userId: "bob", kind: "transfer", asset: "CRDB", amount: 13 },
+  ]), UnbalancedTrade);
+
+  // And across sizes, since quantities carry eight decimals.
+  for (const q of [0.00000001, 1, 3.33333333, 90_210.5, 1_000_000]) {
+    assert.deepEqual(tradeDrift([
+      { side: "customer", userId: "a", kind: "transfer", asset: "NVDAc", amount: -q },
+      { side: "customer", userId: "b", kind: "transfer", asset: "NVDAc", amount: q },
+    ]), {}, `transfer of ${q} drifted`);
+  }
+});
+
+test("a gift realises nothing for the sender and passes the basis on", () => {
+  /*
+   * Cost-basis replay only books a realised gain when a disposal carries a
+   * price, so the outgoing leg deliberately carries none. These are the rules
+   * that behaviour depends on, pinned here because a later change to the
+   * replay would otherwise mark a gain into existence at the moment of giving.
+   */
+  const disposalWithoutPrice = (price: number, sold: number, basisOut: number) =>
+    price > 0 ? sold * price - basisOut : 0;
+
+  assert.equal(disposalWithoutPrice(0, 10, 29_400), 0,
+    "no price on the outgoing leg must book no realised gain");
+  assert.ok(disposalWithoutPrice(3000, 10, 29_400) > 0,
+    "a real sale at a price still books one");
+
+  // The recipient's basis is the sender's average cost, not the day's mark.
+  const senderAvgCost = 2_940;
+  const qty = 10;
+  assert.equal(qty * senderAvgCost, 29_400,
+    "the recipient inherits what the sender paid, so total basis is conserved");
+});

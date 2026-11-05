@@ -126,6 +126,22 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
     ],
   },
   {
+    title: "Transfers",
+    blurb: "Moving shares between CAPX accounts. Nothing is bought or sold and nothing leaves custody — the same shares stay with the same custodian and the claim on them moves, which is why both boards work identically here.",
+    endpoints: [
+      { method: "POST", path: "/v1/transfers", what: "Send shares from one of your customers to another CAPX account.",
+        body: [
+          ["from", "required. Your reference or their CAPX id. Must be your customer."],
+          ["to", "required. Your reference for one of yours, or any CAPX email or @handle."],
+          ["security", "required. Either board."],
+          ["qty", "required. Shares, not cash."],
+          ["note", "optional, shown to the recipient."],
+        ],
+        returns: "The transfer, with `inherited_cost` and `cost_currency`.",
+        note: "The sender must be your customer; the recipient need not be, because people send things to people rather than to customers of the same app. Both must be verified — a transfer is the one way value reaches an account without passing a deposit or a trade, so an unverified recipient would be an unchecked way in, and nothing is held pending somebody finishing signup. The recipient inherits the sender's average cost rather than the day's price: a gift is not a disposal, so the sender realises nothing and the recipient's P&L continues from where the sender's left off. Send an Idempotency-Key." },
+    ],
+  },
+  {
     title: "Dividends and corporate actions",
     blurb: "Neither board pays cash. A tokenised equity reflects a dividend by raising its multiplier, so the holder's share count grows instead. CAPX reads that and credits whoever held the claim.",
     endpoints: [

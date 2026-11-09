@@ -7,6 +7,7 @@ import { b20Abi } from "./abis";
 import { ASSETS, USDC_BASE, BY_SYMBOL } from "./assets";
 import { getRoute, buildRoute } from "./aggregator";
 import { feeParams, FEE_BPS, feeEnabled } from "./fees";
+import { BUILDER_SUFFIX } from "./builderCode";
 import { getMarkets } from "./markets";
 import type { Log } from "viem";
 
@@ -204,6 +205,15 @@ function signer() {
       account,
       chain: base,
       transport: http(process.env.BASE_RPC_URL ?? "https://mainnet.base.org"),
+      /*
+       * Appended to every transaction this wallet signs — swaps, approvals,
+       * transfers — so CAPX's onchain volume is attributed on Base.
+       *
+       * Set on the client rather than per call, because the one that gets
+       * forgotten is the call somebody adds later. Contracts ignore the
+       * suffix; it costs about 448 gas.
+       */
+      ...(BUILDER_SUFFIX ? { dataSuffix: BUILDER_SUFFIX } : {}),
     }),
   };
 }

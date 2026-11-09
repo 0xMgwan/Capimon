@@ -52,6 +52,18 @@ export const POST = partnerRoute(
     const { settleStablecoinDeposits } = await import("@/lib/stablecoinDeposits");
     await settleStablecoinDeposits(customer.id).catch(() => null);
 
+    /*
+     * And repair any earlier order of theirs that converted shillings and
+     * then failed to trade.
+     *
+     * That leaves money taken and nothing bought, which is the state a
+     * customer is most likely to respond to by trying again — so the retry
+     * is the moment to fix it, rather than making them wait for a sweep
+     * while their balance shows a currency they did not ask for.
+     */
+    const { reconcileSwaps } = await import("@/lib/usOrders");
+    await reconcileSwaps().catch(() => null);
+
     const { dseSecurities } = await import("@/lib/dseSecurities");
     const dse = await dseSecurities().catch(() => []);
     const isDse = dse.some((d) => d.symbol.toUpperCase() === security);

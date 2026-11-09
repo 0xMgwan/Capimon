@@ -310,6 +310,24 @@ export async function POST(req: Request) {
     (e) => ({ error: e instanceof Error ? e.message : "failed" }));
 
   /*
+   * Orders whose shillings were converted and whose trade then failed.
+   *
+   * This repairs the worst state a customer can be left in: money taken,
+   * nothing bought, balance showing a currency they did not ask for. It was
+   * on the thrice-daily tick, whose own comment said it ran "every tick
+   * rather than once a day" — true of the job and not of the schedule, which
+   * fires at five, six and three. Somebody whose buy failed at nine in the
+   * morning waited six hours to be made whole, and one failing after three
+   * waited until the next day.
+   *
+   * Fifteen minutes is the outer bound now, and a partner retrying the order
+   * repairs their own customer sooner than that.
+   */
+  const { reconcileSwaps } = await import("@/lib/usOrders");
+  const strandedSwaps = await reconcileSwaps().catch(
+    (e) => ({ error: e instanceof Error ? e.message : "failed" }));
+
+  /*
    * Also finish any order that failed after its shillings were converted. That
    * unwind is the missing half of an interrupted order, so it belongs here
    * beside deposit settlement rather than waiting on someone to notice the
@@ -318,7 +336,7 @@ export async function POST(req: Request) {
   const { reconcileSwapDrift } = await import("@/lib/reconcile");
   const repaired = await reconcileSwapDrift().catch(
     (e) => ({ applied: false, reason: e instanceof Error ? e.message : "reconcile failed" }));
-  return NextResponse.json({ ok: true, stablecoin, ...settled, repaired },
+  return NextResponse.json({ ok: true, strandedSwaps, stablecoin, ...settled, repaired },
     { headers: { "cache-control": "no-store" } });
 }
 

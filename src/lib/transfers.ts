@@ -40,6 +40,25 @@ export type TransferResult =
 const refuse = (code: string, error: string, status = 400): TransferResult =>
   ({ ok: false, code, error, status });
 
+/**
+ * The registry's spelling of a symbol the caller may have typed in any case.
+ *
+ * Matching is case-insensitive because nobody should have to know that a US
+ * ticker is spelled NVDAc. The ledger is not: `balanceOf` compares `asset`
+ * exactly, `positionCosts` keys a map by it, and every US position was
+ * written as the registry's `symbol`. So the caller's word decides *which*
+ * security, and the registry decides how it is spelled from then on.
+ *
+ * Returns null when nothing matches, which is the caller's "unknown security".
+ */
+export function canonicalSecurity(
+  requested: string, listed: readonly string[],
+): string | null {
+  const key = requested.trim().toUpperCase();
+  if (!key) return null;
+  return listed.find((s) => s.toUpperCase() === key) ?? null;
+}
+
 export async function transferShares(input: {
   fromUserId: string;
   toUserId: string;
@@ -50,10 +69,10 @@ export async function transferShares(input: {
   /** Idempotency: the same reference writes once. */
   ref?: string;
 }): Promise<TransferResult> {
-  const security = input.security.trim().toUpperCase();
+  const requested = input.security.trim();
   const qty = Number(input.qty);
 
-  if (!security) return refuse("security_required", "Name the security.");
+  if (!requested) return refuse("security_required", "Name the security.");
   if (!Number.isFinite(qty) || qty <= 0) {
     return refuse("bad_quantity", "Quantity must be a positive number of shares.");
   }
@@ -68,12 +87,13 @@ export async function transferShares(input: {
   const [{ dseSecurities }, { ASSETS }] = await Promise.all([
     import("./dseSecurities"), import("./assets"),
   ]);
-  const dse = (await dseSecurities().catch(() => []))
-    .find((d) => d.symbol.toUpperCase() === security);
-  const us = ASSETS.find((a) => a.symbol.toUpperCase() === security);
-  if (!dse && !us) {
-    return refuse("unknown_security", `${security} is not a security on CAPX.`, 404);
+  const dseList = await dseSecurities().catch(() => []);
+  const security = canonicalSecurity(
+    requested, [...dseList.map((d) => d.symbol), ...ASSETS.map((a) => a.symbol)]);
+  if (!security) {
+    return refuse("unknown_security", `${requested} is not a security on CAPX.`, 404);
   }
+  const dse = dseList.some((d) => d.symbol === security);
 
   const [from, to] = await sql<{ id: string; email: string; name: string | null;
                                  kyc_status: string }[]>`

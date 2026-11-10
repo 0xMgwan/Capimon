@@ -64,6 +64,26 @@ export async function GET() {
       const { formatUnits } = await import("viem");
       const usdc = Number(formatUnits(raw as bigint, 6));
       t.usdc = usdc;
+
+      /*
+       * The earning half of the float, and whether it could be read.
+       *
+       * `usdc` above is only what is on the address. If idle dollars have been
+       * supplied to Aave they are still the treasury's and still back client
+       * balances, so a reader comparing this page against the book needs both
+       * numbers — and needs to know when the position was unreadable rather
+       * than empty, which is a different thing and looks identical.
+       */
+      const { aavePosition, yieldEnabled, BUFFER_USDC } = await import("@/lib/aaveYield");
+      const lent = await aavePosition();
+      t.yield = {
+        enabled: yieldEnabled,
+        bufferUsdc: BUFFER_USDC,
+        suppliedUsdc: lent?.supplied ?? 0,
+        hubLiquidityUsdc: lent?.liquidity ?? null,
+        unreadable: lent === null,
+        totalUsdc: usdc + (lent?.supplied ?? 0),
+      };
     } catch {
       /* the address still reports */
     }

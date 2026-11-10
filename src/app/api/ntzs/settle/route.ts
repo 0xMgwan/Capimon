@@ -336,7 +336,24 @@ export async function POST(req: Request) {
   const { reconcileSwapDrift } = await import("@/lib/reconcile");
   const repaired = await reconcileSwapDrift().catch(
     (e) => ({ applied: false, reason: e instanceof Error ? e.message : "reconcile failed" }));
-  return NextResponse.json({ ok: true, strandedSwaps, stablecoin, ...settled, repaired },
+
+  /*
+   * Last, and only what is over the buffer.
+   *
+   * Everything above this line can move the treasury's dollars — a deposit
+   * credits, a stranded swap unwinds, a payout funds itself. Supplying first
+   * would lend out money those steps are about to need and make them withdraw
+   * it straight back, paying gas twice to end where it started. So the float
+   * is put to work once the sweep has finished deciding what the float is.
+   *
+   * It returns rather than throws when the flag is off, so a deployment that
+   * has not opted in simply reports "disabled" here every fifteen minutes.
+   */
+  const { supplyIdleUsdc } = await import("@/lib/aaveYield");
+  const lent = await supplyIdleUsdc().catch(
+    (e) => ({ supplied: 0, reason: e instanceof Error ? e.message : "supply failed" }));
+
+  return NextResponse.json({ ok: true, strandedSwaps, stablecoin, ...settled, repaired, lent },
     { headers: { "cache-control": "no-store" } });
 }
 

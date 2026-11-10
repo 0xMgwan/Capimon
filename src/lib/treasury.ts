@@ -196,7 +196,7 @@ const UNUSABLE_IMPACT = 15;
 /** Sweep a little more than the order needs, so small buys stop sweeping every time. */
 const SWEEP_HEADROOM = 1.25;
 
-function signer() {
+export function signer() {
   if (!treasuryConfigured) throw new Error("TREASURY_PRIVATE_KEY is not configured");
   const account = privateKeyToAccount(NORMALISED as `0x${string}`);
   return {
@@ -248,7 +248,7 @@ export function treasuryAddress(): `0x${string}` | null {
   return treasuryConfigured ? signer().account.address : null;
 }
 
-async function ensureAllowance(token: `0x${string}`, spender: `0x${string}`, needed: bigint) {
+export async function ensureAllowance(token: `0x${string}`, spender: `0x${string}`, needed: bigint) {
   const { account, wallet } = signer();
   const read = async () =>
     (await publicClient.readContract({
@@ -500,7 +500,26 @@ export async function treasuryHoldings(opts: { prices?: boolean } = {}) {
    * with no price to add up. Both are reported now, and so is their sum,
    * which is the number a block explorer shows for the same address.
    */
-  const usdcHeld = Number(formatUnits(usdc as bigint, 6));
+  const onChainUsdc = Number(formatUnits(usdc as bigint, 6));
+
+  /*
+   * Dollars lent out are still dollars the treasury owns.
+   *
+   * Idle USDC may be supplied to Aave, which moves it off this address. It is
+   * withdrawable on demand and backs client balances exactly as it did before,
+   * so leaving it out would report a shortfall against a book that never
+   * changed — solvency would call a fully backed position short the moment
+   * the float started earning.
+   *
+   * An unreadable position is reported as zero here and the caller is told so
+   * by `usdcSuppliedUnavailable`, because quietly adding nothing is how a real
+   * shortfall gets hidden behind an RPC error.
+   */
+  const { aavePosition } = await import("./aaveYield");
+  const lent = await aavePosition();
+  const usdcSupplied = lent?.supplied ?? 0;
+  const usdcHeld = onChainUsdc + usdcSupplied;
+
   const sharesUsd = opts.prices
     ? holdings.reduce((sum, h) => sum + (h.valueUsd ?? 0), 0)
     : null;
@@ -508,6 +527,9 @@ export async function treasuryHoldings(opts: { prices?: boolean } = {}) {
   return {
     address,
     usdc: usdcHeld,
+    usdcOnChain: onChainUsdc,
+    usdcSupplied,
+    usdcSuppliedUnavailable: lent === null,
     holdings,
     sharesUsd,
     totalUsd: sharesUsd === null ? null : usdcHeld + sharesUsd,
@@ -560,7 +582,8 @@ export async function sendUsdcToNtzs(usdc: number, ntzsAddress: `0x${string}`) {
  * funding that nothing can deliver.
  */
 export async function reachableUsdc(): Promise<
-  { onChain: number; sweepable: number; convertible: number; total: number } | null
+  { onChain: number; sweepable: number; convertible: number; lent: number;
+    total: number } | null
 > {
   const to = treasuryAddress();
   if (!to) return null;
@@ -590,7 +613,21 @@ export async function reachableUsdc(): Promise<
       : 0;
     const convertible = rate > 0 ? (omnibus.tzs * rate) / 1.02 : 0;
 
-    return { onChain, sweepable, convertible, total: onChain + sweepable + convertible };
+    /*
+     * And whatever is earning in Aave, because the funder can pull it back.
+     *
+     * This has to be counted for the same reason the shillings are: the
+     * pre-flight must not reach for less than `ensureTreasuryFunded` can.
+     * Bounded by what the hub can actually pay out today — a position is only
+     * reachable to the extent there is liquidity behind it, and promising the
+     * rest would be the overstatement this function exists to avoid.
+     */
+    const { aavePosition } = await import("./aaveYield");
+    const lent = await aavePosition();
+    const lentReachable = lent ? Math.min(lent.supplied, lent.liquidity) : 0;
+
+    return { onChain, sweepable, convertible, lent: lentReachable,
+      total: onChain + sweepable + convertible + lentReachable };
   } catch {
     // Unreadable is not the same as empty: the caller must not refuse on it.
     return null;
@@ -611,7 +648,8 @@ export async function fundingRefusal(needUsdc: number): Promise<string | null> {
   return (
     `This order needs ${needUsdc.toFixed(2)} USDC but only ${reach.total.toFixed(2)} can reach ` +
     `the treasury (${reach.onChain.toFixed(2)} on-chain, ${reach.sweepable.toFixed(2)} in the omnibus, ` +
-    `${reach.convertible.toFixed(2)} convertible from shillings).` +
+    `${reach.convertible.toFixed(2)} convertible from shillings` +
+    (reach.lent > 0.01 ? `, ${reach.lent.toFixed(2)} withdrawable from Aave` : "") + `).` +
     (stranded > 0.01
       ? ` A further ${stranded.toFixed(2)} USDC sits in the nTZS settlement float, which backs balances ` +
         `but cannot be transferred out — it can be withdrawn to mobile money, or moved by nTZS. ` +
@@ -642,6 +680,30 @@ export async function ensureTreasuryFunded(needUsdc: number, address?: `0x${stri
 
   let onHand = await read();
   if (onHand >= needUsdc) return { swept: 0, onHand };
+
+  /*
+   * Unwind the earning position before reaching across to nTZS.
+   *
+   * These are the treasury's own dollars, one transaction away, with no API
+   * and no relay between them and the trade — so they are the cheapest and
+   * most certain source there is, and trying anything else first would be
+   * asking a harder question before an easier one. It also keeps the promise
+   * `reachableUsdc` makes: that counts this position, so the funder has to be
+   * able to spend it, or the pre-flight is lying.
+   *
+   * Failure is not fatal. If the withdrawal reverts or the hub is short, the
+   * nTZS path below still runs and the refusal at the end still explains
+   * itself.
+   */
+  try {
+    const { aavePosition, withdrawFromAave } = await import("./aaveYield");
+    const lent = await aavePosition();
+    if (lent && lent.supplied > 0) {
+      await withdrawFromAave(needUsdc - onHand);
+      onHand = await read();
+      if (onHand >= needUsdc) return { swept: 0, onHand };
+    }
+  } catch { /* fall through to nTZS */ }
 
   // Only what can actually be moved — the ramp float backs balances but cannot
   // be transferred to the treasury, so counting it here would promise funding

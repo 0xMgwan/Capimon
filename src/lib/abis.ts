@@ -90,3 +90,40 @@ export const aeroRouterAbi = [
     ], name: "params", type: "tuple" }],
     outputs: [{ name: "amountOut", type: "uint256" }] },
 ] as const;
+
+/**
+ * Aave v4 spoke, the subset CAPX uses.
+ *
+ * v4 has no Pool: a spoke is the entry point and reserves are addressed by a
+ * numeric id rather than by token address, so `supply` and `withdraw` take a
+ * reserveId. Copied from the verified implementation behind the proxy
+ * (SpokeInstance at 0x81A73c282faa932DE3B2541CEe19549f4BF13b19), not from a
+ * v3 interface, because the signatures differ.
+ *
+ * A position is held in shares; interest accrues as the share price rises,
+ * so the supplied-assets and supplied-shares totals are both needed to turn
+ * a holding back into dollars.
+ */
+export const aaveSpokeAbi = [
+  { type: "function", name: "supply", stateMutability: "nonpayable",
+    inputs: [{ name: "reserveId", type: "uint256" }, { name: "amount", type: "uint256" },
+             { name: "onBehalfOf", type: "address" }],
+    outputs: [{ type: "uint256" }, { type: "uint256" }] },
+  { type: "function", name: "withdraw", stateMutability: "nonpayable",
+    inputs: [{ name: "reserveId", type: "uint256" }, { name: "amount", type: "uint256" },
+             { name: "onBehalfOf", type: "address" }],
+    outputs: [{ type: "uint256" }, { type: "uint256" }] },
+  { type: "function", name: "getUserPosition", stateMutability: "view",
+    inputs: [{ name: "reserveId", type: "uint256" }, { name: "user", type: "address" }],
+    outputs: [{ type: "tuple", components: [
+      { name: "drawnShares", type: "uint120" },
+      { name: "premiumShares", type: "uint120" },
+      { name: "premiumOffsetRay", type: "int200" },
+      { name: "suppliedShares", type: "uint120" },
+      { name: "dynamicConfigKey", type: "uint32" },
+    ] }] },
+  { type: "function", name: "getReserveSuppliedAssets", stateMutability: "view",
+    inputs: [{ name: "reserveId", type: "uint256" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "getReserveSuppliedShares", stateMutability: "view",
+    inputs: [{ name: "reserveId", type: "uint256" }], outputs: [{ type: "uint256" }] },
+] as const;

@@ -35,7 +35,7 @@ export const POST = partnerRoute("POST /v1/users/link", { idempotent: true },
         { user_id: result.user_id, reference: result.reference }).catch(() => {});
 
       const { customerView } = await import("@/lib/partnerApi");
-      return send({ ok: true, linked: true, user: await customerView(result.user_id) });
+      return send({ ok: true, linked: true, user: await customerView(result.user_id, caller.partner.id) });
     }
 
     const { requestLink } = await import("@/lib/partnerLinks");
@@ -51,7 +51,7 @@ export const POST = partnerRoute("POST /v1/users/link", { idempotent: true },
     }
     if (result.status === "already_linked") {
       const { customerView } = await import("@/lib/partnerApi");
-      return send({ ok: true, linked: true, user: await customerView(result.user_id) });
+      return send({ ok: true, linked: true, user: await customerView(result.user_id, caller.partner.id) });
     }
 
     return send({

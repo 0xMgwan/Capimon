@@ -153,20 +153,36 @@ export async function partnerCustomer(
 }
 
 /** Everything a partner is allowed to know about one of their customers. */
-export async function customerView(userId: string) {
+/**
+ * One customer as the partner sees them.
+ *
+ * `partnerId` decides which reference comes back. An account the partner
+ * created carries their own `partner_ref`; one they linked to carries no
+ * `partner_ref` at all, because a link grants access without changing whose
+ * customer somebody is. Reading `partner_ref` alone therefore answered
+ * `reference: null` for exactly the people a partner addresses by reference,
+ * right at the moment they confirmed the link. Passing the partner lets the
+ * link supply the name they chose.
+ */
+export async function customerView(userId: string, partnerId?: string) {
   await migrate();
   const sql = db();
   const { balances } = await import("./ledger");
   const [u] = await sql<{ id: string; email: string; name: string | null; phone: string | null;
                           country: string; kyc_status: string; partner_ref: string | null;
-                          created_at: string }[]>`
-    select id::text, email, name, phone, country, kyc_status, partner_ref, created_at
-      from capx.users where id = ${userId}::uuid`;
+                          link_ref: string | null; created_at: string }[]>`
+    select u.id::text, u.email, u.name, u.phone, u.country, u.kyc_status, u.partner_ref,
+           pl.reference as link_ref, u.created_at
+      from capx.users u
+      left join capx.partner_links pl
+        on pl.user_id = u.id and pl.status = 'active'
+       and pl.partner_id = ${partnerId ?? null}::uuid
+     where u.id = ${userId}::uuid`;
   if (!u) return null;
   const bal = await balances(u.id).catch(() => []);
   return {
     id: u.id,
-    reference: u.partner_ref,
+    reference: u.partner_ref ?? u.link_ref,
     email: u.email,
     name: u.name,
     phone: u.phone,

@@ -28,7 +28,8 @@ type Partner = {
 };
 
 type Customer = {
-  id: string; reference: string | null; name: string | null; email: string;
+  id: string; reference: string | null; via: "introduced" | "linked";
+  name: string | null; email: string;
   phone: string | null; country: string; kycStatus: string; kycSource: string | null;
   kycAttestedBy: string | null; kycAttestedAt: string | null; docType: string | null;
   createdAt: string; orders: number; lastActivity: string | null;
@@ -349,7 +350,16 @@ export function PartnersAdmin() {
                                 {c.docType ? ` · ${c.docType}` : ""}
                               </div>
                             </td>
-                            <td className="py-2.5 text-[var(--muted)]">{c.reference ?? "—"}</td>
+                            <td className="py-2.5 text-[var(--muted)]">
+                              <div>{c.reference ?? "—"}</div>
+                              {/* Whose account it is, which the reference alone does not
+                                  say. A linked customer signed up with CAPX directly and
+                                  let this partner reach them; they can revoke it, and
+                                  their verification is ours rather than the partner's. */}
+                              <div className="text-[10px] uppercase tracking-wide">
+                                {c.via === "linked" ? "linked" : "introduced"}
+                              </div>
+                            </td>
                             <td className="py-2.5">
                               <span className={c.kycStatus === "approved"
                                 ? "text-[var(--color-up)]"

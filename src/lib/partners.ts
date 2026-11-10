@@ -393,6 +393,16 @@ export function sameSecret(a: string, b: string) {
 export type PartnerCustomer = {
   id: string;
   reference: string | null;
+  /**
+   * How this person came to be the partner's to act for.
+   *
+   * "introduced" — the partner created the account, and it carries their id.
+   * "linked" — they already had a CAPX account and consented to the partner
+   * reaching it. A link grants access; it does not move whose customer they
+   * are, which is why `users.partner_id` stays null for them and why they
+   * have to be joined in rather than selected by it.
+   */
+  via: "introduced" | "linked";
   name: string | null;
   email: string;
   phone: string | null;
@@ -417,13 +427,31 @@ export async function customersOf(
   const limit = Math.min(500, Math.max(1, opts.limit ?? 200));
   const q = (opts.search ?? "").trim().toLowerCase();
 
+  /*
+   * Both kinds of customer, because a partner has both.
+   *
+   * Selecting on `users.partner_id` alone returned only the accounts the
+   * partner created. Somebody who already banked with CAPX and consented to
+   * the partner reaching them is just as much theirs to act for — every
+   * other route resolves them through `partnerCustomer`, which checks the
+   * link — but they were missing from the one place that lists customers.
+   * So the partner's dashboard, and CAPX's own view of that partner's book,
+   * showed a person who could trade as though they did not exist.
+   *
+   * The reference comes from whichever of the two conferred it: the
+   * partner's own `partner_ref` on an account they created, or the
+   * `reference` they chose when they asked for the link.
+   */
   const rows = await sql<{
-    id: string; partner_ref: string | null; name: string | null; email: string;
+    id: string; reference: string | null; via: string; name: string | null; email: string;
     phone: string | null; country: string; kyc_status: string; kyc_source: string | null;
     kyc_attested_by: string | null; kyc_attested_at: string | null; doc_type: string | null;
     created_at: string; orders: number; last_activity: string | null;
   }[]>`
-    select u.id::text, u.partner_ref, u.name, u.email, u.phone, u.country,
+    select u.id::text,
+           coalesce(u.partner_ref, pl.reference) as reference,
+           case when u.partner_id = ${partnerId}::uuid then 'introduced' else 'linked' end as via,
+           u.name, u.email, u.phone, u.country,
            u.kyc_status, u.kyc_source, u.kyc_attested_by, u.kyc_attested_at::text,
            u.doc_type, u.created_at,
            (select count(*)::int from capx.orders o
@@ -431,10 +459,12 @@ export async function customersOf(
            (select max(l.created_at)::text from capx.ledger_entries l
              where l.user_id = u.id) as last_activity
       from capx.users u
-     where u.partner_id = ${partnerId}::uuid
+      left join capx.partner_links pl
+        on pl.user_id = u.id and pl.partner_id = ${partnerId}::uuid and pl.status = 'active'
+     where (u.partner_id = ${partnerId}::uuid or pl.id is not null)
        and (${q === ""} or lower(u.email) like ${"%" + q + "%"}
             or lower(coalesce(u.name, '')) like ${"%" + q + "%"}
-            or lower(coalesce(u.partner_ref, '')) like ${"%" + q + "%"})
+            or lower(coalesce(u.partner_ref, pl.reference, '')) like ${"%" + q + "%"})
      order by u.created_at desc
      limit ${limit}`;
 
@@ -457,7 +487,8 @@ export async function customersOf(
 
   return rows.map((r) => ({
     id: r.id,
-    reference: r.partner_ref,
+    reference: r.reference,
+    via: r.via === "linked" ? ("linked" as const) : ("introduced" as const),
     name: r.name,
     email: r.email,
     phone: r.phone,

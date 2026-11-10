@@ -6,11 +6,17 @@ export const dynamic = "force-dynamic";
 /** The partner's own customers, newest first. */
 export const GET = partnerRoute("GET /v1/users", {}, async ({ caller }) => {
   await migrate();
+  /* Introduced and linked alike: both are people this partner may act for,
+     and listing only the accounts they created hid the ones who already
+     banked with CAPX and consented to being reached. */
   const rows = await db()<{ id: string }[]>`
-    select id::text from capx.users
-     where partner_id = ${caller.partner.id}::uuid
-     order by created_at desc limit 200`;
-  const users = await Promise.all(rows.map((r) => customerView(r.id)));
+    select u.id::text from capx.users u
+      left join capx.partner_links pl
+        on pl.user_id = u.id and pl.partner_id = ${caller.partner.id}::uuid
+       and pl.status = 'active'
+     where u.partner_id = ${caller.partner.id}::uuid or pl.id is not null
+     order by u.created_at desc limit 200`;
+  const users = await Promise.all(rows.map((r) => customerView(r.id, caller.partner.id)));
   return send({ ok: true, users: users.filter(Boolean) });
 });
 
@@ -48,7 +54,7 @@ export const POST = partnerRoute("POST /v1/users", { idempotent: true }, async (
   const [mine] = await sql<{ id: string }[]>`
     select id::text from capx.users
      where partner_id = ${caller.partner.id}::uuid and partner_ref = ${reference}`;
-  if (mine) return send({ ok: true, user: await customerView(mine.id), existing: true });
+  if (mine) return send({ ok: true, user: await customerView(mine.id, caller.partner.id), existing: true });
 
   const [taken] = await sql<{ partner_id: string | null }[]>`
     select partner_id::text from capx.users where lower(email) = ${email}`;
@@ -81,5 +87,5 @@ export const POST = partnerRoute("POST /v1/users", { idempotent: true }, async (
   void emit(caller.partner.id, "customer.created",
     { user_id: row.id, reference, email }).catch(() => {});
 
-  return send({ ok: true, user: await customerView(row.id) }, 201);
+  return send({ ok: true, user: await customerView(row.id, caller.partner.id) }, 201);
 });

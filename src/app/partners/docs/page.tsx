@@ -307,11 +307,26 @@ export default function PartnerDocsPage() {
         <h2 className="text-sm font-medium">Webhooks</h2>
         <p className="mt-2 text-[13px] leading-relaxed text-[var(--muted)]">
           Set a URL on your dashboard and we post{" "}
-          <code className="text-[11.5px]">customer.created</code> and{" "}
-          <code className="text-[11.5px]">order.settled</code> to it. Each delivery carries{" "}
+          <code className="text-[11.5px]">customer.created</code>,{" "}
+          <code className="text-[11.5px]">customer.linked</code>,{" "}
+          <code className="text-[11.5px]">customer.verified</code>,{" "}
+          <code className="text-[11.5px]">deposit.started</code>,{" "}
+          <code className="text-[11.5px]">deposit.credited</code>,{" "}
+          <code className="text-[11.5px]">order.settled</code>,{" "}
+          <code className="text-[11.5px]">order.failed</code> and{" "}
+          <code className="text-[11.5px]">shares.transferred</code> to it. Each delivery carries{" "}
           <code className="text-[11.5px]">capx-signature: sha256=…</code>, an HMAC of the raw body
           with your signing secret. Verify it against the raw bytes before parsing — the URL alone
           is not authentication, and anyone who learns it can post to it.
+        </p>
+        <p className="mt-3 text-[13px] leading-relaxed text-[var(--muted)]">
+          <code className="text-[11.5px]">deposit.credited</code> is the one to wire up if money
+          looks slow to arrive. A stablecoin transfer is announced to us while its block is still
+          unsafe, so the call returns <code className="text-[11.5px]">pending</code> — and the
+          credit then happens a minute or two later, with no response left to report into. Without
+          the webhook the only way you learn is by polling{" "}
+          <code className="text-[11.5px]">GET /v1/deposits</code>, which settles whatever is ready
+          before it answers, so it is a correct way to find out and a slow way to be told.
         </p>
       </section>
 

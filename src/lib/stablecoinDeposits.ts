@@ -443,6 +443,21 @@ export async function settleStablecoinDeposits(onlyUserId?: string): Promise<{
                where id = ${r.id}::uuid`;
     out.credited++;
 
+    /*
+     * Tell the partner, because nothing else will.
+     *
+     * The announcement call returned "pending" a minute or two ago and has no
+     * response left to report into — which is exactly the reason `notifyPartner`
+     * exists, stated in its own comment for the arrival order directly below.
+     * The credit itself was the one thing that never used it, so a partner
+     * learned their customer's money had landed only by polling, or not at
+     * all, and the money looked slow when it had been spendable for minutes.
+     */
+    await notifyPartner(r.id, "deposit.credited", {
+      deposit_id: r.id, user_id: r.user_id, token, amount,
+      tx_hash: r.funding_tx, confirmations: finality.confirmations,
+    }).catch(() => null);
+
     /* The trade this deposit was told to make, now that the money is real. */
     await runArrivalOrder(r.id, r.user_id, amount, asset).catch(() => null);
   }

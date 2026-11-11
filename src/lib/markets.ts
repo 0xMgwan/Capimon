@@ -98,7 +98,15 @@ const logoCache = new Map<string, string | null>();
 let logosInflight: Promise<void> | null = null;
 
 async function loadLogos() {
-  if (logoCache.size >= ASSETS.length) return;
+  /*
+   * Only a complete set counts as loaded.
+   *
+   * This compared the cache's size against the asset count, so a pass where
+   * every image fetch timed out still filled the map with nulls, reached the
+   * expected size, and was never retried — that instance served initials for
+   * the rest of its life. A null is a miss, and a miss is worth asking again.
+   */
+  if (ASSETS.every((a) => logoCache.get(a.symbol))) return;
   if (!logosInflight) {
     logosInflight = publicClient
       .multicall({
@@ -182,9 +190,25 @@ export async function getMarkets(opts: { depth?: number } = {}): Promise<Market[
       updatedAt: Number(rd[3]), decimals, multiplier, rawSupply, supply };
   });
 
+  /*
+   * Prices do not wait for pictures.
+   *
+   * `loadLogos` resolves a contractURI per asset and then fetches each
+   * metadata document from the issuer, with a four second timeout on every
+   * one. The cache is per-instance and serverless means many instances, so a
+   * cold one paid all of that before it could answer — and when the issuer
+   * was slow, the request either crawled or came back with nulls, which is
+   * the same symptom as having no logo at all.
+   *
+   * It is kicked off and not awaited now. The first caller on a cold instance
+   * gets correct prices and initials; the ones a moment later get the logos
+   * too. A picture arriving a second late is not a fault; a price arriving
+   * four seconds late is.
+   */
+  void loadLogos();
+
   const [hist] = await Promise.all([
     Promise.all(base.map((b) => (b.latestRound > 0n ? cachedHistory(b.meta.feed, b.latestRound, depth) : []))),
-    loadLogos(),
   ]);
 
   const now = Math.floor(Date.now() / 1000);

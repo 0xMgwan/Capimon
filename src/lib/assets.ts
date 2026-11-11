@@ -35,13 +35,6 @@ export const ASSETS: AssetMeta[] = [
     blurb: "Global e-commerce and the cloud infrastructure layer beneath much of the internet.",
   },
   {
-    symbol: "COINc", ticker: "COIN", name: "Coinbase Global Inc.",
-    token: "0xb200000000000000000000c85a31389D71F3ecfb",
-    feed: "0x408e44f504A7371a345F03a73dDC96A4b48e8aa7",
-    sector: "Financials", exchange: "NASDAQ", color: "#0052ff",
-    blurb: "The listed crypto exchange and the issuer standing behind these B20 equity tokens.",
-  },
-  {
     symbol: "CRCLc", ticker: "CRCL", name: "Circle Internet Group Inc.",
     token: "0xB20000000000000000000019f6E7C675b73C2e4D",
     feed: "0x0231cF2635D1E17bB5c2462cc7504Ba1fBd61f33",

@@ -1,4 +1,5 @@
 import { partnerRoute, send, sendFail, fail } from "@/lib/partnerApi";
+import { B20_ISSUER } from "@/lib/issuer";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -187,18 +188,15 @@ export const GET = partnerRoute("GET /v1/markets/:symbol", {}, async ({ req }) =
        * ADGM prospectus rather than from marketing copy.
        */
       issuer_structure: {
-        spv: "Coinbase Onchain SPV Ltd (ADGM, company no. 37941)",
-        custodian: "Alpaca Securities LLC — SEC-registered broker-dealer, FINRA and SIPC member",
-        custody: "Segregated accounts in the issuer's name, held on trust for holders "
-               + "under a deed of trust",
-        auditor: "Deloitte & Touche (M.E.) LLP",
-        reconciliation: "Intraday, by Onchain Marketplace Ltd as an FSRA-authorised CSD, "
-                      + "against its Legal Register",
+        spv: `${B20_ISSUER.spv} (${B20_ISSUER.spvDetail})`,
+        custodian: `${B20_ISSUER.custodian} — ${B20_ISSUER.custodianDetail}`,
+        custody: B20_ISSUER.custody,
+        auditor: `${B20_ISSUER.auditor}. ${B20_ISSUER.auditStatus}.`,
+        reconciliation: B20_ISSUER.reconciliation,
+        regulator: B20_ISSUER.regulator,
         /* The part integrators most need to know and are least likely to guess. */
-        caveat: "The issuer's Legal Register, not the chain, is the definitive record of title "
-              + "and prevails over on-chain data. No proof-of-reserves attestation is published; "
-              + "the first audited financial statements cover the year ending 31 December 2026.",
-        prospectus: `https://api.coinbase.com/v1/tokenized-stocks/prospectus/${asset.symbol}.pdf`,
+        caveat: B20_ISSUER.caveat,
+        prospectus: B20_ISSUER.prospectusUrl(asset.symbol),
       },
     },
   });

@@ -848,4 +848,10 @@ export const SW: Record<string, string> = {
   "Send more": "Tuma zaidi",
   "That transfer did not go through.": "Uhamisho huo haukufanikiwa.",
   "They need a verified CAPX account. Shares arrive at the price you paid, so you book no gain and they continue from your cost. This cannot be undone — only they can send them back.": "Wanahitaji akaunti ya CAPX iliyothibitishwa. Hisa zinafika kwa bei uliyolipa, hivyo hupati faida na wao wanaendelea kutoka gharama yako. Hili haliwezi kutenguliwa — wao tu ndio wanaweza kuzirudisha.",
+  "Issuer and custody": "Mtoaji na uhifadhi",
+  "Issuer": "Mtoaji",
+  "Auditor": "Mkaguzi wa hesabu",
+  "Reconciliation": "Upatanishi",
+  "Regulator": "Mdhibiti",
+  "Issuer prospectus": "Waraka wa mtoaji",
 };

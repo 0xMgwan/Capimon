@@ -17,6 +17,7 @@ import { AssetLogo } from "./AssetLogo";
 import { Reveal } from "./Reveal";
 import { compact, compactUsd, usd, short, ago } from "@/lib/format";
 import { useT } from "@/lib/i18n";
+import { B20_ISSUER } from "@/lib/issuer";
 
 export function AssetView({ asset }: { asset: AssetMeta }) {
   const { t } = useT();
@@ -159,6 +160,42 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
               which is applied to every share count shown.
             </p>
           </details>
+
+          {/*
+            Who actually holds the share, in the issuer's own words.
+
+            CAPX buys and holds these tokens and attests to nothing about
+            them; the custody underneath is somebody else's arrangement. A
+            person putting money into one is entitled to see whose, without
+            reading a ninety-page prospectus — and entitled to the two parts
+            of it that the marketing copy leaves out.
+          */}
+          <details className="group mt-3 rounded-2xl border hairline px-3.5 py-3">
+            <summary className="flex cursor-pointer list-none items-center justify-between text-[13px] font-medium">
+              {t("Issuer and custody")}
+              <span className="text-[var(--muted)] transition-transform group-open:rotate-45">+</span>
+            </summary>
+            <dl className="mt-3 space-y-2.5 text-sm">
+              <FactRow k={t("Issuer")} v={B20_ISSUER.spv} sub={B20_ISSUER.spvDetail} />
+              <FactRow k={t("Custodian")} v={B20_ISSUER.custodian} sub={B20_ISSUER.custodianDetail} />
+              <FactRow k={t("Shares held")} v={B20_ISSUER.custody} />
+              <FactRow k={t("Auditor")} v={B20_ISSUER.auditor} sub={B20_ISSUER.auditStatus} />
+              <FactRow k={t("Reconciliation")} v={B20_ISSUER.reconciliation} />
+              <FactRow k={t("Regulator")} v={B20_ISSUER.regulator} />
+            </dl>
+            <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
+              {B20_ISSUER.caveat}
+            </p>
+            <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
+              CAPX issues nothing here and makes no attestation about these shares. What CAPX
+              answers for is its own custody — every token it owes you, held and checked
+              continuously. <Link href="/proof" className="underline underline-offset-2 hover:text-[var(--fg)]">See the proof</Link>.
+            </p>
+            <a href={B20_ISSUER.prospectusUrl(asset.symbol)} target="_blank" rel="noreferrer"
+               className="mt-2 inline-block text-[11px] text-[var(--muted)] underline underline-offset-2 transition-colors hover:text-[var(--color-accent)]">
+              {t("Issuer prospectus")} ↗
+            </a>
+          </details>
         </div>
       </div>
 
@@ -192,6 +229,19 @@ function Stat({ label, value, sub }: { label: string; value: string; sub: string
       <div className="eyebrow truncate">{label}</div>
       <div className="tnum mt-1 text-[15px] font-medium sm:text-lg">{value}</div>
       <div className="mt-0.5 truncate text-[10.5px] text-[var(--muted)]">{sub}</div>
+    </div>
+  );
+}
+
+/** A stated fact rather than an address: wraps, and carries a second line. */
+function FactRow({ k, v, sub }: { k: string; v: string; sub?: string }) {
+  return (
+    <div className="flex justify-between gap-4">
+      <dt className="shrink-0 text-[var(--muted)]">{k}</dt>
+      <dd className="min-w-0 text-right text-[13px]">
+        {v}
+        {sub && <div className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">{sub}</div>}
+      </dd>
     </div>
   );
 }

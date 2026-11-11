@@ -59,6 +59,25 @@ export const GET = partnerRoute(
         low: c.l ?? c.p ?? null,
         close: c.c ?? c.p ?? null,
       })),
+      /*
+       * The ranges CAPX's own charts offer, so a partner's selector matches
+       * what the customer sees here.
+       *
+       * `days` is still free-form and any value works — this is a convention,
+       * not a constraint. But without one stated, every integrator picks
+       * their own: NEDApay built 1M / 3M / 1Y against our 1D / 1W / 1M / All,
+       * so the same security showed two different histories depending on
+       * which app the customer opened, and neither was wrong.
+       *
+       * "All" is the whole series: `days` omitted, or any value past the
+       * feed's first round.
+       */
+      ranges: [
+        { label: "1D", days: 1 },
+        { label: "1W", days: 7 },
+        { label: "1M", days: 30 },
+        { label: "All", days: null },
+      ],
     });
   },
 );

@@ -435,6 +435,23 @@ export async function treasuryHoldings(opts: { prices?: boolean } = {}) {
   ]);
 
   const markets = await getMarkets({ depth: 2 });
+
+  /*
+   * A balance that could not be read is not a balance of zero.
+   *
+   * `allowFailure` turns a failed multicall entry into a zero, and the filter
+   * below then drops it entirely — so a reader downstream cannot tell "we
+   * hold none of this" from "the node did not answer". It showed up as a
+   * partner being told METAc was uncovered while CAPX's own solvency page,
+   * reading the same two numbers, said it was covered.
+   *
+   * The names are carried out so callers can say "unknown" where they would
+   * otherwise say "no".
+   */
+  const unreadable = ASSETS
+    .filter((_, i) => shares[i].status !== "success")
+    .map((a) => a.symbol);
+
   const holdings = ASSETS.map((a, i) => {
     const m = markets.find((x) => x.symbol === a.symbol)!;
     const raw = shares[i].status === "success" ? (shares[i].result as bigint) : 0n;
@@ -530,6 +547,8 @@ export async function treasuryHoldings(opts: { prices?: boolean } = {}) {
     usdcOnChain: onChainUsdc,
     usdcSupplied,
     usdcSuppliedUnavailable: lent === null,
+    /** Symbols whose on-chain balance could not be read on this pass. */
+    unreadable,
     holdings,
     sharesUsd,
     totalUsd: sharesUsd === null ? null : usdcHeld + sharesUsd,

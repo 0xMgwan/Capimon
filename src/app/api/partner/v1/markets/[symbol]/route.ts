@@ -122,7 +122,22 @@ export const GET = partnerRoute("GET /v1/markets/:symbol", {}, async ({ req }) =
   const owed = await totalLiabilities()
     .then((ls) => ls.find((l) => l.asset === asset.symbol)?.amount ?? 0).catch(() => 0);
 
-  const inTreasury = ours?.qty ?? 0;
+  /*
+   * Unknown is not the same answer as no.
+   *
+   * `treasuryHoldings` drops anything it holds none of, and used to drop
+   * anything it could not *read* in exactly the same way — so one failed
+   * multicall entry made a fully backed security report `covered: false` to
+   * a partner while CAPX's own solvency page, comparing the same two
+   * numbers, said it was covered. Telling a reseller their customers'
+   * securities are unbacked because a node timed out is the worst available
+   * way to be wrong.
+   *
+   * So a balance that could not be read is reported as null and labelled,
+   * the way /v1/attestation already reports an unavailable solvency check.
+   */
+  const unread = held === null || (held.unreadable ?? []).includes(asset.symbol);
+  const inTreasury = unread ? null : (ours?.qty ?? 0);
   return send({
     ok: true,
     security: {
@@ -142,11 +157,15 @@ export const GET = partnerRoute("GET /v1/markets/:symbol", {}, async ({ req }) =
       /* Supply is issuance, not tradability. A token nobody has minted
          cannot be routed to, whatever its feed reports. */
       tradable: (m?.supply ?? 0) > 0,
-      available_to_trade: Math.max(0, inTreasury - owed),
+      available_to_trade: inTreasury === null ? null : Math.max(0, inTreasury - owed),
     },
     backing: {
       model: "issuer-held",
       issuer: "Coinbase",
+      /* "covered" / "shortfall" / "unknown" — read `status`, not `covered`,
+         when you need to tell a failed check from a failed backing. */
+      status: inTreasury === null ? "unknown"
+        : inTreasury + 1e-9 >= owed ? "covered" : "shortfall",
       note: "CAPX issues nothing here and makes no attestation: these are Coinbase-issued B20 "
           + "tokens CAPX buys and holds. The backing CAPX is answerable for is its own "
           + "treasury balance against what its customers are owed, both below and both "
@@ -154,7 +173,33 @@ export const GET = partnerRoute("GET /v1/markets/:symbol", {}, async ({ req }) =
       treasury_address: treasuryAddress(),
       treasury_holds: inTreasury,
       client_held: owed,
-      covered: inTreasury + 1e-9 >= owed,
+      /* Null, never false, when the balance could not be read. A boolean has
+         no way to say "I do not know", and false is the dangerous guess. */
+      covered: inTreasury === null ? null : inTreasury + 1e-9 >= owed,
+      ...(inTreasury === null
+        ? { unavailable: "The treasury balance for this security could not be read just now. "
+            + "This is not a shortfall — treat it as unknown rather than as a pass or a fail, "
+            + "and retry." }
+        : {}),
+      /*
+       * What the issuer's own arrangements are, so a partner answering their
+       * regulator is not left to find this out themselves. Taken from the
+       * ADGM prospectus rather than from marketing copy.
+       */
+      issuer_structure: {
+        spv: "Coinbase Onchain SPV Ltd (ADGM, company no. 37941)",
+        custodian: "Alpaca Securities LLC — SEC-registered broker-dealer, FINRA and SIPC member",
+        custody: "Segregated accounts in the issuer's name, held on trust for holders "
+               + "under a deed of trust",
+        auditor: "Deloitte & Touche (M.E.) LLP",
+        reconciliation: "Intraday, by Onchain Marketplace Ltd as an FSRA-authorised CSD, "
+                      + "against its Legal Register",
+        /* The part integrators most need to know and are least likely to guess. */
+        caveat: "The issuer's Legal Register, not the chain, is the definitive record of title "
+              + "and prevails over on-chain data. No proof-of-reserves attestation is published; "
+              + "the first audited financial statements cover the year ending 31 December 2026.",
+        prospectus: `https://api.coinbase.com/v1/tokenized-stocks/prospectus/${asset.symbol}.pdf`,
+      },
     },
   });
 });

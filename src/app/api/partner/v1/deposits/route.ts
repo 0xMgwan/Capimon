@@ -160,6 +160,14 @@ export const POST = partnerRoute(
           amount: credited.amount, tx_hash: credited.txHash,
           confirmations: credited.confirmations ?? null,
           /*
+           * Spendable, and still reversible for the minute or two until its
+           * block is safe. Said plainly rather than folded into "settled":
+           * a balance that can still go down is a different thing to show a
+           * customer than one that cannot, and the deposit.reversed webhook
+           * is the only warning if it does.
+           */
+          early: credited.early ?? false,
+          /*
            * Null while the deposit waits; then "done" with the order, or
            * "failed" with the reason. A failed order never costs the deposit
            * — the money is credited and stays as the customer's cash.

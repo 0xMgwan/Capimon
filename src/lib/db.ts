@@ -953,6 +953,14 @@ export async function migrate() {
            * Keyed to the deposit, so it executes once however many times the
            * settlement sweep passes over the row.
            */
+          /*
+           * Set when a deposit was credited before its block was safe, and
+           * cleared the moment it goes safe. Non-null therefore means "this
+           * credit is still reversible and still counts against the early
+           * exposure ceiling" — the sweep scans on it, so it is the whole
+           * record that an unwind may still be owed.
+           */
+          "early_credit_at timestamptz",
           "on_arrival jsonb",
           "on_arrival_status text",
           "on_arrival_order_id uuid",

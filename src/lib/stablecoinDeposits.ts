@@ -120,11 +120,46 @@ export async function finalityOf(blockNumber: bigint): Promise<Finality> {
   return finalityFrom({ blockNumber, latest, safeHead });
 }
 
+/**
+ * Early credit already outstanding in this token, for the exposure ceiling.
+ *
+ * Counts only rows whose block has not gone safe yet — `early_credit_at` is
+ * cleared the moment it does, so a settled deposit stops consuming the
+ * allowance rather than holding it forever.
+ *
+ * Unreadable returns Infinity, not zero. A ceiling that cannot be measured
+ * must refuse the fast path, never wave it through: the failure mode of
+ * guessing low here is crediting without a limit.
+ */
+export async function earlyOutstanding(token: StableToken): Promise<number> {
+  try {
+    const sql = db();
+    const [row] = await sql<{ total: string | null }[]>`
+      select coalesce(sum(
+               case when ${token} = 'USDC' then usdc_credited else amount_tzs end
+             ), 0)::text as total
+        from capx.deposits
+       where early_credit_at is not null
+         and metadata->>'route' = 'stablecoin-transfer'
+         and metadata->>'token' = ${token}`;
+    return Number(row?.total ?? 0);
+  } catch {
+    return Infinity;
+  }
+}
+
 export type CreditResult =
   | { ok: true; depositId: string; token: StableToken; asset: string; amount: number;
       txHash: string; duplicate?: boolean;
-      /** "credited" once the block is safe; "pending" while it is not. */
+      /** "credited" once the money is spendable; "pending" while it is not. */
       state: "credited" | "pending";
+      /**
+       * Credited ahead of the batch reaching Ethereum, under the small-deposit
+       * ceiling. Spendable, and still reversible for the minute or two until
+       * its block goes safe — so it is stated rather than hidden behind the
+       * same word as a fully settled credit.
+       */
+      early?: boolean;
       confirmations?: number; waitingFor?: string | null;
       /** The outcome of a buy_on_arrival, once there was one to run. */
       arrival?: { status: string; order_id?: string; qty?: number; price?: number;
@@ -246,6 +281,23 @@ export async function creditStablecoinTransfer(input: {
   const finality = await finalityOf(receipt.blockNumber);
 
   /*
+   * A small deposit does not wait for the batch.
+   *
+   * The money is in the omnibus either way — this was read from the mined
+   * transaction's own Transfer log. What is skipped is the one-to-three
+   * minutes until the batch carrying it reaches Ethereum, which for a small
+   * top-up costs more in abandonment than the reorg it insures against costs
+   * in expectation. Above the ceiling, and above the outstanding-exposure
+   * ceiling, nothing changes at all.
+   */
+  const { instantAllowed } = await import("./instantCredit");
+  const early = finality.safe
+    ? { instant: false as const, reason: "already safe" }
+    : instantAllowed({ token: input.token, amount,
+        outstanding: await earlyOutstanding(input.token) });
+  const creditNow = finality.safe || early.instant;
+
+  /*
    * The row carries the hash, and the unique index on it is what makes this
    * safe to call twice. Written before the ledger entry, so a crash between
    * the two leaves a settled deposit with no credit — recoverable — rather
@@ -258,8 +310,8 @@ export async function creditStablecoinTransfer(input: {
     values (${input.userId}::uuid,
             ${input.token === "NTZS" ? amount : 0},
             ${input.token === "USDC" ? amount : null},
-            '', ${finality.safe ? "settled" : "pending"},
-            ${finality.safe ? sql`now()` : null}, ${txHash},
+            '', ${creditNow ? "settled" : "pending"},
+            ${creditNow ? sql`now()` : null}, ${txHash},
             ${input.partnerId ?? null}, ${sql.json({
               route: "stablecoin-transfer", token: input.token, txHash,
               paymentMethod: "stablecoin_transfer",
@@ -269,9 +321,16 @@ export async function creditStablecoinTransfer(input: {
             ${input.onArrival ? "pending" : null})
     returning id::text`;
 
-  if (!finality.safe) {
+  /* Still reversible, and still counting against the exposure ceiling, until
+     its block goes safe. The sweep scans on exactly this. */
+  if (creditNow && !finality.safe) {
+    await sql`update capx.deposits set early_credit_at = now() where id = ${row.id}::uuid`;
+  }
+
+  if (!creditNow) {
     return { ok: true, depositId: row.id, token: input.token, asset: spec.asset, amount, txHash,
-      state: "pending", confirmations: finality.confirmations, waitingFor: finality.waitingFor };
+      state: "pending", confirmations: finality.confirmations,
+      waitingFor: finality.waitingFor ?? early.reason };
   }
 
   await record([{
@@ -280,13 +339,17 @@ export async function creditStablecoinTransfer(input: {
     metadata: { route: "stablecoin-transfer", token: input.token, txHash },
   }]);
 
-  /* Already safe, so there is nothing to wait for: the trade happens now. */
+  /* Creditable now — safe, or small enough to be credited ahead of safe —
+     so the trade this deposit was told to make happens now. */
   const arrival = input.onArrival
     ? await runArrivalOrder(row.id, input.userId, amount, spec.asset)
     : null;
 
   return { ok: true, depositId: row.id, token: input.token, asset: spec.asset, amount, txHash,
-    state: "credited", confirmations: finality.confirmations, arrival };
+    state: "credited", confirmations: finality.confirmations, arrival,
+    /* True while the credit is ahead of the batch: spendable, and still
+       reversible if the transaction is reorged out before it goes safe. */
+    early: creditNow && !finality.safe };
 }
 
 /**
@@ -377,8 +440,20 @@ async function runArrivalOrder(
  */
 export async function settleStablecoinDeposits(onlyUserId?: string): Promise<{
   checked: number; credited: number; waiting: number; vanished: number;
+  early?: { checked: number; settled: number; reversed: number };
 }> {
-  const out = { checked: 0, credited: 0, waiting: 0, vanished: 0 };
+  const out: { checked: number; credited: number; waiting: number; vanished: number;
+               early?: { checked: number; settled: number; reversed: number } } =
+    { checked: 0, credited: 0, waiting: 0, vanished: 0 };
+
+  /*
+   * Check the promises made by early credits first.
+   *
+   * An unwind owed is more urgent than a credit owed: one is money already
+   * handed over on a transaction that may have vanished, the other is money
+   * sitting safely in the omnibus waiting its turn.
+   */
+  out.early = await reconcileEarlyCredits().catch(() => undefined);
   await migrate();
   const sql = db();
 
@@ -465,6 +540,112 @@ export async function settleStablecoinDeposits(onlyUserId?: string): Promise<{
   return out;
 }
 
+
+/**
+ * Settles, or unwinds, every credit that ran ahead of its batch.
+ *
+ * An early credit is a promise that the transaction will still be there when
+ * the batch lands. This is where that promise is checked, and it is the whole
+ * reason crediting early is defensible rather than reckless:
+ *
+ *   - still on chain and now safe — the promise held. The flag is cleared and
+ *     the row stops counting against the exposure ceiling.
+ *   - gone, or reverted — the reorg the gate exists for. The credit is
+ *     reversed out of the ledger and the desk is told.
+ *   - mined but not safe yet — nothing to do, check again next minute.
+ *
+ * The reversal is a negative entry with its own ref rather than a deletion,
+ * because a ledger that forgets is not a ledger: what happened is that money
+ * was credited and then taken back, and both halves are true.
+ *
+ * If the customer already spent it, the reversal takes their balance negative.
+ * That is the honest record and deliberately not smoothed over — solvency will
+ * show it, the desk is mailed, and the ceilings exist to keep the number small
+ * enough to absorb.
+ */
+export async function reconcileEarlyCredits(): Promise<{
+  checked: number; settled: number; reversed: number;
+}> {
+  const out = { checked: 0, settled: 0, reversed: 0 };
+  await migrate();
+  const sql = db();
+
+  const rows = await sql<{ id: string; user_id: string; funding_tx: string;
+                           amount_tzs: string; usdc_credited: string | null;
+                           token: string | null }[]>`
+    select id::text, user_id::text, funding_tx, amount_tzs::text, usdc_credited::text,
+           metadata->>'token' as token
+      from capx.deposits
+     where early_credit_at is not null
+       and metadata->>'route' = 'stablecoin-transfer'
+     order by early_credit_at limit 50`;
+
+  for (const r of rows) {
+    out.checked++;
+    const token: StableToken = r.token === "USDC" ? "USDC" : "NTZS";
+    const asset = TOKEN[token].asset;
+    const amount = token === "USDC" ? Number(r.usdc_credited ?? 0) : Number(r.amount_tzs);
+
+    let receipt;
+    try {
+      receipt = await publicClient.getTransactionReceipt({ hash: r.funding_tx as `0x${string}` });
+    } catch {
+      await reverseEarlyCredit(r.id, r.user_id, asset, amount, token,
+        "the transaction is no longer on chain — reorged after it was credited");
+      out.reversed++;
+      continue;
+    }
+
+    if (receipt.status !== "success") {
+      await reverseEarlyCredit(r.id, r.user_id, asset, amount, token,
+        "the transaction reverted after it was credited");
+      out.reversed++;
+      continue;
+    }
+
+    const finality = await finalityOf(receipt.blockNumber);
+    if (!finality.safe) continue;
+
+    /* The promise held: nothing to unwind, and the allowance is released. */
+    await sql`update capx.deposits set early_credit_at = null where id = ${r.id}::uuid`;
+    out.settled++;
+  }
+
+  return out;
+}
+
+async function reverseEarlyCredit(
+  depositId: string, userId: string, asset: string, amount: number,
+  token: StableToken, why: string,
+) {
+  const sql = db();
+  /* Idempotent through the unique index on ref: a second pass writes nothing
+     rather than debiting the customer twice for one reorg. */
+  await record([{
+    userId, kind: "adjustment", asset, amount: (-amount).toString(),
+    ref: `deposit:${depositId}:reversal`,
+    metadata: { route: "stablecoin-transfer", token, reason: why },
+  }]).catch(() => null);
+
+  await sql`update capx.deposits
+               set status = 'failed', early_credit_at = null,
+                   error = ${`credited early, then reversed: ${why}`}
+             where id = ${depositId}::uuid`.catch(() => null);
+
+  await notifyPartner(depositId, "deposit.reversed", {
+    deposit_id: depositId, user_id: userId, token, amount, reason: why,
+  }).catch(() => null);
+
+  const { sendMail } = await import("./mail");
+  await sendMail({
+    subject: "CAPX: an early-credited deposit was reversed",
+    text: `Deposit ${depositId} for user ${userId} was credited before its block was safe and `
+        + `has now been reversed.\n\n${amount} ${asset} — ${why}.\n\n`
+        + `If the customer spent it before the reversal their balance is now negative. `
+        + `That is the exposure the early-credit ceilings bound; check the balance and decide `
+        + `whether to pursue it.`,
+  }).catch(() => null);
+}
 
 /**
  * Tells the partner that brought a deposit what became of its order.

@@ -312,6 +312,7 @@ export default function PartnerDocsPage() {
           <code className="text-[11.5px]">customer.verified</code>,{" "}
           <code className="text-[11.5px]">deposit.started</code>,{" "}
           <code className="text-[11.5px]">deposit.credited</code>,{" "}
+          <code className="text-[11.5px]">deposit.reversed</code>,{" "}
           <code className="text-[11.5px]">order.settled</code>,{" "}
           <code className="text-[11.5px]">order.failed</code> and{" "}
           <code className="text-[11.5px]">shares.transferred</code> to it. Each delivery carries{" "}
@@ -327,6 +328,14 @@ export default function PartnerDocsPage() {
           the webhook the only way you learn is by polling{" "}
           <code className="text-[11.5px]">GET /v1/deposits</code>, which settles whatever is ready
           before it answers, so it is a correct way to find out and a slow way to be told.
+        </p>
+        <p className="mt-3 text-[13px] leading-relaxed text-[var(--muted)]">
+          A small deposit is credited as soon as it is mined, without waiting for the batch — the
+          response carries <code className="text-[11.5px]">early: true</code> and the money is
+          immediately spendable. It stays reversible for the minute or two until its block is safe,
+          so if that transaction is reorged out we reverse the credit and post{" "}
+          <code className="text-[11.5px]">deposit.reversed</code>. Handle that event: it is rare,
+          but it is the one case where a balance you have already shown goes down.
         </p>
       </section>
 

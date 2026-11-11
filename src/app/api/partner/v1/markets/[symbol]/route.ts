@@ -158,7 +158,34 @@ export const GET = partnerRoute("GET /v1/markets/:symbol", {}, async ({ req }) =
       /* Supply is issuance, not tradability. A token nobody has minted
          cannot be routed to, whatever its feed reports. */
       tradable: (m?.supply ?? 0) > 0,
-      available_to_trade: inTreasury === null ? null : Math.max(0, inTreasury - owed),
+      /*
+       * Null, because on this board there is no such limit.
+       *
+       * It used to report the treasury's surplus over what customers are
+       * owed, which is the right question on the Dar es Salaam board — there
+       * CAPX issues tokens against attested custody and can only sell what
+       * has actually been tokenised. On the US board CAPX issues nothing and
+       * holds no inventory to sell from: a buy routes to Aerodrome and
+       * acquires the shares at the moment it settles. usOrders.ts has no
+       * inventory check anywhere in it, and never had.
+       *
+       * So the number was describing accumulated rounding — a tenth of a
+       * share — and partners were sizing orders against it. NEDApay showed
+       * "0.009536 available" for a token with 41,770 share-equivalents
+       * outstanding and millions of dollars of liquidity behind it.
+       *
+       * The real ceiling is price impact, and it is enforced where it is
+       * measured: a route more than 15% from the oracle mark is refused.
+       * That is what /v1/quote answers, so a partner sizing an order is
+       * pointed there rather than at a number that means nothing.
+       */
+      available_to_trade: null,
+      fill_source: "market",
+      available_note: "There is no inventory limit on this board — CAPX holds no stock to sell "
+        + "from and buys the shares on the market as the order settles. Size orders with "
+        + "/v1/quote, which prices the actual route; an order is refused only if that route is "
+        + "more than 15% from the oracle mark. `treasury_holds` below is backing for what "
+        + "customers already own, not a cap on what they may buy.",
     },
     backing: {
       model: "issuer-held",

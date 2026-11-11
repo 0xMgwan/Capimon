@@ -78,6 +78,19 @@ export async function settlePending(
    * anything on a client's say-so.
    */
   onlyUserId?: string,
+  /**
+   * Narrows the sweep to deposits somebody is plausibly still waiting on.
+   *
+   * The full pass deliberately keeps watching 'expired' rows forever, because
+   * expired means "stop showing this as in flight" and never "stop crediting
+   * it if the money arrives". That is right once every fifteen minutes and
+   * wrong once a minute: it would ask nTZS about months of dead prompts, sixty
+   * times an hour, to catch the one live payment in the set.
+   *
+   * So the fast path asks only about collections young enough to still be in
+   * flight. The full sweep is unchanged and still catches everything else.
+   */
+  opts: { maxAgeMs?: number } = {},
 ): Promise<{ checked: number; results: Record<string, string>[] }> {
   // Settlement only needs the database and nTZS; the treasury is required for
   // the wallet route's transfer leg, not for a ramp credit.
@@ -94,10 +107,15 @@ export async function settlePending(
       from capx.deposits
      -- 'expired' is still watched: it means "stop showing this as in flight",
      -- never "stop crediting it if the money arrives".
-     where status in ('pending','uncertain','expired') and ntzs_deposit_id is not null
+     where ntzs_deposit_id is not null
+       and (${opts.maxAgeMs ?? null}::bigint is null
+            or (status in ('pending','uncertain')
+                and created_at > now() - make_interval(secs => ${(opts.maxAgeMs ?? 0) / 1000})))
+       and (${opts.maxAgeMs ?? null}::bigint is not null
+            or status in ('pending','uncertain','expired'))
        ${onlyUserId ? sql`and user_id = ${onlyUserId}::uuid` : sql``}
      order by created_at asc
-     limit 20`;
+     limit ${opts.maxAgeMs ? 10 : 20}`;
 
   const results: Record<string, string>[] = [];
 

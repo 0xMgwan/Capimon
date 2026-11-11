@@ -33,11 +33,23 @@ export const GET = partnerRoute("GET /v1/deposits", {}, async ({ caller, req }) 
    * for fourteen minutes.
    */
   const { settleStablecoinDeposits } = await import("@/lib/stablecoinDeposits");
+  /* Collections too, not only transfers. A mobile-money deposit is creditable
+     the moment nTZS says the prompt was paid, and reading the deposits is
+     exactly when somebody wants to know whether it was. */
+  const { settlePending } = await import("@/app/api/ntzs/settle/route");
   if (ref) {
     const who = await partnerCustomer(caller.partner.id, ref);
-    if (who) await settleStablecoinDeposits(who.id).catch(() => null);
+    if (who) {
+      await Promise.all([
+        settleStablecoinDeposits(who.id).catch(() => null),
+        settlePending(who.id).catch(() => null),
+      ]);
+    }
   } else {
-    await settleStablecoinDeposits().catch(() => null);
+    await Promise.all([
+      settleStablecoinDeposits().catch(() => null),
+      settlePending(undefined, { maxAgeMs: 30 * 60_000 }).catch(() => null),
+    ]);
   }
   const rows = ref
     ? await (async () => {

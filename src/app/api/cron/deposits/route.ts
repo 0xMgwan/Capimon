@@ -38,7 +38,28 @@ export async function POST(req: Request) {
   const settled = await settleStablecoinDeposits().catch(
     (e) => ({ error: e instanceof Error ? e.message : "settle failed" }));
 
-  return NextResponse.json({ ok: true, settled },
+  /*
+   * And the mobile-money collections, which had the same problem for a
+   * different reason.
+   *
+   * A stablecoin transfer waits on a batch reaching Ethereum. A collection
+   * waits on nothing — the money is at nTZS the moment the customer approves
+   * the prompt, and the only thing between that and a credit is CAPX asking.
+   * Asking every fifteen minutes meant somebody who paid on their phone and
+   * watched it leave their mobile money balance sat looking at nothing for a
+   * quarter of an hour.
+   *
+   * Narrowed to collections young enough that somebody is plausibly still
+   * waiting, because the full sweep keeps watching expired prompts forever
+   * and asking nTZS about those sixty times an hour would be rude and
+   * pointless.
+   */
+  const { settlePending } = await import("@/app/api/ntzs/settle/route");
+  const collections = await settlePending(undefined, { maxAgeMs: 30 * 60_000 })
+    .then((r) => ({ checked: r.checked, results: r.results }))
+    .catch((e) => ({ error: e instanceof Error ? e.message : "collections failed" }));
+
+  return NextResponse.json({ ok: true, settled, collections },
     { headers: { "cache-control": "no-store" } });
 }
 

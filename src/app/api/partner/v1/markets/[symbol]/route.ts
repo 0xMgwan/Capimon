@@ -1,5 +1,6 @@
 import { partnerRoute, send, sendFail, fail } from "@/lib/partnerApi";
 import { B20_ISSUER } from "@/lib/issuer";
+import { IMPACT_LIMIT_PCT } from "@/lib/depth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -118,6 +119,13 @@ export const GET = partnerRoute("GET /v1/markets/:symbol", {}, async ({ req }) =
   const m = markets.find((x) => x.symbol === asset.symbol);
   const ours = held?.holdings?.find((h) => h.asset === asset.symbol);
 
+  /* What the market will sell, quoted live and cached briefly. Null when the
+     aggregator could not be reached — unknown, not zero. */
+  const { marketDepth } = await import("@/lib/depth");
+  const depth = m
+    ? await marketDepth(asset.token, m.decimals, m.multiplier).catch(() => null)
+    : null;
+
   /* What customers are owed, against what the treasury actually holds. */
   const { totalLiabilities } = await import("@/lib/ledger");
   const owed = await totalLiabilities()
@@ -179,13 +187,26 @@ export const GET = partnerRoute("GET /v1/markets/:symbol", {}, async ({ req }) =
        * That is what /v1/quote answers, so a partner sizing an order is
        * pointed there rather than at a number that means nothing.
        */
-      available_to_trade: null,
+      available_to_trade: depth?.availableShares ?? null,
       fill_source: "market",
-      available_note: "There is no inventory limit on this board — CAPX holds no stock to sell "
-        + "from and buys the shares on the market as the order settles. Size orders with "
-        + "/v1/quote, which prices the actual route; an order is refused only if that route is "
-        + "more than 15% from the oracle mark. `treasury_holds` below is backing for what "
-        + "customers already own, not a cap on what they may buy.",
+      available_note: "What the market will actually sell, not what CAPX holds. On this board "
+        + "CAPX holds no inventory — a buy routes to the market and acquires the shares as it "
+        + "settles — so `available_to_trade` is the largest order that still fills within "
+        + `${IMPACT_LIMIT_PCT}% of the small-order price, quoted live. It is not onchain supply, `
+        + "which exists but belongs to other holders and is not for sale. `depth` is the whole "
+        + "curve if you need to size past it; `treasury_holds` below is backing for what "
+        + "customers already own, never a cap on what they may buy.",
+      /* The curve, not just the point off the end of it: a partner sizing a
+         large order should see what it would cost rather than be told no. */
+      depth: depth && {
+        reference_price: depth.referencePrice,
+        impact_limit_pct: depth.impactLimitPct,
+        max_order_usd: depth.maxOrderUsd,
+        deeper_than_probed: depth.deeperThanProbed,
+        ladder: depth.ladder.map((r) => ({
+          usd: r.usd, shares: r.shares, impact_pct: r.impactPct,
+        })),
+      },
     },
     backing: {
       model: "issuer-held",

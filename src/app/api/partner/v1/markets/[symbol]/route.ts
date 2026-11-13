@@ -225,6 +225,33 @@ export const GET = partnerRoute("GET /v1/markets/:symbol", {}, async ({ req }) =
       /* Null, never false, when the balance could not be read. A boolean has
          no way to say "I do not know", and false is the dangerous guess. */
       covered: inTreasury === null ? null : inTreasury + 1e-9 >= owed,
+      /*
+       * The sentence to show, rather than two numbers and a boolean to
+       * reason from.
+       *
+       * Holding exactly what is owed is the *normal* state on this board —
+       * CAPX keeps no inventory and buys each share as the order settles, so
+       * held and owed are equal to the last decimal for almost every
+       * security almost all of the time. A partner comparing them with a
+       * strict `>` therefore reads the healthy case as a failure, and
+       * NEDApay duly showed "the treasury holds less than is owed" against
+       * 0.007222 held and 0.007222 owed.
+       *
+       * Telling them to read `status` is correct and was not enough: given
+       * two numbers, an integrator will compare them. So the words come too,
+       * and the equal case says in its own text that equal is the target.
+       */
+      coverage_note: inTreasury === null
+        ? "The treasury balance for this security could not be read just now, so coverage is "
+          + "unknown. This is not a shortfall — retry rather than showing a warning."
+        : inTreasury + 1e-9 < owed
+        ? `The treasury holds ${(owed - inTreasury).toFixed(8)} fewer shares than customers are `
+          + "owed. CAPX pauses buying on its own when this happens."
+        : Math.abs(inTreasury - owed) <= 1e-9
+        ? "The treasury holds exactly what customers are owed, which is the intended state: "
+          + "CAPX keeps no inventory on this board and buys each share as the order settles."
+        : `The treasury holds ${(inTreasury - owed).toFixed(8)} more shares than customers are `
+          + "owed, so every holding is backed with a little spare.",
       ...(inTreasury === null
         ? { unavailable: "The treasury balance for this security could not be read just now. "
             + "This is not a shortfall — treat it as unknown rather than as a pass or a fail, "

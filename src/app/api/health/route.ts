@@ -179,6 +179,37 @@ export async function GET() {
    * Side, size and outcome are enough to see what a trade thought it was doing;
    * no customer appears here.
    */
+  /*
+   * Securities whose price could not be read.
+   *
+   * A feed that answers nothing reports a price of zero, and zero flows
+   * everywhere quietly: the market page shows a dash, the oracle bound in
+   * executeBuy compares against it and refuses every order, and nothing
+   * anywhere says why. Adding ANTc surfaced exactly this — the address in
+   * Chainlink's directory is the access-controlled aggregator, which reverts
+   * with "No access" when it is reached through Multicall3, and the one to
+   * use is the proxy listed beside it. Both look equally plausible in a
+   * config file.
+   *
+   * So the symptom is named here rather than left to be noticed by a
+   * customer who cannot buy something.
+   */
+  try {
+    const { getMarkets } = await import("@/lib/markets");
+    const ms = await getMarkets({ depth: 1 });
+    const unpriced = ms.filter((m) => !(m.price > 0)).map((m) => m.symbol);
+    checks.prices = {
+      assets: ms.length,
+      unpriced,
+      ok: unpriced.length === 0,
+      ...(unpriced.length
+        ? { note: "A zero price means the Chainlink feed for that symbol could not be read — "
+               + "check the feed address is the proxy, not the access-controlled aggregator. "
+               + "Orders in these securities will be refused until it is fixed." }
+        : {}),
+    };
+  } catch { /* not fatal */ }
+
   if (dbConfigured) {
     try {
       const rows = await db()<{ side: string; symbol: string; usdc_amount: string | null;

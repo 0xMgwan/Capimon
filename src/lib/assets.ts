@@ -28,6 +28,14 @@ export const ASSETS: AssetMeta[] = [
     blurb: "Consumer hardware, silicon and services — the largest company by market capitalisation.",
   },
   {
+    symbol: "ANTc", ticker: "ANT", name: "Anthropic, PBC",
+    token: "0xb20000000000000000000016e38FD364d271Ba28",
+    feed: "0xeEDc7412E991a3F2BD693eb2aC7fB0F27d4660dA",
+    sector: "Technology", exchange: "NASDAQ", color: "#FF7F16",
+    blurb: "The research lab behind Claude. Listed on the Nasdaq Global Select Market on "
+         + "19 November 2026; the tokenised certificate opened the same day.",
+  },
+  {
     symbol: "AMZNc", ticker: "AMZN", name: "Amazon.com Inc.",
     token: "0xb200000000000000000000d9192b6B456483C2E8",
     feed: "0x06A8E4b3aBB3B7543d8396FB2B763d22820cB295",

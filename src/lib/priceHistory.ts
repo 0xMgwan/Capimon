@@ -25,14 +25,20 @@ import { db, dbConfigured, migrate } from "./db";
  * outage is not a lie, but presenting it as live would be.
  */
 
-export type Candle = { t: number; o?: number; h?: number; l?: number; c?: number; p?: number };
+export type Candle = { t: number; o?: number; h?: number; l?: number; c?: number; p?: number;
+                       /** Quote-currency volume in the bucket. Market candles only. */
+                       v?: number };
 
 export type PriceHistory = {
   symbol: string;
   venue: "DSE" | "US";
   currency: "TZS" | "USD";
   candles: Candle[];
-  /** "dse" | "saved" | "saved+oracle" | "oracle" | "chainlink" */
+  /**
+   * "market" — real trades from the deepest onchain pool, with OHLC and volume.
+   * "chainlink" — oracle rounds, one price per point, no OHLC.
+   * "dse" | "saved" | "saved+oracle" | "oracle" — the Dar es Salaam board.
+   */
   source: string;
   /** When a saved series was fetched, if that is what this is. */
   cachedAt: string | null;
@@ -73,6 +79,30 @@ export async function priceHistory(
      * instruction — a partner asking for five years must not be able to spend
      * a minute of compute to be told so.
      */
+    /*
+     * The trades first, the oracle as the floor under them.
+     *
+     * A Chainlink round is a mark, not a trade: one price, no open, high, low
+     * or close, printed when the feed decides to speak. The pool is where the
+     * price was actually made and comes with real candles, so that is what a
+     * chart should show. The oracle line stays as the fallback because the
+     * index is a third party with no obligation to us, and a chart one grade
+     * coarser beats a chart that is not there.
+     *
+     * Whichever arrives, `source` says which — these two series disagree on
+     * purpose and presenting one as the other would be the actual error.
+     */
+    const { poolCandles, bucketFor, barsFor } = await import("./poolCandles");
+    const bucket = bucketFor(days);
+    const market = await poolCandles(us.token, bucket, barsFor(days, bucket)).catch(() => null);
+    if (market?.length) {
+      return {
+        symbol: us.symbol, venue: "US", currency: "USD",
+        candles: market.map((k) => ({ t: k.t, o: k.o, h: k.h, l: k.l, c: k.c, p: k.c, v: k.v })),
+        source: "market", cachedAt: null,
+      };
+    }
+
     const { getMarkets } = await import("./markets");
     const markets = await getMarkets({ depth: Math.min(120, days) }).catch(() => []);
     const m = markets.find((x) => x.symbol === us.symbol);

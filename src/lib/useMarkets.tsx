@@ -3,7 +3,11 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { AssetMeta } from "./assets";
 
-export type Candle = { t: number; p: number; round: string };
+export type Candle = {
+  t: number; p: number; round?: string;
+  /** Present on market candles, absent on an oracle line. */
+  o?: number; h?: number; l?: number; c?: number; v?: number;
+};
 export type Market = AssetMeta & {
   logo: string | null;
   price: number; feedDecimals: number; updatedAt: number; roundId: string;

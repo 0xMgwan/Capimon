@@ -58,6 +58,9 @@ export const GET = partnerRoute(
         high: c.h ?? c.p ?? null,
         low: c.l ?? c.p ?? null,
         close: c.c ?? c.p ?? null,
+        /* Quote-currency volume in the bucket. Present on market candles and
+           null on an oracle line, which has no such thing. */
+        volume: c.v ?? null,
       })),
       /*
        * The ranges CAPX's own charts offer, so a partner's selector matches

@@ -5,7 +5,7 @@ import { Arrow } from "./icons/Arrow";
 import { Comments } from "./Comments";
 import { useEffect, useState } from "react";
 import type { AssetMeta } from "@/lib/assets";
-import { useMarket, useMarkets } from "@/lib/useMarkets";
+import { useMarket, useMarkets, type Candle } from "@/lib/useMarkets";
 import { PriceChart } from "./PriceChart";
 import { TradePanel } from "./TradePanel";
 import { CustodialTradePanel } from "./CustodialTradePanel";
@@ -29,6 +29,39 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
   const custodial = !isConnected && !!account;
   const { data, loading } = useMarkets();
   const [logo, setLogo] = useState<string | null>(null);
+
+  /*
+   * Real trades for the chart, the oracle line as the floor under it.
+   *
+   * `market.history` is the Chainlink round series — one price per print, no
+   * open, high, low or close, because a feed does not have those. The pool is
+   * where the price was actually made, so that is what the chart draws when
+   * it is available; the oracle line stays as the fallback, which is what the
+   * `?? market?.history` below is for.
+   *
+   * Refreshed on a timer because these candles are live trades and the last
+   * one is still forming. Left at a minute rather than seconds: the index is
+   * rate limited, and a chart that updates every few seconds is not worth
+   * being the reason it stops answering.
+   */
+  const [candles, setCandles] = useState<Candle[] | null>(null);
+  const [candleSource, setCandleSource] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      fetch(`/api/securities/${encodeURIComponent(asset.symbol.toLowerCase())}/history?days=30`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          if (!alive || !j?.ok || !Array.isArray(j.candles) || !j.candles.length) return;
+          setCandles(j.candles.map((c: Candle & { c?: number }) => ({ ...c, p: c.p ?? c.c ?? 0 })));
+          setCandleSource(j.source ?? null);
+        })
+        .catch(() => {});
+    };
+    load();
+    const id = setInterval(load, 60_000);
+    return () => { alive = false; clearInterval(id); };
+  }, [asset.symbol]);
 
   // The B20 contractURI carries the issuer's own logo as an inline data URI.
   useEffect(() => {
@@ -93,7 +126,13 @@ export function AssetView({ asset }: { asset: AssetMeta }) {
       <div className="mt-3 grid gap-3 sm:mt-8 sm:gap-6 lg:grid-cols-[1.7fr_1fr]">
         <Reveal className="lg:col-start-1 lg:row-start-1">
           <div className="rounded-2xl border hairline p-3 sm:rounded-3xl sm:p-7">
-            <PriceChart data={market?.history ?? []} color={up ? "var(--color-up)" : "var(--color-down)"} />
+            <PriceChart
+              data={candles ?? market?.history ?? []}
+              color={up ? "var(--color-up)" : "var(--color-down)"}
+              provenance={(n) => candleSource === "market"
+                ? `${n} candles from the deepest onchain pool · live trades`
+                : `${n} onchain prints · Chainlink feed on Base`}
+            />
           </div>
         </Reveal>
 

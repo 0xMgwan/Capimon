@@ -71,17 +71,45 @@ export function PriceChart({ data, color, height = 320, format = usd, ranges, pr
     return win.length >= 2 ? win : data;
   }, [data, range]);
 
+  /*
+   * Candles only when the data has them.
+   *
+   * A Chainlink round is one price: open, high, low and close are the same
+   * number, and drawing that as a candle gives a row of identical dashes
+   * that look like a rendering fault. Market candles come from real trades
+   * and have a genuine range, so the toggle appears for those and not for
+   * the oracle line.
+   */
+  const hasOHLC = useMemo(
+    () => series.length > 1 && series.some((d) => d.h !== undefined && d.l !== undefined && d.h !== d.l),
+    [series],
+  );
+  const [candles, setCandles] = useState(true);
+  const asCandles = candles && hasOHLC;
+
   const geo = useMemo(() => {
     if (series.length < 2) return null;
     const ps = series.map((d) => d.p);
-    const min = Math.min(...ps);
-    const max = Math.max(...ps);
+    /*
+     * A candle's extremes are its wick, not its close. Scaling to closes
+     * alone clips every high and low out of the frame — the chart would draw
+     * wicks past the top of the box.
+     */
+    const lows = series.map((d) => d.l ?? d.p);
+    const highs = series.map((d) => d.h ?? d.p);
+    const min = Math.min(...lows);
+    const max = Math.max(...highs);
     const span = max - min || max * 0.01 || 1;
     const padY = 26;
     const x = (i: number) => (i / (series.length - 1)) * W;
     const y = (p: number) => h - padY - ((p - min) / span) * (h - padY * 2);
+    /* Bodies leave a hairline between neighbours so a dense range still
+       reads as separate bars rather than a solid block. */
+    const step = W / series.length;
+    const bw = Math.max(1, Math.min(14, step * 0.68));
+
     return {
-      min, max, x, y,
+      min, max, x, y, bw,
       line: ps.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(2)},${y(p).toFixed(2)}`).join(" "),
       area: `${ps.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(2)},${y(p).toFixed(2)}`).join(" ")} L${W},${h} L0,${h} Z`,
       up: ps[ps.length - 1] >= ps[0],
@@ -120,6 +148,22 @@ export function PriceChart({ data, color, height = 320, format = usd, ranges, pr
           </div>
         </div>
 
+        <div className="flex items-center gap-2">
+        {hasOHLC && (
+          <div className="flex gap-1 rounded-full border hairline p-1">
+            {([["line", "Line"], ["candles", "Candles"]] as const).map(([k, label]) => (
+              <button
+                key={k}
+                onClick={() => setCandles(k === "candles")}
+                className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
+                  (k === "candles") === candles ? "bg-[var(--fg)] text-[var(--bg)]" : "text-[var(--muted)] hover:text-[var(--fg)]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex gap-1 rounded-full border hairline p-1">
           {shownRanges.map((r) => (
             <button
@@ -132,6 +176,7 @@ export function PriceChart({ data, color, height = 320, format = usd, ranges, pr
               {r.key}
             </button>
           ))}
+        </div>
         </div>
       </div>
 
@@ -161,9 +206,43 @@ export function PriceChart({ data, color, height = 320, format = usd, ranges, pr
                 stroke="var(--border)" strokeWidth="1" strokeDasharray="3 5" />
             ))}
 
-            <path d={geo.area} fill="url(#pc-fill)" />
-            <path d={geo.line} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-              className="sweep" style={{ "--len": 6000 } as React.CSSProperties} />
+            {asCandles ? (
+              /*
+               * Coloured against the previous close, not against the bar's
+               * own open. A bar that opens on a gap and closes above its open
+               * is still down on the day, and colouring it green says the
+               * opposite of what happened.
+               */
+              series.map((d, i) => {
+                const o = d.o ?? d.p, c = d.c ?? d.p;
+                const hi = d.h ?? Math.max(o, c), lo = d.l ?? Math.min(o, c);
+                const prev = i > 0 ? (series[i - 1].c ?? series[i - 1].p) : o;
+                const up = c >= prev;
+                const stroke = up ? "var(--color-up)" : "var(--color-down)";
+                const cx = geo.x(i);
+                const top = geo.y(Math.max(o, c));
+                const bot = geo.y(Math.min(o, c));
+                return (
+                  <g key={d.t} opacity={hover && hover.i !== i ? 0.55 : 1}>
+                    <line x1={cx} x2={cx} y1={geo.y(hi)} y2={geo.y(lo)} stroke={stroke} strokeWidth="1" />
+                    <rect
+                      x={cx - geo.bw / 2} width={geo.bw}
+                      y={top}
+                      /* A doji has no body; give it a hairline so the bar
+                         does not vanish at that price. */
+                      height={Math.max(1, bot - top)}
+                      fill={stroke}
+                    />
+                  </g>
+                );
+              })
+            ) : (
+              <>
+                <path d={geo.area} fill="url(#pc-fill)" />
+                <path d={geo.line} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  className="sweep" style={{ "--len": 6000 } as React.CSSProperties} />
+              </>
+            )}
 
             {hover && (
               <g>

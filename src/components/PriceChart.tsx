@@ -108,8 +108,20 @@ export function PriceChart({ data, color, height = 320, format = usd, ranges, pr
     const step = W / series.length;
     const bw = Math.max(1, Math.min(14, step * 0.68));
 
+    /*
+     * Candle centres are inset by half a body.
+     *
+     * A line's first and last points sit exactly on the edges, which is right
+     * for a line and wrong for anything with width: at x=0 and x=W half of
+     * each body falls outside the viewBox and is clipped. The bars at the
+     * ends are the two a reader cares most about — the latest price is the
+     * whole point of the right-hand one.
+     */
+    const xc = (i: number) =>
+      series.length < 2 ? W / 2 : bw / 2 + (i / (series.length - 1)) * (W - bw);
+
     return {
-      min, max, x, y, bw,
+      min, max, x, y, bw, xc,
       line: ps.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(2)},${y(p).toFixed(2)}`).join(" "),
       area: `${ps.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(2)},${y(p).toFixed(2)}`).join(" ")} L${W},${h} L0,${h} Z`,
       up: ps[ps.length - 1] >= ps[0],
@@ -219,7 +231,7 @@ export function PriceChart({ data, color, height = 320, format = usd, ranges, pr
                 const prev = i > 0 ? (series[i - 1].c ?? series[i - 1].p) : o;
                 const up = c >= prev;
                 const stroke = up ? "var(--color-up)" : "var(--color-down)";
-                const cx = geo.x(i);
+                const cx = geo.xc(i);
                 const top = geo.y(Math.max(o, c));
                 const bot = geo.y(Math.min(o, c));
                 return (

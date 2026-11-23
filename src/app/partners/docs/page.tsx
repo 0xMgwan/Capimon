@@ -200,13 +200,16 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
         ],
         returns: "202 with the deposit, its route and status. A bank transfer also returns `bank`: the account, the one-off reference and when it expires.",
         note: "Mobile money prompts the phone and settles on its own. A bank transfer takes nothing until the customer sends it — show them the reference verbatim, because that is what matches the money to them." },
-      { method: "POST", path: "/v1/withdrawals", what: "Pay a customer out to mobile money or a bank.",
+      { method: "POST", path: "/v1/withdrawals", what: "Pay a customer out — shillings to mobile money or a bank, or USDC to a wallet.",
         body: [
-          ["user", "required"], ["amount_tzs", "required"],
+          ["user", "required"],
+          ["to_address", "USDC on Base — send with amount_usdc"],
+          ["amount_usdc", "with to_address"],
+          ["amount_tzs", "with a phone or bank destination"],
           ["phone", "mobile money"], ["bank_code + account_number", "bank payout"],
         ],
-        returns: "status: sent or queued, with amount_tzs and fee_tzs. The fee is charged by the payout rail and quoted per payout, so it is whatever the rail reported rather than a rate CAPX applies — null when it did not state one.",
-        note: "Read the status. A queued payout is accepted and goes out automatically, oldest first — showing your customer 'sent' when the body says queued would be misreporting it." },
+        returns: "For shillings: status sent or queued, with amount_tzs and fee_tzs — the rail's own fee, quoted per payout rather than a rate CAPX applies, and null when it did not state one. For USDC: status sent, with amount_usdc, to_address, tx_hash and explorer.",
+        note: "The destination decides the currency, so send one or the other and never both — a request carrying an address and a phone is refused rather than guessed at. Shillings: read the status, because a queued payout is accepted and goes out automatically, oldest first, and showing your customer 'sent' when the body says queued would be misreporting it. USDC: it sends or it refuses, there is no queue, and the only fee is the network's, which CAPX pays. It is final once mined — there is no recall, so check the address with your customer before you call this. Send an Idempotency-Key: a retry after a timeout is keyed on it and cannot pay twice, and if you get withdrawal_uncertain the transfer was already broadcast, so do not retry — CAPX is reconciling it." },
     ],
   },
 ];
@@ -315,7 +318,8 @@ export default function PartnerDocsPage() {
           <code className="text-[11.5px]">deposit.reversed</code>,{" "}
           <code className="text-[11.5px]">order.settled</code>,{" "}
           <code className="text-[11.5px]">order.failed</code> and{" "}
-          <code className="text-[11.5px]">shares.transferred</code> to it. Each delivery carries{" "}
+          <code className="text-[11.5px]">shares.transferred</code> and{" "}
+          <code className="text-[11.5px]">withdrawal.sent</code> to it. Each delivery carries{" "}
           <code className="text-[11.5px]">capx-signature: sha256=…</code>, an HMAC of the raw body
           with your signing secret. Verify it against the raw bytes before parsing — the URL alone
           is not authentication, and anyone who learns it can post to it.

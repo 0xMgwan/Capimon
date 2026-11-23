@@ -203,13 +203,13 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
       { method: "POST", path: "/v1/withdrawals", what: "Pay a customer out — shillings to mobile money or a bank, or USDC to a wallet.",
         body: [
           ["user", "required"],
-          ["to_address", "USDC on Base — send with amount_usdc"],
-          ["amount_usdc", "with to_address"],
-          ["amount_tzs", "with a phone or bank destination"],
+          ["to_address", "a wallet on Base — send with amount_usdc or amount_tzs"],
+          ["amount_usdc", "with to_address — pays USDC"],
+          ["amount_tzs", "with to_address pays nTZS; with a phone or bank pays shillings"],
           ["phone", "mobile money"], ["bank_code + account_number", "bank payout"],
         ],
-        returns: "For shillings: status sent or queued, with amount_tzs and fee_tzs — the rail's own fee, quoted per payout rather than a rate CAPX applies, and null when it did not state one. For USDC: status sent, with amount_usdc, to_address, tx_hash and explorer.",
-        note: "The destination decides the currency, so send one or the other and never both — a request carrying an address and a phone is refused rather than guessed at. Shillings: read the status, because a queued payout is accepted and goes out automatically, oldest first, and showing your customer 'sent' when the body says queued would be misreporting it. USDC: it sends or it refuses, there is no queue, and the only fee is the network's, which CAPX pays. It is final once mined — there is no recall, so check the address with your customer before you call this. Send an Idempotency-Key: a retry after a timeout is keyed on it and cannot pay twice, and if you get withdrawal_uncertain the transfer was already broadcast, so do not retry — CAPX is reconciling it." },
+        returns: "For a rail payout: status sent or queued, with amount_tzs and fee_tzs — the rail's own fee, quoted per payout rather than a rate CAPX applies, and null when it did not state one. For a wallet: status sent, with to_address and either amount_usdc and tx_hash, or amount_tzs and asset NTZS.",
+        note: "There are three exits and the request picks one. A phone or bank destination pays shillings through a Tanzanian rail. `to_address` pays a wallet on Base, and the amount field decides the token: `amount_usdc` sends USDC, `amount_tzs` sends nTZS — which is the one you want after a customer sells a Dar es Salaam share, since they hold nTZS everywhere else and a mobile money payout would put it through one more rail and one more fee. Send exactly one amount with an address; a bare `amount` is refused rather than guessed at, because guessing between dollars and shillings is wrong by a factor of two and a half thousand. Never send an address and a phone together — a request carrying an address and a phone is refused rather than guessed at. Rail payouts: read the status, because a queued payout is accepted and goes out automatically, oldest first, and showing your customer 'sent' when the body says queued would be misreporting it. Wallet withdrawals: they send or they refuse, there is no queue, and there is no CAPX fee — the network fee is ours. It is final once mined — there is no recall, so check the address with your customer before you call this. Send an Idempotency-Key: a retry after a timeout is keyed on it and cannot pay twice, and if you get withdrawal_uncertain the transfer was already broadcast, so do not retry — CAPX is reconciling it." },
     ],
   },
 ];

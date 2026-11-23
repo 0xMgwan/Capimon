@@ -63,7 +63,61 @@ export const POST = partnerRoute(
      * denominated in USDC.
      */
     if (toAddress) {
-      const amountUsdc = Number(body.amount_usdc ?? body.amount);
+      /*
+       * Which token, decided by which amount was named.
+       *
+       * A wallet can hold both, so the address cannot say what to send. The
+       * amount field does: `amount_usdc` is dollars, `amount_tzs` is
+       * shillings paid as nTZS — which is the exit a customer wants after
+       * selling a Dar es Salaam share, since nTZS is what they hold
+       * everywhere else and a mobile money payout would convert it to one
+       * more rail and one more fee.
+       *
+       * A bare `amount` is not accepted here. It would have to be guessed at,
+       * and guessing between dollars and shillings is wrong by a factor of
+       * two and a half thousand.
+       */
+      const hasUsdc = body.amount_usdc !== undefined;
+      const hasTzs = body.amount_tzs !== undefined;
+      if (hasUsdc === hasTzs) {
+        return sendFail(fail("amount_required",
+          "Send exactly one of `amount_usdc` or `amount_tzs` with `to_address`. The amount "
+          + "decides which token goes to the wallet — USDC, or shillings as nTZS."));
+      }
+
+      if (hasTzs) {
+        const idemTzs = (req.headers.get("idempotency-key") ?? "").trim();
+        const keyTzs = idemTzs
+          || `${caller.partner.id}:${customer.id}:${toAddress.toLowerCase()}:tzs:${amountTzs}:${Math.floor(Date.now() / 1000)}`;
+
+        const { withdrawNtzsToWallet } = await import("@/lib/walletWithdrawal");
+        const result = await withdrawNtzsToWallet({
+          userId: customer.id, amountTzs: Number(body.amount_tzs), to: toAddress, key: keyTzs,
+          via: `partner:${caller.partner.slug}`,
+        });
+
+        if (!result.ok) {
+          const { status, ok, ...rest } = result; void ok;
+          return send({ ok: false, ...rest }, status);
+        }
+
+        const { emit } = await import("@/lib/partners");
+        void emit(caller.partner.id, "withdrawal.sent", {
+          user_id: customer.id, reference: ref, asset: "NTZS",
+          amount: result.amountTzs, to_address: result.to, tx_hash: result.txHash,
+        }).catch(() => {});
+
+        return send({
+          ok: true, status: "sent", asset: "NTZS",
+          amount_tzs: result.amountTzs, to_address: result.to,
+          tx_hash: result.txHash, reference: result.reference,
+          note: "Sent as nTZS on Base from the CAPX omnibus. No CAPX fee and no payout rail. "
+              + "It is final once it lands — there is no recall. `tx_hash` is null when nTZS "
+              + "did not return one; the transfer still went.",
+        });
+      }
+
+      const amountUsdc = Number(body.amount_usdc);
       if (!Number.isFinite(amountUsdc) || amountUsdc <= 0) {
         return sendFail(fail("bad_amount",
           "`amount_usdc` must be a positive number of USDC for a wallet withdrawal."));
@@ -77,9 +131,9 @@ export const POST = partnerRoute(
        */
       const idem = (req.headers.get("idempotency-key") ?? "").trim();
       const key = idem
-        || `${caller.partner.id}:${customer.id}:${toAddress.toLowerCase()}:${amountUsdc}:${Math.floor(Date.now() / 1000)}`;
+        || `${caller.partner.id}:${customer.id}:${toAddress.toLowerCase()}:usdc:${amountUsdc}:${Math.floor(Date.now() / 1000)}`;
 
-      const { withdrawUsdcToWallet } = await import("@/lib/usdcWithdrawal");
+      const { withdrawUsdcToWallet } = await import("@/lib/walletWithdrawal");
       const result = await withdrawUsdcToWallet({
         userId: customer.id, amount: amountUsdc, to: toAddress, key,
         via: `partner:${caller.partner.slug}`,

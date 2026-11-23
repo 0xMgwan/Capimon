@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseDestination, MIN_WITHDRAWAL_USDC } from "../src/lib/usdcWithdrawal";
+import { parseDestination, MIN_WITHDRAWAL_USDC, MIN_WITHDRAWAL_TZS } from "../src/lib/walletWithdrawal";
 
 /**
  * Checking a withdrawal address, without a chain.
@@ -64,4 +64,20 @@ test("a mixed-case address that fails its own checksum is refused", () => {
 test("the minimum is a real floor, not zero", () => {
   assert.ok(MIN_WITHDRAWAL_USDC > 0,
     "a zero minimum lets dust withdrawals cost more in bookkeeping than they move");
+});
+
+test("both exits share one address check, so neither can drift from the other", () => {
+  // The dollar and shilling paths differ in everything except where the money
+  // goes. If that check ever forks, one of them gets weaker validation.
+  const r = parseDestination(GOOD);
+  assert.equal(r.ok, true);
+});
+
+test("the shilling minimum is in shillings, not dollars", () => {
+  // A thousand-fold unit mix-up here would set the floor at about forty cents
+  // or about a thousand dollars, depending which way it went.
+  assert.ok(MIN_WITHDRAWAL_TZS >= 100,
+    "a TZS floor below a hundred is almost certainly a USD number in the wrong field");
+  assert.ok(MIN_WITHDRAWAL_TZS > MIN_WITHDRAWAL_USDC,
+    "shillings are worth far less than dollars, so the floor must be a larger number");
 });

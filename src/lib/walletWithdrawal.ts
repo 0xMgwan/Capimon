@@ -233,16 +233,175 @@ async function refund(userId: string, usdc: number, key: string, reason: string)
   }]).catch(() => null);
 }
 
+/**
+ * Names the asset rather than assuming dollars.
+ *
+ * This said "USDC" unconditionally, which on a shilling withdrawal would have
+ * put "25000 USDC" in front of whoever had to settle it — off by three orders
+ * of magnitude and in the wrong currency, in the one message whose entire job
+ * is to be acted on correctly.
+ */
 async function alertStranded(
-  userId: string, usdc: number, to: string, key: string, reason: string,
+  userId: string, amount: number, to: string, key: string, reason: string,
+  asset: "USDC" | "TZS" = "USDC",
 ) {
   const { sendMail } = await import("./mail");
+  const pretty = asset === "TZS"
+    ? `${Math.round(amount).toLocaleString()} TZS (as nTZS)`
+    : `${amount} USDC`;
+  const where = asset === "TZS"
+    ? "Check the omnibus wallet's recent transfers and the nTZS transfers log"
+    : "Check the treasury's recent transactions on Basescan";
   await sendMail({
-    subject: "CAPX: a wallet withdrawal was broadcast but not confirmed",
-    text: `User ${userId} withdrew ${usdc} USDC to ${to} (key ${key}).\n\n`
-        + `The transaction was broadcast and the receipt could not be read: ${reason}\n\n`
-        + `The balance stays debited because refunding a broadcast transfer pays twice. `
-        + `Check the treasury's recent transactions on Basescan: if it confirmed, nothing `
-        + `more is needed; if it never landed, refund the balance by hand.`,
+    subject: "CAPX: a wallet withdrawal was sent but not confirmed",
+    text: `User ${userId} withdrew ${pretty} to ${to} (key ${key}).\n\n`
+        + `It was submitted and the outcome could not be read: ${reason}\n\n`
+        + `The balance stays debited because refunding something that may have moved pays `
+        + `twice. ${where}: if it went, nothing more is needed; if it never landed, refund `
+        + `the balance by hand.`,
   }).catch(() => null);
+}
+
+/* ------------------------------------------------------- shillings out -- */
+
+/** Below this the transfer is not worth the bookkeeping either side of it. */
+export const MIN_WITHDRAWAL_TZS = 1_000;
+
+export type NtzsWithdrawalResult =
+  | { ok: true; amountTzs: number; to: `0x${string}`; txHash: string | null; reference: string }
+  | { ok: false; code: string; error: string; status: number };
+
+/**
+ * Sends a shilling balance to a wallet as nTZS, rather than to a phone.
+ *
+ * The mirror of the dollar exit, and the one a NEDApay customer actually
+ * wants after selling a Dar es Salaam share: they hold nTZS everywhere else
+ * in their life, so paying them out through a mobile money rail converts a
+ * balance they already understand into one more rail, one more fee and a
+ * reconciliation nobody asked for.
+ *
+ * ## Why this cannot be signed the way USDC is
+ *
+ * The treasury is an ordinary EOA and signs its own USDC. Shillings are not
+ * the treasury's to sign: client TZS balances are backed by nTZS sitting in
+ * the omnibus, which belongs to nTZS and has no key CAPX holds. The only way
+ * out is the transfers API, sourced by `fromUserId` — the same endpoint, in
+ * the opposite direction, that credits a deposit when a partner sends nTZS in.
+ *
+ * So there are two moving parts rather than one: the omnibus must actually
+ * hold the shillings, which `ensureNtzsHasTzs` arranges by walking dollars
+ * back and converting them, and then the transfer is requested.
+ *
+ * ## The same refund rule, for a different reason
+ *
+ * `withdrawUsdcToWallet` refuses to refund after broadcast because the
+ * transaction is already public. Here the uncertainty is an HTTP one: a
+ * timeout against the transfers API may still have moved money. nTZS says so
+ * itself — `NtzsError.retry === "verify"` means exactly "this may have
+ * happened" — and `payout.ts` already treats that as do-not-refund. The same
+ * rule applies, read off the same field.
+ */
+export async function withdrawNtzsToWallet(input: {
+  userId: string;
+  amountTzs: number;
+  to: string;
+  key: string;
+  via?: string;
+}): Promise<NtzsWithdrawalResult> {
+  const dest = parseDestination(input.to);
+  if (!dest.ok) return { ok: false, code: "bad_destination", error: dest.error, status: 400 };
+
+  const amountTzs = Math.round(Number(input.amountTzs));
+  if (!Number.isFinite(amountTzs) || amountTzs <= 0) {
+    return { ok: false, code: "bad_amount",
+      error: "The amount must be a positive number of shillings.", status: 400 };
+  }
+  if (amountTzs < MIN_WITHDRAWAL_TZS) {
+    return { ok: false, code: "below_minimum",
+      error: `The smallest wallet withdrawal is ${MIN_WITHDRAWAL_TZS.toLocaleString()} TZS.`,
+      status: 400 };
+  }
+
+  const held = await balanceOf(input.userId, "TZS").catch(() => null);
+  if (held === null) {
+    return { ok: false, code: "balance_unreadable",
+      error: "The customer's balance could not be read just now. Nothing was sent; try again.",
+      status: 503 };
+  }
+  if (amountTzs > held + 1e-9) {
+    return { ok: false, code: "insufficient_balance",
+      error: `That customer holds ${Math.floor(held).toLocaleString()} TZS.`, status: 409 };
+  }
+
+  /* Debited first, for the reason set out at the top of this file: money
+     owed and still held is repairable, money gone and still spendable is not. */
+  const ref = `ntzs-withdrawal:${input.key}`;
+  const debit = await record([{
+    userId: input.userId, kind: "withdrawal", asset: "TZS", amount: (-amountTzs).toString(),
+    ref,
+    metadata: { destination: dest.address, chain: "base", token: "NTZS",
+                ...(input.via ? { via: input.via } : {}) },
+  }]);
+  if (debit.duplicate) {
+    return { ok: false, code: "already_submitted",
+      error: "A withdrawal with this key was already accepted. Check the customer's activity "
+           + "for it rather than sending a second one.", status: 409 };
+  }
+
+  try {
+    const { ensureNtzsHasTzs } = await import("./ntzsFunding");
+    const { transferNtzs } = await import("./ntzs");
+    const { omnibusUserId } = await import("./omnibus");
+
+    /* The shillings may currently be dollars in the treasury; this walks them
+       back and converts, confirming each step before the next. */
+    await ensureNtzsHasTzs(amountTzs);
+
+    const result = await transferNtzs({
+      fromUserId: await omnibusUserId(),
+      toAddress: dest.address,
+      amountTzs,
+      purpose: "customer_withdrawal",
+      /* nTZS keys its own idempotency on this, so a retry inside their API is
+         the same transfer rather than a second one. */
+      reference: input.key,
+    });
+
+    const txHash = typeof result.txHash === "string" ? result.txHash : null;
+    if (txHash) {
+      const { db } = await import("./db");
+      await db()`
+        update capx.ledger_entries
+           set metadata = metadata || ${JSON.stringify({ txHash })}::jsonb
+         where ref = ${ref}`.catch(() => null);
+    }
+
+    return { ok: true, amountTzs, to: dest.address, txHash, reference: String(result.id ?? input.key) };
+  } catch (e) {
+    const { NtzsError } = await import("./ntzs");
+    const err = e instanceof NtzsError ? e : null;
+    const message = e instanceof Error ? e.message : "The transfer did not go through.";
+
+    /*
+     * "verify" is nTZS saying it may have moved the money. Refunding on that
+     * pays the customer twice, so the debit stands and a person settles it —
+     * the same call payout.ts makes on the same field.
+     */
+    if (err?.retry === "verify") {
+      await alertStranded(input.userId, amountTzs, dest.address, input.key,
+        `${message} (nTZS reported an uncertain outcome)`, "TZS");
+      return { ok: false, code: "withdrawal_uncertain",
+        error: "The transfer was requested but its outcome could not be confirmed. The balance "
+             + "stays debited and CAPX is checking it — do not retry, as that would send twice.",
+        status: 502 };
+    }
+
+    await record([{
+      userId: input.userId, kind: "adjustment", asset: "TZS", amount: amountTzs.toString(),
+      ref: `${ref}:refund`,
+      metadata: { reason: message },
+    }]).catch(() => null);
+    return { ok: false, code: "withdrawal_failed",
+      error: `${message} Nothing was sent and the balance is unchanged.`, status: 502 };
+  }
 }

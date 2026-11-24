@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/deposits",
-      "schedule": "* * * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/ntzs/settle",

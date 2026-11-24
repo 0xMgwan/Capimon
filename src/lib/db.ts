@@ -16,6 +16,39 @@ import postgres from "postgres";
 const URL = process.env.DATABASE_URL ?? "";
 export const dbConfigured = URL.length > 0;
 
+/**
+ * Which server the ledger actually lives on, host only.
+ *
+ * Worth reporting because the answer was not written down anywhere: the
+ * connection string is a sensitive Vercel variable, which cannot be read
+ * back once set, so when the database started refusing connections there was
+ * no way to tell from the outside whose quota had been hit. The host is not
+ * a secret — it is the one part of the string that identifies the provider
+ * without identifying the account — so health reports it and the credentials
+ * stay where they are.
+ */
+export function dbHost(): string | null {
+  if (!dbConfigured) return null;
+  let host: string;
+  try {
+    host = new globalThis.URL(URL).hostname;
+  } catch {
+    return null;
+  }
+  if (!host) return null;
+
+  /*
+   * The endpoint's own label is dropped, because health is public.
+   *
+   * "ep-xxxx-1234.eu-central-1.aws.neon.tech" names one specific compute and
+   * publishing it invites traffic at it; "*.eu-central-1.aws.neon.tech" says
+   * Neon, which is the whole question, and names nothing that can be aimed
+   * at. A bare host with two labels is already generic and is left alone.
+   */
+  const labels = host.split(".");
+  return labels.length > 2 ? `*.${labels.slice(1).join(".")}` : host;
+}
+
 let client: ReturnType<typeof postgres> | null = null;
 
 export function db() {

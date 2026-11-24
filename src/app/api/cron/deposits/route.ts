@@ -6,7 +6,19 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * Credits stablecoin deposits the minute they become safe, and nothing else.
+ * Credits stablecoin deposits soon after they become safe, and nothing else.
+ *
+ * Runs every five minutes, which is a retreat from every minute and the
+ * reason is billing rather than design. A query a minute means the Postgres
+ * compute never goes idle, so it bills every hour of every day — about 720 a
+ * month against a free allowance of roughly 192. Thirteen days after this
+ * cron went in, the ledger's host hit its quota and began refusing
+ * connections, which took sign-in, custody and solvency down with it.
+ *
+ * Five minutes is not a fix on its own: it only pays off if the database is
+ * allowed to suspend faster than it is woken, so the provider's idle timeout
+ * has to be shorter than this interval. The honest fix for a system holding
+ * client money is a plan that does not suspend at all.
  *
  * A transfer into the omnibus is spendable about a minute or two after it is
  * mined — once the batch carrying it reaches Ethereum and Base's `safe` head
@@ -21,8 +33,8 @@ export const maxDuration = 60;
  * the noticing gets faster.
  *
  * Deliberately narrow. The fifteen-minute sweep also reconciles swaps,
- * repairs drift and supplies idle dollars, none of which wants to run sixty
- * times an hour. This does one query against an indexed column and, on the
+ * repairs drift and supplies idle dollars, none of which wants to run on
+ * this cadence. This does one query against an indexed column and, on the
  * overwhelmingly common path where nothing is pending, returns having
  * touched no chain and no third party.
  */
@@ -51,8 +63,7 @@ export async function POST(req: Request) {
    *
    * Narrowed to collections young enough that somebody is plausibly still
    * waiting, because the full sweep keeps watching expired prompts forever
-   * and asking nTZS about those sixty times an hour would be rude and
-   * pointless.
+   * and asking nTZS about those on a loop would be rude and pointless.
    */
   const { settlePending } = await import("@/app/api/ntzs/settle/route");
   const collections = await settlePending(undefined, { maxAgeMs: 30 * 60_000 })

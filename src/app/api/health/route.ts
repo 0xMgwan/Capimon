@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db, dbConfigured, migrate } from "@/lib/db";
+import { db, dbConfigured, dbHost, migrate } from "@/lib/db";
 import { ntzsConfigured, ntzsLiveMode, getSwapRate } from "@/lib/ntzs";
 import { treasuryConfigured, treasuryAddress, treasuryDiagnosis } from "@/lib/treasury";
 import { feeEnabled, FEE_BPS } from "@/lib/fees";
@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   const checks: Record<string, unknown> = {
-    database: { configured: dbConfigured, reachable: null as boolean | null, error: null as string | null },
+    database: { configured: dbConfigured, host: dbHost(), reachable: null as boolean | null, error: null as string | null },
     ntzs: { configured: ntzsConfigured, liveMode: ntzsLiveMode, rateAvailable: null as boolean | null, error: null as string | null },
     treasury: {
       configured: treasuryConfigured,
@@ -32,9 +32,9 @@ export async function GET() {
       await migrate();
       const rows = await db()<{ n: string }[]>`
         select count(*)::text as n from information_schema.tables where table_schema = 'capx'`;
-      checks.database = { configured: true, reachable: true, tables: Number(rows[0]?.n ?? 0), error: null };
+      checks.database = { configured: true, host: dbHost(), reachable: true, tables: Number(rows[0]?.n ?? 0), error: null };
     } catch (e) {
-      checks.database = { configured: true, reachable: false, error: e instanceof Error ? e.message.split("\n")[0] : "unreachable" };
+      checks.database = { configured: true, host: dbHost(), reachable: false, error: e instanceof Error ? e.message.split("\n")[0] : "unreachable" };
     }
   }
 

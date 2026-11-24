@@ -8,17 +8,25 @@ export const maxDuration = 60;
 /**
  * Credits stablecoin deposits soon after they become safe, and nothing else.
  *
- * Runs every five minutes, which is a retreat from every minute and the
+ * Runs every ten minutes, which is a retreat from every minute and the
  * reason is billing rather than design. A query a minute means the Postgres
  * compute never goes idle, so it bills every hour of every day — about 720 a
  * month against a free allowance of roughly 192. Thirteen days after this
  * cron went in, the ledger's host hit its quota and began refusing
  * connections, which took sign-in, custody and solvency down with it.
  *
- * Five minutes is not a fix on its own: it only pays off if the database is
- * allowed to suspend faster than it is woken, so the provider's idle timeout
- * has to be shorter than this interval. The honest fix for a system holding
- * client money is a plan that does not suspend at all.
+ * Ten rather than five because the interval has to clear the compute's idle
+ * timer with room to spare, and that timer is not ours to set: Neon fixes
+ * scale-to-zero at five minutes below its Scale plan, and the API refuses
+ * the change outright. At five the compute would wake about when it was due
+ * to suspend and bill continuously anyway; at ten it sleeps for roughly half
+ * of each cycle.
+ *
+ * The cost is latency, and it is worth naming rather than burying. A deposit
+ * can now sit up to ten minutes before anything notices it. Small ones are
+ * covered by instant credit and land immediately regardless; it is the large
+ * ones, the deposits that most want to feel quick, that wait. That is a real
+ * loss and the alternative was a database that suspends itself mid-month.
  *
  * A transfer into the omnibus is spendable about a minute or two after it is
  * mined — once the batch carrying it reaches Ethereum and Base's `safe` head

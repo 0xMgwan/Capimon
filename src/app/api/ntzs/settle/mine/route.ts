@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 /**
  * Settle this customer's own deposits, now.
  *
- * The cron sweep runs every fifteen minutes. That is the right cadence for
+ * The cron sweep runs every half hour. That is the right cadence for
  * making sure nothing is ever missed and a miserable one for somebody who has
  * just approved a prompt on their phone and is watching a spinner — the money
  * had often arrived at nTZS within seconds and simply had nobody looking.

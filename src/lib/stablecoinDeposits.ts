@@ -422,7 +422,7 @@ async function runArrivalOrder(
 /**
  * Credits the transfers that were mined but not yet safe when they arrived.
  *
- * Runs on the fifteen-minute settlement sweep, and again — scoped to one
+ * Runs on the half-hourly settlement sweep, and again — scoped to one
  * customer — whenever a partner reads their deposits or places an order. The
  * sweep is the right cadence for catching everything and a poor one for
  * somebody who has just paid: a transfer is safe about a minute after it is

@@ -26,11 +26,11 @@ export const GET = partnerRoute("GET /v1/deposits", {}, async ({ caller, req }) 
    * Settle this partner's waiting transfers before answering.
    *
    * A stablecoin transfer is safe about a minute after it is mined, and the
-   * sweep that notices runs every fifteen. Reading the deposits is the moment
+   * sweep that notices runs every ten. Reading the deposits is the moment
    * somebody actually wants to know, so the same check runs here first —
    * scoped to this partner's customers, which costs one query. Without it a
    * partner polls and is told "pending" about money that has been creditable
-   * for fourteen minutes.
+   * for nine minutes.
    */
   const { settleStablecoinDeposits } = await import("@/lib/stablecoinDeposits");
   /* Collections too, not only transfers. A mobile-money deposit is creditable

@@ -40,7 +40,7 @@ export const maxDuration = 60;
  * once its block is safe, and a reorg before that still fails it — and only
  * the noticing gets faster.
  *
- * Deliberately narrow. The fifteen-minute sweep also reconciles swaps,
+ * Deliberately narrow. The half-hourly sweep also reconciles swaps,
  * repairs drift and supplies idle dollars, none of which wants to run on
  * this cadence. This does one query against an indexed column and, on the
  * overwhelmingly common path where nothing is pending, returns having
@@ -65,9 +65,9 @@ export async function POST(req: Request) {
    * A stablecoin transfer waits on a batch reaching Ethereum. A collection
    * waits on nothing — the money is at nTZS the moment the customer approves
    * the prompt, and the only thing between that and a credit is CAPX asking.
-   * Asking every fifteen minutes meant somebody who paid on their phone and
-   * watched it leave their mobile money balance sat looking at nothing for a
-   * quarter of an hour.
+   * Asking only on the slow sweep meant somebody who paid on their phone
+   * and watched it leave their mobile money balance sat looking at nothing
+   * for a quarter of an hour, and now would sit for half of one.
    *
    * Narrowed to collections young enough that somebody is plausibly still
    * waiting, because the full sweep keeps watching expired prompts forever

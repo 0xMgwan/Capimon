@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/ntzs/settle",
-      "schedule": "*/15 * * * *"
+      "schedule": "*/30 * * * *"
     },
     {
       "path": "/api/cron/tick",

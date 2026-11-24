@@ -70,9 +70,9 @@ export async function settlePending(
   /**
    * One customer's deposits, rather than everybody's.
    *
-   * The sweep runs on a cron every fifteen minutes, which is the right
-   * cadence for catching everything and a poor one for somebody standing
-   * there having just paid. Scoped to a single account, the same work is
+   * The sweep runs on a cron every half hour, which is the right cadence
+   * for catching everything and a poor one for somebody standing there
+   * having just paid. Scoped to a single account, the same work is
    * cheap enough to run while they watch — and it is the same work: the
    * money still has to have arrived at nTZS, and nothing here credits
    * anything on a client's say-so.
@@ -83,8 +83,8 @@ export async function settlePending(
    *
    * The full pass deliberately keeps watching 'expired' rows forever, because
    * expired means "stop showing this as in flight" and never "stop crediting
-   * it if the money arrives". That is right once every fifteen minutes and
-   * wrong once a minute: it would ask nTZS about months of dead prompts, sixty
+   * it if the money arrives". That is right once every half hour and wrong
+   * once a minute: it would ask nTZS about months of dead prompts, sixty
    * times an hour, to catch the one live payment in the set.
    *
    * So the fast path asks only about collections young enough to still be in
@@ -365,7 +365,7 @@ export async function POST(req: Request) {
    * is put to work once the sweep has finished deciding what the float is.
    *
    * It returns rather than throws when the flag is off, so a deployment that
-   * has not opted in simply reports "disabled" here every fifteen minutes.
+   * has not opted in simply reports "disabled" here twice an hour.
    */
   const { supplyIdleUsdc } = await import("@/lib/aaveYield");
   const lent = await supplyIdleUsdc().catch(

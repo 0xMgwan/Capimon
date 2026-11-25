@@ -240,9 +240,9 @@ export function DseOversight() {
       </div>
 
       <p className="mt-3 max-w-3xl text-[13px] leading-relaxed text-[var(--muted)]">
-        DSE-listed securities only. Nothing on this page includes a US-listed share, a dollar
-        balance, or a customer who has never held a Dar es Salaam security — those are not sent
-        to this portal rather than hidden on it.
+        Everything CAPX holds in Dar es Salaam listings: who owns what, every order behind it,
+        what backs each token, and the money in and out. US-listed shares and dollar balances
+        are a separate book and never reach this page.
       </p>
 
       <div className="mt-6 flex flex-wrap gap-1.5">

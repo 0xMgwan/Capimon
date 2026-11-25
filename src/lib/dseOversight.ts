@@ -1,6 +1,7 @@
 import "server-only";
 import { db, migrate } from "./db";
 import { dseSecurities } from "./dseSecurities";
+import { DEFAULT_CHAIN } from "./explorer";
 
 /**
  * The Dar es Salaam book, assembled for the exchange to supervise.
@@ -60,10 +61,23 @@ export async function recordView(input: {
 }
 
 export type Overview = {
-  securities: { symbol: string; name: string; token: string | null; status: string;
-                holders: number; held: number; issued: number | null;
-                custodian: string | null; locked: number | null;
-                attestationExpires: string | null; fresh: boolean }[];
+  securities: {
+    symbol: string; name: string; status: string;
+    /* The token itself, so every figure below can be checked against it. */
+    token: string | null; decimals: number; chainId: number;
+    holders: number; held: number;
+    custodian: string | null; locked: number | null;
+    attestationExpires: string | null; fresh: boolean;
+    /* What the chain says exists, and how it divides up. */
+    issued: number | null; clientHeld: number | null; unallocated: number | null;
+    /* locked ÷ issued as a percentage; null when coverage is unbounded. */
+    ratioPct: number | null;
+    /* How much more may be issued before the attestation is breached. */
+    headroom: number | null;
+    /* issued − what the issuance log recorded. Non-zero means they disagree. */
+    drift: number | null;
+    backingError: string | null;
+  }[];
   holders: number;
   verified: number;
   pending: number;
@@ -92,6 +106,26 @@ export async function overview(): Promise<Overview> {
   }
 
   const list = (await dseSecurities()).filter((s) => s.kind === "dse");
+
+  /*
+   * The backing arithmetic, from the same function the proof page uses.
+   *
+   * Reproducing it here would have given the exchange a second set of
+   * numbers to reconcile against CAPX's own, which is the one thing a
+   * supervisory view must never do. It reads the chain, so it is run per
+   * security in parallel and a failure degrades to a stated error rather
+   * than an absent row — "we could not reach the chain" and "there is
+   * nothing issued" look identical as a blank and mean opposite things.
+   */
+  const { backing } = await import("./custody");
+  const backings = new Map<string, Awaited<ReturnType<typeof backing>> | { error: string }>();
+  await Promise.all(list.map(async (sec) => {
+    try {
+      backings.set(sec.symbol, await backing(sec.symbol));
+    } catch (e) {
+      backings.set(sec.symbol, { error: e instanceof Error ? e.message : "could not be read" });
+    }
+  }));
 
   const positions = await sql<{ asset: string; holders: number; held: string }[]>`
     select l.asset, count(distinct l.user_id)::int as holders, sum(l.amount)::text as held
@@ -154,13 +188,23 @@ export async function overview(): Promise<Overview> {
     securities: list.map((s) => {
       const p = posBy.get(s.symbol);
       const a = attBy.get(s.symbol);
+      const b = backings.get(s.symbol);
+      const ok = b && !("error" in b) ? b : null;
       return {
-        symbol: s.symbol, name: s.name, token: s.token ?? null, status: s.status,
-        holders: p?.holders ?? 0, held: Number(p?.held ?? 0), issued: null,
-        custodian: a?.custodian ?? null,
-        locked: a ? Number(a.locked) : null,
-        attestationExpires: a?.expires_at ?? null,
-        fresh: a ? new Date(a.expires_at).getTime() > now : false,
+        symbol: s.symbol, name: s.name, status: s.status,
+        token: s.token ?? null, decimals: s.decimals, chainId: DEFAULT_CHAIN,
+        holders: p?.holders ?? 0, held: Number(p?.held ?? 0),
+        custodian: a?.custodian ?? ok?.custodian ?? null,
+        locked: a ? Number(a.locked) : ok?.locked ?? null,
+        attestationExpires: a?.expires_at ?? ok?.expiresAt ?? null,
+        fresh: a ? new Date(a.expires_at).getTime() > now : ok?.fresh ?? false,
+        issued: ok?.issued ?? null,
+        clientHeld: ok?.clientHeld ?? null,
+        unallocated: ok?.unallocated ?? null,
+        ratioPct: ok?.ratioPct ?? null,
+        headroom: ok?.headroom ?? null,
+        drift: ok?.drift ?? null,
+        backingError: b && "error" in b ? b.error : null,
       };
     }),
     holders: people[0]?.holders ?? 0,
@@ -253,7 +297,8 @@ export type CustomerFile = {
   ledger: { id: string; kind: string; asset: string; amount: number; ref: string | null;
             createdAt: string }[];
   deposits: { id: string; amountTzs: number; status: string; route: string | null;
-              reference: string | null; createdAt: string; settledAt: string | null }[];
+              reference: string | null; fundingTx: string | null; transferTx: string | null;
+              createdAt: string; settledAt: string | null }[];
   withdrawals: { id: string; amountTzs: number; status: string; destination: string;
                  createdAt: string; sentAt: string | null }[];
 };
@@ -331,10 +376,14 @@ export async function customerFile(userId: string): Promise<CustomerFile | null>
        where user_id = ${userId}::uuid and (asset = any(${symbols}) or asset = 'TZS')
        order by created_at desc limit 500`,
 
+    /* The chain references too: a deposit that arrived as a stablecoin
+       transfer has a transaction behind it, and a reference nobody can follow
+       is not evidence of anything. */
     sql<{ id: string; amount_tzs: string; status: string; route: string | null;
-          reference: string | null; created_at: string; settled_at: string | null }[]>`
+          reference: string | null; funding_tx: string | null; transfer_tx: string | null;
+          created_at: string; settled_at: string | null }[]>`
       select id::text, amount_tzs::text, status, metadata->>'route' as route,
-             ntzs_reference as reference, created_at, settled_at
+             ntzs_reference as reference, funding_tx, transfer_tx, created_at, settled_at
         from capx.deposits where user_id = ${userId}::uuid
        order by created_at desc limit 200`,
 
@@ -374,7 +423,8 @@ export async function customerFile(userId: string): Promise<CustomerFile | null>
     })),
     deposits: deposits.map((d) => ({
       id: d.id, amountTzs: Number(d.amount_tzs), status: d.status, route: d.route,
-      reference: d.reference, createdAt: d.created_at, settledAt: d.settled_at,
+      reference: d.reference, fundingTx: d.funding_tx, transferTx: d.transfer_tx,
+      createdAt: d.created_at, settledAt: d.settled_at,
     })),
     withdrawals: withdrawals.map((w) => ({
       id: w.id, amountTzs: Number(w.amount_tzs), status: w.status,
@@ -474,14 +524,15 @@ export async function moneyTrail(limit = 300) {
 
   const [deposits, withdrawals, fees] = await Promise.all([
     sql<{ id: string; user_id: string; name: string | null; email: string; amount_tzs: string;
-          status: string; route: string | null; reference: string | null; created_at: string;
+          status: string; route: string | null; reference: string | null;
+          funding_tx: string | null; transfer_tx: string | null; created_at: string;
           settled_at: string | null }[]>`
       with mine as (
         select distinct user_id from capx.ledger_entries where asset = any(${symbols})
       )
       select d.id::text, d.user_id::text, u.name, u.email, d.amount_tzs::text, d.status,
              d.metadata->>'route' as route, d.ntzs_reference as reference,
-             d.created_at, d.settled_at
+             d.funding_tx, d.transfer_tx, d.created_at, d.settled_at
         from capx.deposits d
         join mine on mine.user_id = d.user_id
         join capx.users u on u.id = d.user_id
@@ -529,7 +580,8 @@ export async function moneyTrail(limit = 300) {
     deposits: deposits.map((d) => ({
       id: d.id, userId: d.user_id, name: d.name, email: d.email,
       amountTzs: Number(d.amount_tzs), status: d.status, route: d.route,
-      reference: d.reference, createdAt: d.created_at, settledAt: d.settled_at,
+      reference: d.reference, fundingTx: d.funding_tx, transferTx: d.transfer_tx,
+      createdAt: d.created_at, settledAt: d.settled_at,
     })),
     withdrawals: withdrawals.map((w) => ({
       id: w.id, userId: w.user_id, name: w.name, email: w.email,

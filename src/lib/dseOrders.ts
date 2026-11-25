@@ -203,6 +203,43 @@ export async function placeSecurityOrder(
      * A sell is the same identity read backwards.
      */
     const meta = { orderId, price: quote.price, fee: quote.fee, feeBps: quote.feeBps };
+
+    /*
+     * Who filled it.
+     *
+     * Off by default. Routing changes which account is paid on every trade,
+     * and the arithmetic balancing is the most a test without a book can
+     * show — so the switch is turned on deliberately, against a real book
+     * with a funded provider, rather than by deploying. With it off this is
+     * the path the order has always taken and nothing below runs.
+     */
+    const routed = process.env.ORDER_ROUTING === "on"
+      ? await routeOrder({ orderId, side, symbol: SEC, quote })
+      : null;
+
+    if (routed) {
+      await recordTrade(orderId, routed.map((l) => {
+        if (l.party === "house") {
+          return { side: "house" as const, account: l.account, asset: l.asset,
+            amount: l.amount, ref: l.ref, metadata: meta };
+        }
+        /*
+         * A provider is a customer in the ledger — they hold a balance like
+         * anybody else — and their side of the trade is the opposite of the
+         * customer's: when the customer buys, the maker sells.
+         */
+        const isMaker = l.party === "provider";
+        return {
+          side: "customer" as const,
+          userId: isMaker ? l.userId : user.id,
+          kind: (isMaker ? (side === "buy" ? "sell" : "buy") : side) as "buy" | "sell",
+          asset: l.asset, amount: l.amount, ref: l.ref,
+          metadata: l.asset === SEC
+            ? { orderId, price: quote.price, currency: "TZS" }
+            : meta,
+        };
+      }));
+    } else {
     await recordTrade(orderId, side === "buy"
       ? [
           { side: "customer", userId: user.id, kind: "buy", asset: "TZS",
@@ -230,6 +267,7 @@ export async function placeSecurityOrder(
           { side: "house", account: "inventory", asset: SEC,
             amount: quote.qty, ref: `${orderId}:house-asset`, metadata: meta },
         ]);
+    }
 
     await sql`update capx.orders set status = 'settled', settled_at = now() where id = ${orderId}`;
 
@@ -305,5 +343,83 @@ export async function placeSecurityOrder(
       error: raw.slice(0, 300),
       note: "Nothing was debited from your balance.",
     };
+  }
+}
+
+/**
+ * Picks the makers who fill an order, and builds the entries for it.
+ *
+ * Returns null whenever routing cannot produce a complete answer, and the
+ * caller then writes the legs it always wrote. That is the important
+ * property: this is an improvement on the fill, not a new dependency for the
+ * trade. A provider whose terms refuse, an oracle that will not read, an
+ * allocation that comes up short — none of them is a reason to fail an order
+ * the treasury could have filled on its own.
+ *
+ * ## Why capacity is converted to shares here
+ *
+ * `makersFor` answers in the unit of the side: shares a maker can sell, or
+ * shillings a maker can buy with. The allocation has to happen in one unit,
+ * and shares is the right one, because the legs are written per share and a
+ * shilling allocation would have to be converted back — twice, with rounding
+ * both ways. So a selling customer's makers have their shillings divided by
+ * the price they are filling at.
+ */
+async function routeOrder(args: {
+  orderId: string;
+  side: "buy" | "sell";
+  symbol: string;
+  quote: { qty: number; tzs: number; netTzs: number; fee: number; price: number };
+}): Promise<import("./makers").TradeLegSpec[] | null> {
+  const { orderId, side, symbol, quote } = args;
+  if (!(quote.qty > 0) || !(quote.price > 0)) return null;
+
+  try {
+    const { makersFor, allocate, tradeLegs } = await import("./makers");
+    const makers = await makersFor(symbol, side);
+
+    /*
+     * A provider only sells on the terms they agreed.
+     *
+     * Their inventory is sellable in principle the moment they hold it, and
+     * the scheduled release still checks a price band and a margin floor
+     * before parting with it. A customer's order is not a reason to skip
+     * those — it would make the routed path a way of getting a sale the
+     * scheduled one would have refused.
+     */
+    const eligible: typeof makers = [];
+    if (side === "buy") {
+      const { providers, canReleaseTo } = await import("./liquidity");
+      const byId = new Map((await providers()).map((p) => [p.id, p]));
+      for (const mk of makers) {
+        if (mk.kind !== "provider") { eligible.push(mk); continue; }
+        const p = byId.get(mk.id);
+        if (!p) continue;
+        const gate = await canReleaseTo(p, symbol, quote.price).catch(() => ({ ok: false, reason: null }));
+        if (gate.ok) eligible.push(mk);
+      }
+    } else {
+      /* Shillings into shares, so the allocation counts one thing. */
+      for (const mk of makers) {
+        eligible.push(mk.kind === "treasury"
+          ? mk
+          : { ...mk, capacity: mk.capacity / quote.price });
+      }
+    }
+
+    const { fills, unfilled } = allocate(eligible, quote.qty);
+    /* A partial answer is no answer. Filling most of an order from makers and
+       the rest from nowhere would settle the customer short of what they were
+       quoted, so the untouched path takes it instead. */
+    if (unfilled > 1e-9 || !fills.length) return null;
+
+    return tradeLegs({
+      orderId, side, symbol,
+      qty: quote.qty, tzs: quote.tzs, netTzs: quote.netTzs, fee: quote.fee,
+      fills,
+    });
+  } catch {
+    /* Routing is the optimisation; the trade is the obligation. */
+    return null;
   }
 }

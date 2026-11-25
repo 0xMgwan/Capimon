@@ -49,6 +49,9 @@ export type MakerCapacity = {
   id: string;
   kind: MakerKind;
   name: string;
+  /** The ledger account holding their position. Absent for the treasury,
+      whose side of a trade is the house accounts rather than a user. */
+  userId?: string;
   /** Shares they can sell, or shillings they can buy with. */
   capacity: number;
   /** Why they can do nothing, when they can do nothing. */
@@ -71,7 +74,9 @@ export type MakerCapacity = {
   };
 };
 
-export type Fill = { id: string; kind: MakerKind; name: string; amount: number };
+export type Fill = {
+  id: string; kind: MakerKind; name: string; userId?: string; amount: number;
+};
 
 export type Allocation = {
   fills: Fill[];
@@ -116,7 +121,12 @@ export function allocate(makers: readonly MakerCapacity[], want: number): Alloca
        would create a settlement with a counterparty for a quantity that
        cannot be represented in the ledger's precision. */
     if (amount <= 1e-9) continue;
-    fills.push({ id: m.id, kind: m.kind, name: m.name, amount });
+    /* The key is omitted rather than set to undefined: the treasury has no
+       ledger account, and an explicit undefined would survive into JSON as a
+       field that looks answered. */
+    fills.push(m.userId
+      ? { id: m.id, kind: m.kind, name: m.name, userId: m.userId, amount }
+      : { id: m.id, kind: m.kind, name: m.name, amount });
     left -= amount;
   }
 
@@ -191,21 +201,22 @@ export async function makersFor(
   for (const p of await providers().catch(() => [])) {
     const party = await partyStatus(p.walletAddress);
     if (!p.active) {
-      out.push({ id: p.id, kind: "provider", name: p.name, capacity: 0,
-        reason: "paused by the provider", settlement: party });
+      out.push({ id: p.id, kind: "provider", name: p.name, userId: p.userId,
+        capacity: 0, reason: "paused by the provider", settlement: party });
       continue;
     }
     if (side === "buy") {
       /* What they hold of this security is what they can sell back. */
       const held = await balanceOf(p.userId, S).catch(() => 0);
-      out.push({ id: p.id, kind: "provider", name: p.name, capacity: Math.max(0, held),
+      out.push({ id: p.id, kind: "provider", name: p.name, userId: p.userId,
+        capacity: Math.max(0, held),
         reason: held > 0 ? null : `holds no ${S}`, settlement: party });
     } else {
       /* Their own terms decide this — committed size, daily cap, the floor
          under their balance — so it is read through capacityOf rather than
          from their balance, which would ignore every limit they agreed. */
       const cap = await capacityOf(p).catch(() => null);
-      out.push({ id: p.id, kind: "provider", name: p.name,
+      out.push({ id: p.id, kind: "provider", name: p.name, userId: p.userId,
         capacity: Math.max(0, cap?.availableTzs ?? 0),
         reason: (cap?.availableTzs ?? 0) > 0 ? null : cap?.reason ?? "unavailable",
         settlement: party });

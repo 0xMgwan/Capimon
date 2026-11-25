@@ -1307,7 +1307,18 @@ export function AdminPanel() {
                   <div className="font-medium">{d.name ?? d.email}</div>
                   <div className="text-[11px] text-[var(--muted)]">{d.email}</div>
                 </td>
-                <td className="tnum px-3 py-3 text-right">{TZS(d.amount_tzs)}</td>
+                {/*
+                  * A deposit funded in USDC never had a shilling amount, so
+                  * this printed a flat 0 against money that really arrived —
+                  * the same misreading the orders column above was fixed for.
+                  * The desk keeps both books, so the row belongs here; it just
+                  * has to be shown in what it was actually funded in.
+                  */}
+                <td className="tnum px-3 py-3 text-right">
+                  {d.amount_tzs > 0 || !d.usdc_credited
+                    ? TZS(d.amount_tzs)
+                    : usd(Number(d.usdc_credited))}
+                </td>
                 <td className="px-3 py-3 text-right">
                   <span className={`rounded-full px-2 py-0.5 text-[11px] ${
                     d.status === "settled" ? "bg-[var(--color-up)]/10 text-[var(--color-up)]"

@@ -49,34 +49,23 @@ function same(a: string, b: string) {
 }
 
 /**
- * Image routes, and only image routes, may still be opened with a token in
- * the query string.
+ * A desk token is presented in one place: an Authorization header.
  *
- * A desk token in a URL is the worst place to keep one: it lands in browser
- * history, in a download manager's list, in any referrer the page sends, and
- * in every access log between here and the browser. On the KYC and custody
- * document routes that URL also points at somebody's identity document.
+ * It used to be readable from the query string as well, because an `<img
+ * src>` carries no headers and the KYC and custody document routes are
+ * loaded by one. That put a credential opening the whole estate into browser
+ * history, referrers and every access log in between, in a URL that also
+ * named somebody's identity document.
  *
- * Every other caller now sends the token as a bearer header, which is why the
- * fallback below is a list rather than a blanket. These three cannot: an
- * `<img src>` and an `<a href>` carry no headers, so removing it here would
- * simply stop the desk showing the documents it exists to review.
- *
- * The answer is a short-lived signed URL per image — minted on request,
- * expiring in under a minute, granting one document rather than the whole
- * desk — and this list is what that work deletes. Until then the exposure is
- * narrowed from every endpoint to these, and written down rather than left to
- * be discovered.
+ * Those routes now take a short-lived grant instead — see imageGrant.ts —
+ * which names one document, lapses in ten minutes and is signed under a key
+ * derived from the minting role's own token. So nothing needs the query
+ * string any more, and the exception that existed for them is gone rather
+ * than narrowed: a route added later cannot opt back in by accident, because
+ * there is no longer anything to opt into.
  */
-const TOKEN_IN_URL_ALLOWED = ["/api/admin/kyc/image", "/api/dse/document"];
-
 function presented(req: Request): string {
-  const url = new URL(req.url);
-  const header = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
-  if (header) return header;
-  return TOKEN_IN_URL_ALLOWED.some((p) => url.pathname.startsWith(p))
-    ? url.searchParams.get("token") ?? ""
-    : "";
+  return (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
 }
 
 export function roleOf(req: Request): OpsRole | null {
@@ -115,3 +104,34 @@ export const ACTOR: Record<ViewerRole, string> = {
  * added later refuses an observer by default rather than by being remembered.
  */
 export const canWrite = (role: ViewerRole): boolean => role !== "dse";
+
+/**
+ * The signing material behind an image grant, for that module alone.
+ *
+ * Not the token itself as a convenience getter — it is the token, and a
+ * function that hands it out invites a second caller who only wanted to
+ * compare it. imageGrant.ts derives a key from this and never stores or
+ * transmits it; see the reasoning there for why a role's own token is the
+ * right key.
+ */
+export function grantKeyFor(role: ViewerRole): string {
+  if (role === "dse") return DSE_TOKEN;
+  return OPS_TOKENS.find(([r]) => r === role)?.[1] ?? "";
+}
+
+/**
+ * Mints a grant for the caller, when they are entitled to the document.
+ *
+ * Minting is deliberately only possible from an already-authenticated
+ * request: the grant is a narrowing of what the caller can already do, never
+ * a way to obtain access. A viewer with no role gets null and the listing
+ * that asked simply carries no link.
+ */
+export async function grantFor(
+  req: Request, id: string, which: "doc" | "selfie",
+): Promise<string | null> {
+  const role = viewerOf(req);
+  if (!role) return null;
+  const { signGrant } = await import("./imageGrant");
+  return signGrant({ role, id, which }, grantKeyFor(role));
+}

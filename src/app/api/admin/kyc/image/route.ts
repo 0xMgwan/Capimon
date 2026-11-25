@@ -1,28 +1,38 @@
 import { NextResponse } from "next/server";
 import { dbConfigured } from "@/lib/db";
 import { kycImage } from "@/lib/kyc";
-import { roleOf } from "@/lib/adminAuth";
+import { roleOf, grantKeyFor } from "@/lib/adminAuth";
+import { checkGrant } from "@/lib/imageGrant";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Serves one identity image to a reviewer.
  *
- * The token comes through the query string because this is loaded by an <img>
- * tag, which cannot carry a header. That puts the token in the browser's
- * history and any proxy log, which is the cost of showing the picture at all —
- * so the response is marked private and no-store, and nothing else about this
- * route is cacheable or guessable without the id.
+ * An <img> tag carries no headers, so this used to be opened with a desk
+ * token in the query string — a credential that opens everything, written
+ * into browser history, referrers and every log in between, next to a URL
+ * pointing at somebody's identity document.
+ *
+ * It now takes a grant instead: minted by the listing that already
+ * authenticated the reviewer, good for this one document for ten minutes,
+ * and worth nothing anywhere else. A bearer header still works for anything
+ * that can send one.
  */
 export async function GET(req: Request) {
   if (!dbConfigured) return new NextResponse("not configured", { status: 503 });
 
   const url = new URL(req.url);
-  if (!roleOf(req)) return new NextResponse("unauthorised", { status: 401 });
-
   const id = url.searchParams.get("id") ?? "";
   const which = url.searchParams.get("which") === "selfie" ? "selfie" : "doc";
   if (!/^[0-9a-f-]{36}$/i.test(id)) return new NextResponse("bad id", { status: 400 });
+
+  /* The id is validated before the grant is checked, because the grant is
+     checked *against* it — an unchecked id would be compared to itself. */
+  const grant = url.searchParams.get("g") ?? "";
+  const permitted = roleOf(req)
+    || (grant && checkGrant(grant, { id, which }, grantKeyFor).ok);
+  if (!permitted) return new NextResponse("unauthorised", { status: 401 });
 
   const row = await kycImage(id, which).catch(() => null);
   if (!row) return new NextResponse("not found", { status: 404 });

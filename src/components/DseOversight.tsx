@@ -109,7 +109,8 @@ type File = {
           joined: string };
   documents: { id: string; docType: string; docNumber: string | null; status: string;
                reason: string | null; reviewedBy: string | null; reviewedAt: string | null;
-               filedAt: string; docMime: string; selfieMime: string }[];
+               filedAt: string; docMime: string; selfieMime: string;
+               docGrant: string | null; selfieGrant: string | null }[];
   positions: { symbol: string; qty: number; bought: number; sold: number }[];
   orders: { id: string; reference: string; side: string; symbol: string;
             qty: number | null; price: number | null;
@@ -1197,8 +1198,11 @@ function CustomerFile({ file, busy, token, onClose }: {
                      * The mime is on the record, so it is used.
                      */
                     const mime = shown.which === "doc" ? d.docMime : d.selfieMime;
-                    const src = `/api/dse/document?id=${encodeURIComponent(d.id)}`
-                      + `&which=${shown.which}&token=${encodeURIComponent(token)}`;
+                    const grant = shown.which === "doc" ? d.docGrant : d.selfieGrant;
+                    const src = grant
+                      ? `/api/dse/document?id=${encodeURIComponent(d.id)}`
+                        + `&which=${shown.which}&g=${encodeURIComponent(grant)}`
+                      : "";
                     const label = shown.which === "doc" ? "Identity document" : "Selfie";
                     return (
                       <div className="mt-3">

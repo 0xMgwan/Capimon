@@ -749,6 +749,8 @@ type Kyc = {
   doc_type: string; doc_number: string | null; status: string; reason: string | null;
   reviewed_by: string | null; reviewed_at: string | null; created_at: string;
   doc_bytes: number | null; selfie_bytes: number | null; doc_mime: string | null;
+  /* Short-lived permits for the two images, minted by the listing. */
+  docGrant: string | null; selfieGrant: string | null;
 };
 
 
@@ -888,8 +890,12 @@ function CustomersSection({ token }: { token: string }) {
     ["withdrawals", "Withdrawals", wdRows.length],
   ] as const;
 
-  const img = (id: string, which: "doc" | "selfie") =>
-    `/api/admin/kyc/image?id=${id}&which=${which}&token=${encodeURIComponent(token)}`;
+  /* A grant, not the desk token: it names this one document, lapses in ten
+     minutes, and is worth nothing anywhere else if the URL leaks. */
+  const img = (r: Kyc, which: "doc" | "selfie") => {
+    const g = which === "doc" ? r.docGrant : r.selfieGrant;
+    return g ? `/api/admin/kyc/image?id=${r.id}&which=${which}&g=${encodeURIComponent(g)}` : "";
+  };
   const money = (n: number, c = "TZS") => `${Math.round(n).toLocaleString()} ${c}`;
   const loading = !data || kyc === null || holders === null;
 
@@ -992,24 +998,24 @@ function CustomersSection({ token }: { token: string }) {
                 <div className="grid gap-3 px-4 pb-4 sm:grid-cols-2">
                   {r.doc_bytes ? (
                     r.doc_mime === "application/pdf" ? (
-                      <iframe src={img(r.id, "doc")} title="ID document"
+                      <iframe src={img(r, "doc")} title="ID document"
                         className="h-[420px] w-full rounded-xl border hairline bg-white" />
                     ) : /heic|heif/i.test(r.doc_mime ?? "") ? (
-                      <a href={img(r.id, "doc")} target="_blank" rel="noreferrer"
+                      <a href={img(r, "doc")} target="_blank" rel="noreferrer"
                         className="grid h-40 place-items-center rounded-xl border hairline surface text-center text-[12px] text-[var(--muted)]">
                         HEIC photo — <span className="underline">open it ↗</span>
                       </a>
                     ) : (
-                      <a href={img(r.id, "doc")} target="_blank" rel="noreferrer">
+                      <a href={img(r, "doc")} target="_blank" rel="noreferrer">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={img(r.id, "doc")} alt="ID document"
+                        <img src={img(r, "doc")} alt="ID document"
                           className="max-h-[420px] w-full rounded-xl border hairline object-contain" />
                       </a>
                     )
                   ) : <p className="text-[11px] text-[var(--muted)]">No document image.</p>}
                   {r.selfie_bytes ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={img(r.id, "selfie")} alt="Selfie"
+                    <img src={img(r, "selfie")} alt="Selfie"
                       className="max-h-[420px] w-full rounded-xl border hairline object-contain" />
                   ) : <p className="text-[11px] text-[var(--muted)]">No selfie.</p>}
                   <p className="text-[11px] text-[var(--muted)] sm:col-span-2">

@@ -48,6 +48,10 @@ const haystack = (o: unknown): string =>
   JSON.stringify(o ?? "").toLowerCase();
 
 type KycRow = {
+  /* Short-lived permits for the two images, minted by the listing. Null when
+     the caller had no role, in which case there is nothing to show. */
+  docGrant: string | null;
+  selfieGrant: string | null;
   id: string; user_id: string; email: string; name: string | null;
   doc_type: string; doc_number: string | null; status: string; reason: string | null;
   reviewed_by: string | null; reviewed_at: string | null; created_at: string;
@@ -1788,7 +1792,10 @@ export function AdminPanel() {
                 <td className="px-3 py-3" colSpan={2}>
                   <div className="flex gap-2">
                     {(["doc", "selfie"] as const).map((which) => {
-                      const href = `/api/admin/kyc/image?id=${k.id}&which=${which}&token=${encodeURIComponent(token)}`;
+                      const grant = which === "doc" ? k.docGrant : k.selfieGrant;
+                      const href = grant
+                        ? `/api/admin/kyc/image?id=${k.id}&which=${which}&g=${encodeURIComponent(grant)}`
+                        : "";
                       // A PDF has no thumbnail, so it gets a tile that opens it
                       // rather than a broken image where a face should be.
                       const isPdf = which === "doc" && k.doc_mime === "application/pdf";

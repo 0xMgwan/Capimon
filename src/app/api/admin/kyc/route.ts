@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { dbConfigured } from "@/lib/db";
 import { listKyc, reviewKyc } from "@/lib/kyc";
-import { roleOf, ACTOR } from "@/lib/adminAuth";
+import { roleOf, ACTOR, grantFor } from "@/lib/adminAuth";
 import { sendMail } from "@/lib/mail";
 import { brandedEmail } from "@/lib/mailTemplate";
 import { db } from "@/lib/db";
@@ -15,7 +15,22 @@ export async function GET(req: Request) {
   // FIMCO, as broker of record, holds its clients' verification for compliance.
   if (!roleOf(req)) return NextResponse.json({ ok: false, code: "unauthorised" }, { status: 401 });
   try {
-    return NextResponse.json({ ok: true, submissions: await listKyc() },
+    /*
+     * Each row carries its own grants for the two images.
+     *
+     * Minted here rather than fetched separately because this request has
+     * already proved who is asking, so the grant costs no extra round trip
+     * and cannot be obtained by anyone the listing would have refused. They
+     * outlive the listing by ten minutes, which is a review session; a desk
+     * left open longer reloads and gets fresh ones.
+     */
+    const rows = await listKyc();
+    const submissions = await Promise.all(rows.map(async (k) => ({
+      ...k,
+      docGrant: await grantFor(req, k.id, "doc"),
+      selfieGrant: await grantFor(req, k.id, "selfie"),
+    })));
+    return NextResponse.json({ ok: true, submissions },
       { headers: { "cache-control": "no-store" } });
   } catch (e) {
     return NextResponse.json(

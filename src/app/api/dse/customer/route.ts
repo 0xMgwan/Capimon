@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { dbConfigured } from "@/lib/db";
-import { viewerOf, ACTOR } from "@/lib/adminAuth";
+import { viewerOf, ACTOR, grantFor } from "@/lib/adminAuth";
 import { customerFile, recordView } from "@/lib/dseOversight";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +41,16 @@ export async function GET(req: Request) {
         { ok: false, code: "not_found", error: "No shareholder on this book matches that." },
         { status: 404 });
     }
-    return NextResponse.json({ ok: true, ...file }, { headers: { "cache-control": "no-store" } });
+    /* Each filing carries its own two grants, so the portal can show an
+       identity document without a DSE token in the image URL. Minted on a
+       request that has already proved who is asking. */
+    const documents = await Promise.all(file.documents.map(async (d) => ({
+      ...d,
+      docGrant: await grantFor(req, d.id, "doc"),
+      selfieGrant: await grantFor(req, d.id, "selfie"),
+    })));
+    return NextResponse.json({ ok: true, ...file, documents },
+      { headers: { "cache-control": "no-store" } });
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : "could not load the file" },

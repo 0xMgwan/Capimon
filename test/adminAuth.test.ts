@@ -49,17 +49,19 @@ test("a token in the query string is ignored on an ordinary route", async () => 
   assert.equal(roleOf(withQuery("/api/admin/holders", ADMIN)), null);
 });
 
-test("the image routes still accept it, because an img tag sends no header", async () => {
+test("not even the image routes, which now take a grant instead", async () => {
   const { roleOf } = await auth();
-  assert.equal(roleOf(withQuery("/api/admin/kyc/image", ADMIN)), "admin");
-  assert.equal(roleOf(withQuery("/api/dse/document", ADMIN)), "admin");
+  /* These were the one exception, because an <img src> sends no header. They
+     take a short-lived grant naming a single document now, so the exception
+     is gone rather than narrowed — there is nothing left to opt back into. */
+  assert.equal(roleOf(withQuery("/api/admin/kyc/image", ADMIN)), null);
+  assert.equal(roleOf(withQuery("/api/dse/document", ADMIN)), null);
 });
 
 test("the exception is matched on the path, not on a substring anywhere", async () => {
   const { roleOf } = await auth();
-  /* A route that merely mentions an allowed path in its query must not
-     inherit the exception — otherwise ?next=/api/admin/kyc/image would
-     reopen every endpoint to tokens in URLs. */
+  /* Kept as a guard. While there was an allow-list this was the way to
+     defeat it; if one is ever reintroduced, this fails before it ships. */
   assert.equal(
     roleOf(new Request(
       `https://capx.broker/api/admin/custody?next=/api/admin/kyc/image&token=${ADMIN}`)),

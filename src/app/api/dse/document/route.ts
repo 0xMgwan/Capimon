@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { dbConfigured } from "@/lib/db";
 import { kycImage } from "@/lib/kyc";
-import { viewerOf, ACTOR } from "@/lib/adminAuth";
+import { viewerOf, ACTOR, grantKeyFor } from "@/lib/adminAuth";
+import { checkGrant } from "@/lib/imageGrant";
 import { documentOnBook, recordView } from "@/lib/dseOversight";
 
 export const dynamic = "force-dynamic";
@@ -31,13 +32,27 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   if (!dbConfigured) return new NextResponse("not configured", { status: 503 });
 
-  const role = viewerOf(req);
-  if (!role) return new NextResponse("unauthorised", { status: 401 });
-
   const url = new URL(req.url);
   const id = url.searchParams.get("id") ?? "";
   const which = url.searchParams.get("which") === "selfie" ? "selfie" : "doc";
   if (!/^[0-9a-f-]{36}$/i.test(id)) return new NextResponse("bad id", { status: 400 });
+
+  /*
+   * A grant stands in for the token an <img> cannot send, and carries the
+   * role with it.
+   *
+   * That matters more here than on the KYC route, because the role is not
+   * only permission — it is the name written into the access log below. A
+   * grant that authorised the read without saying who held it would log the
+   * view as nobody, and this log exists so that the customer whose identity
+   * document this is can be told who opened it. The grant is signed under
+   * that role's own key, so the name in the log is the one that could have
+   * produced the signature.
+   */
+  const grant = url.searchParams.get("g") ?? "";
+  const checked = grant ? checkGrant(grant, { id, which }, grantKeyFor) : null;
+  const role = viewerOf(req) ?? (checked?.ok ? checked.role : null);
+  if (!role) return new NextResponse("unauthorised", { status: 401 });
 
   const owner = await documentOnBook(id).catch(() => null);
   if (!owner) return new NextResponse("not found", { status: 404 });

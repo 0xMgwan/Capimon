@@ -88,12 +88,18 @@ type Money = {
   split: { totalBps: number; brokerBps: number; capxBps: number };
 };
 
+type Anchor = {
+  day: string; root: string; trades: number; txHash: string | null;
+  status: string; error: string | null; postedAt: string | null; createdAt: string;
+  liveRoot: string; liveTrades: number; matches: boolean;
+};
+
 type Access = { id: string; actor: string; action: string; subject: string | null;
                 detail: Record<string, unknown>; ip: string | null; createdAt: string };
 
 type Book = {
   actor: string; readOnly: boolean; overview: Overview; register: RegisterRow[];
-  orders: Order[]; custody: Custody; money: Money; access: Access[];
+  orders: Order[]; custody: Custody; money: Money; anchors: Anchor[]; access: Access[];
 };
 
 type File = {
@@ -267,7 +273,10 @@ export function DseOversight() {
 
       {tab === "overview" && <OverviewTab o={book.overview} />}
       {tab === "register" && <RegisterTab rows={book.register} onOpen={openFile} />}
-      {tab === "orders" && <OrdersTab rows={book.orders} onOpen={openFile} />}
+      {tab === "orders" && (
+        <OrdersTab rows={book.orders} anchors={book.anchors ?? []} token={token}
+          onOpen={openFile} />
+      )}
       {tab === "custody" && <CustodyTab c={book.custody} securities={book.overview.securities} />}
       {tab === "money" && <MoneyTab m={book.money} />}
       {tab === "access" && <AccessTab rows={book.access} />}
@@ -475,7 +484,180 @@ function RegisterTab({ rows, onOpen }: { rows: RegisterRow[]; onOpen: (id: strin
 
 /* ------------------------------------------------------------------ */
 
-function OrdersTab({ rows, onOpen }: { rows: Order[]; onOpen: (id: string) => void }) {
+/**
+ * The daily anchors, each checked against the book as it stands now.
+ *
+ * The verdict column is the whole of it. A root on a chain proves nothing on
+ * its own — the useful question is whether the trades on this screen still
+ * produce the number that went out that night, and that is a comparison
+ * rather than a claim. So the panel re-derives and says yes or no, and the
+ * manifest hands over everything needed to run the same comparison without
+ * CAPX in the middle.
+ */
+function AnchorPanel({ anchors, token }: { anchors: Anchor[]; token: string }) {
+  const [how, setHow] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const posted = anchors.filter((a) => a.status === "posted");
+  const broken = posted.filter((a) => !a.matches);
+
+  /*
+   * The manifest is fetched rather than held in the page, because it carries
+   * a canonical line per trade and a year of those is not something to keep
+   * in memory on the chance somebody asks for one day of it.
+   */
+  const download = async (day: string) => {
+    setBusy(day); setErr(null);
+    try {
+      const r = await fetch(
+        `/api/dse/anchor?day=${encodeURIComponent(day)}&token=${encodeURIComponent(token)}`,
+        { cache: "no-store" });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error ?? "Could not build that manifest.");
+      downloadCsv(`dse-anchor-${day}`,
+        ["reference", "leaf", "canonical", "order_id", "side", "security", "quantity",
+         "price_tzs", "consideration_tzs", "status", "settled_at"],
+        (j.trades as {
+          reference: string; leaf: string; canonical: string; id: string; side: string;
+          security: string; qty: string | null; price: string | null; cash: string | null;
+          status: string; settledAt: string;
+        }[]).map((t) => [t.reference, t.leaf, t.canonical, t.id, t.side, t.security,
+          t.qty, t.price, t.cash, t.status, t.settledAt]));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not build that manifest.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h2 className="text-sm font-medium">Daily anchors</h2>
+        <button onClick={() => setHow(!how)}
+          className="text-[11px] text-[var(--muted)] underline underline-offset-2">
+          {how ? "hide" : "how to check this yourself"}
+        </button>
+      </div>
+      <p className="mt-1 max-w-[70ch] text-[12px] leading-relaxed text-[var(--muted)]">
+        Once a day the trades that settled in Dar that day are hashed into a single number and
+        written to Base. From then on the day is fixed. Each row below re-derives that number
+        from the trades as they stand right now and compares it to the one on the chain — so
+        a figure that has moved since is arithmetic, not anybody&apos;s word against
+        anybody&apos;s.
+      </p>
+
+      {broken.length > 0 && (
+        <p className="mt-3 rounded-xl border px-3 py-2 text-[12px]"
+          style={{ borderColor: "var(--color-down)", color: "var(--color-down)" }}>
+          {broken.length === 1
+            ? `The book no longer matches what was anchored for ${broken[0].day}.`
+            : `The book no longer matches what was anchored on ${broken.length} days.`}
+          {" "}Download that day&apos;s manifest and compare it against your own copy.
+        </p>
+      )}
+
+      {how && (
+        <div className="mt-3 max-w-[80ch] rounded-xl border hairline p-4 text-[12px] leading-relaxed">
+          <p>
+            Nothing below needs CAPX. It needs a SHA-256 implementation and the day&apos;s
+            manifest, which is the button on each row.
+          </p>
+          <ol className="mt-3 list-decimal space-y-1.5 pl-4">
+            <li>
+              Each trade has a <em>canonical line</em>, in the manifest verbatim:
+              {" "}<code className="tnum">order id|side|SECURITY|quantity|price|consideration|status|settled_at</code>.
+              The figures are the database&apos;s own text, never a formatted version, so
+              nothing shifts because a display changed.
+            </li>
+            <li>
+              Its <em>leaf</em> is <code>SHA-256(canonical line)</code>, 32 bytes. The last
+              part of a trade&apos;s reference is the first four bytes of its own leaf.
+            </li>
+            <li>
+              Sort the day&apos;s leaves as hex strings, then hash them in pairs —
+              {" "}<code>SHA-256(left ‖ right)</code> over the 32 raw bytes of each, not over
+              their hex text. An odd one at any level is carried up unchanged, never paired
+              with a copy of itself. Repeat until one value is left: that is the root.
+            </li>
+            <li>
+              Open the day&apos;s transaction on Basescan and read its input data as UTF-8.
+              It says <code className="tnum">CAPX.DSE.ANCHOR.v1 {"<day>"} trades={"<n>"} root={"<root>"}</code>,
+              sent from the CAPX treasury to itself. There is no contract involved and
+              nothing to decode.
+            </li>
+            <li>A day on which nothing settled is anchored with a root of 64 zeroes.</li>
+          </ol>
+          <p className="mt-3 text-[var(--muted)]">
+            What this establishes is narrow and worth being exact about: that the record has
+            not moved since the night it was written. It says nothing about whether a trade
+            was priced fairly or whether the shares behind it existed — those are the custody
+            tab&apos;s business. It is also only as good as your own copy of the root, so keep
+            the manifests you download.
+          </p>
+        </div>
+      )}
+
+      {err && <p className="mt-3 text-[12px] text-[var(--color-down)]">{err}</p>}
+
+      <div className="mt-3">
+        <Table cols={[
+          { label: "Day" }, { label: "Trades", align: "right" }, { label: "Root" },
+          { label: "Anchored" }, { label: "Re-derived now" }, { label: "" },
+        ]} empty="Nothing anchored yet.">
+          {anchors.map((a) => (
+            <Row key={a.day}>
+              <Td className="whitespace-nowrap font-medium">{a.day}</Td>
+              <Td align="right" className="tnum">{a.trades}</Td>
+              <Td><Ref value={a.root} label={shortRoot(a.root)} /></Td>
+              <Td>
+                {a.status === "posted"
+                  ? <Tx hash={a.txHash} />
+                  : <>
+                      <Pill tone={a.status === "failed" ? "bad" : "warn"}>{a.status}</Pill>
+                      {a.error && (
+                        <div className="mt-1 max-w-[32ch] text-[11px] text-[var(--color-down)]">
+                          {a.error}
+                        </div>
+                      )}
+                    </>}
+              </Td>
+              <Td>
+                {a.status !== "posted"
+                  ? <span className="text-[var(--muted)]">—</span>
+                  : a.matches
+                    ? <Pill tone="ok">matches</Pill>
+                    : <>
+                        <Pill tone="bad">does not match</Pill>
+                        <div className="mt-1 tnum text-[11px] text-[var(--muted)]">
+                          {a.liveTrades} trade{a.liveTrades === 1 ? "" : "s"} now ·{" "}
+                          {shortRoot(a.liveRoot)}
+                        </div>
+                      </>}
+              </Td>
+              <Td>
+                <button onClick={() => void download(a.day)} disabled={busy === a.day}
+                  className="whitespace-nowrap text-[11px] underline underline-offset-2 disabled:opacity-50">
+                  {busy === a.day ? "building…" : "manifest"}
+                </button>
+              </Td>
+            </Row>
+          ))}
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+/* Enough of a root to recognise on screen; the click copies all 64. */
+const shortRoot = (r: string) => `${r.slice(0, 10)}…${r.slice(-6)}`;
+
+/* ------------------------------------------------------------------ */
+
+function OrdersTab({ rows, anchors, token, onOpen }: {
+  rows: Order[]; anchors: Anchor[]; token: string; onOpen: (id: string) => void;
+}) {
   const [q, setQ] = useState("");
   const [sec, setSec] = useState("");
   const [side, setSide] = useState("");
@@ -495,7 +677,9 @@ function OrdersTab({ rows, onOpen }: { rows: Order[]; onOpen: (id: string) => vo
 
   return (
     <section className="mt-6">
-      <h2 className="text-sm font-medium">Order blotter</h2>
+      <AnchorPanel anchors={anchors} token={token} />
+
+      <h2 className="mt-10 text-sm font-medium">Order blotter</h2>
       <p className="mt-1 text-[12px] text-[var(--muted)]">
         Every order in a DSE security, settled or not. Each carries a reference derived from
         its own terms — security, date and a digest of the quantity, price, consideration and

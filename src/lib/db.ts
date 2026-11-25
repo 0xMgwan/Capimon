@@ -828,6 +828,37 @@ export async function migrate() {
         create index if not exists access_log_subject
           on capx.access_log (subject, created_at desc)`;
 
+      /*
+       * One row a day, holding the number that fixes that day's DSE trades.
+       *
+       * The leaves are deliberately not stored. Keeping them would make the
+       * portal's verification cheaper and worthless: the check that matters
+       * is re-deriving the root from the live rows and seeing whether it
+       * still equals what went onchain, and a check run against a stored
+       * copy of the inputs would pass whatever happened to the originals.
+       *
+       * `day` is unique because two roots for one day would turn the thing
+       * this exists to settle into an argument about which transaction
+       * counts. A day is posted once; a failed attempt may be retried, and
+       * stops being retriable the moment one succeeds.
+       */
+      await sql`
+        create table if not exists capx.dse_anchors (
+          day       date primary key,
+          root      text not null,            -- 64 hex, all zeroes if nothing traded
+          trades    integer not null default 0,
+          tx_hash   text,
+          status    text not null default 'pending',   -- pending | posted | failed
+          error     text,
+          posted_at timestamptz,
+          created_at timestamptz not null default now()
+        )`;
+      /* The anchor and the portal both ask "what settled on this day", and
+         both ask it once per day shown. */
+      await sql`
+        create index if not exists orders_settled_at
+          on capx.orders (settled_at) where status = 'settled'`;
+
       await sql`
         create table if not exists capx.ops_contacts (
           /* Which party these addresses belong to: "fimco" today. */

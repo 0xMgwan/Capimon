@@ -117,7 +117,13 @@ type Admin = {
            deposits: number; settled_tzs: number; usdc_balance: string | null;
            tzs_balance: string | null; share_entries: number; created_at: string }[];
   orders: { id: string; email: string; side: string; symbol: string; price: string | null; usdc_amount: string | null;
-            qty: string | null; status: string; tx_hash: string | null; created_at: string }[];
+            qty: string | null; status: string; tx_hash: string | null; created_at: string;
+            /* What the customer and DSE quote this trade by. */
+            reference: string }[];
+  anchors: { days: number; posted: number; failed: number; pending: number;
+             mismatched: string[];
+             latest: { day: string; trades: number; status: string; txHash: string | null;
+                       matches: boolean } | null } | null;
 };
 
 const TZS = (n: number) => `${Math.round(n).toLocaleString()} TZS`;
@@ -761,6 +767,37 @@ export function AdminPanel() {
       })()}
 
       {/*
+        * Whether yesterday's DSE trades actually made it onto the chain.
+        *
+        * Shown beside the deposit reconciliation because it is the same kind
+        * of fact — a thing that is supposed to agree with itself, reported
+        * whether or not it does. A cron that stopped posting is invisible
+        * until somebody looks, and the somebody who looks should not be the
+        * exchange.
+        */}
+      {data.anchors && data.anchors.days > 0 && (() => {
+        const a = data.anchors!;
+        const wrong = a.mismatched.length > 0 || a.failed > 0;
+        return (
+          <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${
+            wrong ? "border-[var(--color-down)]/50 bg-[var(--color-down)]/[0.07]" : "hairline"}`}>
+            <span className={wrong ? "font-medium text-[var(--color-down)]" : "text-[var(--muted)]"}>
+              {a.mismatched.length > 0
+                ? `DSE anchors: the book no longer matches what was posted for ${a.mismatched.join(", ")}.`
+                : a.failed > 0
+                  ? `DSE anchors: ${a.failed} of the last ${a.days} days failed to post.`
+                  : `DSE anchors: ${a.posted} of the last ${a.days} days posted and still matching`
+                    + `${a.latest ? `, latest ${a.latest.day} with ${a.latest.trades} trade${a.latest.trades === 1 ? "" : "s"}` : ""}.`}
+            </span>
+            {a.latest?.txHash && (
+              <a href={`https://basescan.org/tx/${a.latest.txHash}`} target="_blank" rel="noreferrer"
+                className="ml-2 text-[11px] underline">view ↗</a>
+            )}
+          </div>
+        );
+      })()}
+
+      {/*
         * Who is waiting to be paid, and who can cover it.
         *
         * A queued withdrawal is not an error state — it is CAPX keeping a
@@ -1257,7 +1294,7 @@ export function AdminPanel() {
                 : tab === "holdings" ? ["Holder", "Asset", "Quantity", "Cost", "Value", "Since"]
                 : tab === "withdrawals" ? ["User", "Amount", "Reference", "When"]
                 : tab === "kyc" ? ["Applicant", "Document", "Selfie", "Status", "Decision"]
-                : ["User", "Side", "Asset", "Amount", "Status", "Tx"]).map((h, i) => (
+                : ["User", "Side", "Asset", "Amount", "Status", "Reference"]).map((h, i) => (
               <th key={h} className={`px-3 py-3 text-[11px] font-medium uppercase tracking-wider text-[var(--muted)] ${i === 0 ? "text-left" : "text-right"}`}>{h}</th>
             ))}</tr>
           </thead>
@@ -1538,10 +1575,23 @@ export function AdminPanel() {
                       : Number(o.qty ?? 0).toFixed(6)}
                 </td>
                 <td className="px-3 py-3 text-right text-[var(--muted)]">{o.status}</td>
+                {/*
+                  * A shilling trade has no transaction and never will, so this
+                  * column was a dash on exactly the orders support gets asked
+                  * about. The reference is the one identifier the customer, the
+                  * exchange and the day's anchor all use for the same trade.
+                  */}
                 <td className="px-3 py-3 text-right">
-                  {o.tx_hash
-                    ? <a href={`https://basescan.org/tx/${o.tx_hash}`} target="_blank" rel="noreferrer" className="text-[11px] underline">view ↗</a>
-                    : <span className="text-[11px] text-[var(--muted)]">—</span>}
+                  <button type="button" title={`${o.reference} — click to copy`}
+                    onClick={() => void navigator.clipboard?.writeText(o.reference).catch(() => {})}
+                    className="tnum text-[11px] underline decoration-dotted underline-offset-2">
+                    {o.reference}
+                  </button>
+                  {o.tx_hash && (
+                    <div className="mt-0.5">
+                      <a href={`https://basescan.org/tx/${o.tx_hash}`} target="_blank" rel="noreferrer" className="text-[11px] underline">view ↗</a>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

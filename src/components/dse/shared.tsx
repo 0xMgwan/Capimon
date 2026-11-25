@@ -90,18 +90,24 @@ export function Addr({ address, chainId, kind = "address", label }: {
  * leads nowhere invites. Click copies it, because the whole use of a
  * reference is being quoted somewhere else.
  */
-export function Ref({ value }: { value: string | null | undefined }) {
+export function Ref({ value, label }: {
+  value: string | null | undefined;
+  /** Shown instead of the value, when the value is too long to print. The
+      click still copies the whole thing — a shortened hash that copies
+      shortened is worse than no copy button at all. */
+  label?: string;
+}) {
   const [copied, setCopied] = useState(false);
   if (!value) return <span className="text-[var(--muted)]">—</span>;
   return (
-    <button type="button" title="Copy this reference"
+    <button type="button" title={`${value} — click to copy`}
       onClick={() => {
         navigator.clipboard?.writeText(value)
           .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1400); })
           .catch(() => {});
       }}
       className="tnum whitespace-nowrap text-left text-[11px] underline decoration-dotted underline-offset-2 hover:decoration-solid">
-      {value}
+      {label ?? value}
       {copied && <span className="ml-1 text-[var(--color-up)]">copied</span>}
     </button>
   );

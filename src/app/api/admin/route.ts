@@ -32,7 +32,7 @@ export async function GET(req: Request) {
 
     const jobs = await import("@/lib/jobRuns").then((m) => m.recentRuns()).catch(() => []);
 
-    const [deposits, users, orders, totals, holdingsByAsset, ledgerTotals, withdrawals] = await Promise.all([
+    const [deposits, users, rawOrders, totals, holdingsByAsset, ledgerTotals, withdrawals] = await Promise.all([
       // Everything needed to match a CAPX row against its nTZS counterpart,
       // plus the identity CAPX holds for the depositor.
       sql`select d.id::text, d.amount_tzs, d.status, d.usdc_credited::text, d.phone,
@@ -66,8 +66,14 @@ export async function GET(req: Request) {
                    where l.user_id = u.id and l.asset not in ('TZS','USDC')
                      and l.amount > 0)::int as share_entries
             from capx.users u order by created_at desc limit 100`,
-      sql`select o.id::text, o.side, o.symbol, o.usdc_amount::text, o.qty::text, o.price::text, o.status,
-                 o.tx_hash, o.error, o.created_at, u.email
+      /* The cash leg and the settlement time come along so the desk can see
+         the same contract-note reference the customer and DSE are quoting.
+         Recomputed here rather than stored, because a reference read from a
+         column would agree with a row that had been edited. */
+      sql`select o.id::text, o.side, o.symbol, o.usdc_amount::text, o.qty::text, o.price::text,
+                 o.status, o.tx_hash, o.error, o.created_at, o.settled_at, u.email,
+                 (select abs(l.amount)::text from capx.ledger_entries l
+                   where l.ref = o.id::text || ':cash' and l.asset = 'TZS' limit 1) as cash
             from capx.orders o join capx.users u on u.id = o.user_id
            order by o.created_at desc limit 50`,
       sql<{ users: number; pending: number; settled_tzs: string | null; credited_usdc: string | null;
@@ -133,6 +139,22 @@ export async function GET(req: Request) {
             from capx.ledger_entries l join capx.users u on u.id = l.user_id
            where l.kind = 'withdrawal' order by l.created_at desc, l.id desc limit 30`,
     ]);
+
+    /*
+     * Every order with the reference it is quoted by.
+     *
+     * A shilling-settled trade has no transaction hash and never will, so
+     * the desk's Tx column was a dash on exactly the orders somebody is most
+     * likely to be ringing up about. The reference is what the customer sees,
+     * what DSE sees and what the day's anchor hashes, so support searching
+     * for it has to find it here too.
+     */
+    const { dealRef } = await import("@/lib/dseAnchor");
+    const orders = (rawOrders as unknown as {
+      id: string; side: string; symbol: string; qty: string | null; price: string | null;
+      cash: string | null; status: string; created_at: unknown; settled_at: unknown;
+    }[]).map((o) => ({ ...o, reference: dealRef(o) }));
+
 
     /*
      * FIMCO sees the client-facing half and nothing else: who the customers
@@ -205,6 +227,29 @@ export async function GET(req: Request) {
     ]);
     const fees = { position: feePos, sweeps };
 
+    /*
+     * Whether the daily anchors are going out, and whether they still agree.
+     *
+     * This is on the desk's page and not only on DSE's because the order the
+     * two should learn it in is not negotiable. A cron that has quietly
+     * stopped posting, or a day whose root no longer re-derives, is something
+     * CAPX needs to find on its own screen — being told about it by the
+     * exchange is the same fact arriving in the worst possible way.
+     */
+    const anchorHealth = await import("@/lib/dseAnchor")
+      .then(async (m) => {
+        const rows = await m.anchors(14);
+        return {
+          days: rows.length,
+          posted: rows.filter((a) => a.status === "posted").length,
+          failed: rows.filter((a) => a.status === "failed").length,
+          pending: rows.filter((a) => a.status === "pending").length,
+          mismatched: rows.filter((a) => a.status === "posted" && !a.matches).map((a) => a.day),
+          latest: rows[0] ?? null,
+        };
+      })
+      .catch(() => null);
+
     return NextResponse.json({
       ok: true,
       // Does the sum of credited deposits reconcile with what the ledger holds?
@@ -246,6 +291,7 @@ export async function GET(req: Request) {
       jobs,
       holdingsByAsset, ledgerTotals, withdrawals,
       deposits, users, orders,
+      anchors: anchorHealth,
     }, { headers: { "cache-control": "no-store" } });
   } catch (e) {
     return NextResponse.json(

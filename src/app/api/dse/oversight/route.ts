@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { dbConfigured } from "@/lib/db";
 import { viewerOf, ACTOR, canWrite } from "@/lib/adminAuth";
 import { overview, register, blotter, custodyTrail, moneyTrail, accessTrail } from "@/lib/dseOversight";
+import { anchors } from "@/lib/dseAnchor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -27,13 +28,16 @@ export async function GET(req: Request) {
   }
 
   try {
-    const [head, people, orders, custody, money, trail] = await Promise.all([
+    const [head, people, orders, custody, money, trail, anchored] = await Promise.all([
       overview(),
       register(),
       blotter(),
       custodyTrail(),
       moneyTrail(),
       accessTrail(),
+      /* Each one re-derived from the live rows as it is read, which is the
+         only version of this check worth running. */
+      anchors(),
     ]);
 
     return NextResponse.json({
@@ -48,6 +52,7 @@ export async function GET(req: Request) {
       orders,
       custody,
       money,
+      anchors: anchored,
       access: trail,
     }, { headers: { "cache-control": "no-store" } });
   } catch (e) {

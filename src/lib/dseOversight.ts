@@ -1,7 +1,10 @@
 import "server-only";
-import { createHash } from "node:crypto";
 import { db, migrate } from "./db";
 import { dseSecurities } from "./dseSecurities";
+/* One definition of what a trade's reference is, shared with the daily
+   anchor that hashes the same canonical line into the same leaf. Two
+   definitions of this would be two answers to "is the record unchanged".  */
+import { dealRef } from "./dseAnchor";
 import { DEFAULT_CHAIN } from "./explorer";
 
 /**
@@ -437,54 +440,6 @@ export async function customerFile(userId: string): Promise<CustomerFile | null>
 }
 
 /** Every settled and failed order in a DSE security, newest first. */
-/**
- * A reference for a trade that never touched a chain.
- *
- * A DSE order is a move inside CAPX's own book. The shares sit in the
- * omnibus wallet before it and after it, nothing is broadcast, and so the
- * transaction column was a dash on every row — which reads as the portal
- * withholding something rather than as there being nothing to withhold.
- *
- * Mirroring each trade onchain is the obvious alternative and is the wrong
- * one. A transfer that moves nothing between wallets costs gas to say
- * nothing, and a supervisor who followed it would find the omnibus paying
- * itself: a transaction that looks like evidence of a trade while being
- * evidence of nothing. The issuance that does move supply is already onchain
- * and already linked, on the custody tab.
- *
- * So each trade carries a contract-note reference instead, derived from the
- * trade's own terms rather than assigned. Two consequences are the point of
- * doing it this way: CAPX cannot renumber a trade, and a figure altered
- * after DSE has written the reference down no longer produces that
- * reference, so DSE's own copy is what checks ours.
- *
- * It is a reference and not a proof, and the difference is worth being plain
- * about: anybody who changes a row changes the reference computed from it.
- * What it catches is a change made after DSE recorded the reference, which
- * is the case this portal exists for.
- */
-const stamp = (v: unknown): string =>
-  v instanceof Date ? v.toISOString() : v === null || v === undefined ? "" : String(v);
-
-export function dealRef(o: {
-  id: string; side: string; symbol: string; qty: string | null; price: string | null;
-  cash: string | null; status: string; created_at: unknown; settled_at: unknown;
-}): string {
-  const sec = o.symbol.toUpperCase();
-  const canonical = [o.id, o.side, sec, o.qty ?? "", o.price ?? "", o.cash ?? "",
-                     o.status, stamp(o.settled_at)].join("|");
-  const digest = createHash("sha256").update(canonical).digest("hex").slice(0, 8).toUpperCase();
-
-  /* Dated in UTC so the reference a reader quotes is the same one whatever
-     machine recomputed it. */
-  const d = new Date(stamp(o.created_at));
-  const day = Number.isNaN(d.getTime()) ? "000000"
-    : [d.getUTCFullYear() % 100, d.getUTCMonth() + 1, d.getUTCDate()]
-        .map((n) => String(n).padStart(2, "0")).join("");
-
-  return `${sec}-${day}-${digest}`;
-}
-
 export async function blotter(limit = 500) {
   await migrate();
   const sql = db();

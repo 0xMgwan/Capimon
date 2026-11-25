@@ -244,6 +244,42 @@ export async function treasuryWrite(args: {
   ) as Promise<`0x${string}`>;
 }
 
+/**
+ * One raw transaction from the treasury, queued behind every other.
+ *
+ * Separate from `treasuryWrite` because not everything the desk sends is a
+ * contract call. An anchor is a payload and nothing else — no contract to
+ * deploy, no ABI to keep in step with, no function that could be changed
+ * later — and the cheapest permanent home for a payload on Base is the
+ * calldata of a transaction the treasury sends to itself.
+ *
+ * Shares the nonce queue, because a second signer on this key is how the
+ * "nonce too low" failures on customer orders happened.
+ */
+export async function treasurySend(args: {
+  to?: `0x${string}`;
+  data: `0x${string}`;
+  value?: bigint;
+}): Promise<`0x${string}`> {
+  const { account, wallet } = signer();
+  return signedSend((nonce) => wallet.sendTransaction({
+    to: args.to ?? account.address,
+    data: args.data,
+    value: args.value ?? 0n,
+    nonce,
+    /*
+     * No builder suffix on this one, deliberately.
+     *
+     * The client appends it to every transaction it signs, which is right for
+     * a swap and wrong here: when the calldata *is* the record, somebody
+     * checking it has to be able to say the payload is the whole of it, not
+     * the whole of it minus four bytes nobody warned them about. Attribution
+     * on one transaction a day is not worth that sentence in the spec.
+     */
+    dataSuffix: "0x",
+  })) as Promise<`0x${string}`>;
+}
+
 export function treasuryAddress(): `0x${string}` | null {
   return treasuryConfigured ? signer().account.address : null;
 }

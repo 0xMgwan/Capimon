@@ -131,6 +131,9 @@ export function WalletSection({ holdings }: {
   const [wdText, setWdText] = useState<string | null>(null);
   const wdPrimed = useRef(false);
   const [bankDetails, setBankDetails] = useState<BankDetails | null>(null);
+  /* Which deposit the open instructions belong to, so the receipt the customer
+     is holding can be matched to it. */
+  const [bankDepositId, setBankDepositId] = useState<string | null>(null);
   const [hiddenRef, setHiddenRef] = useState<string | null>(null);
   const [payerAccount, setPayerAccount] = useState("");
   /* Payouts go to a phone or, via nTZS's FI codes, straight to a bank account. */
@@ -221,6 +224,7 @@ export function WalletSection({ holdings }: {
   /* The newest open bank transfer, so its details survive a reload. */
   const openBankRaw = bankDetails ?? deposits.find((d) => d.bank)?.bank ?? null;
   const openBank = openBankRaw && openBankRaw.reference !== hiddenRef ? openBankRaw : null;
+  const openBankId = bankDepositId ?? deposits.find((d) => d.bank)?.id ?? null;
 
   if (!account) return null;
   const phoneToUse = phone || account.user.phone || "";
@@ -262,7 +266,7 @@ export function WalletSection({ holdings }: {
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error);
-      if (j.bank) { setBankDetails(j.bank); setHiddenRef(null); }
+      if (j.bank) { setBankDetails(j.bank); setBankDepositId(j.depositId ?? null); setHiddenRef(null); }
       else setNotice(j.note ?? "Approve the prompt on your phone.");
       setPanel("none");
       await loadDeposits();
@@ -590,9 +594,11 @@ export function WalletSection({ holdings }: {
           </AnimatePresence>
 
           {openBank && panel !== "withdraw" && (
-            <BankTransferCard bank={openBank}
+            <BankTransferCard bank={openBank} depositId={openBankId}
+              onClaimed={() => void loadDeposits()}
               onDone={(sent) => {
                 setHiddenRef(openBank.reference); setBankDetails(null);
+                setBankDepositId(null);
                 // Remembered on the row, so it does not reappear on the next
                 // load. Either answer puts the panel away; only the words
                 // differ.
@@ -927,9 +933,49 @@ export function WalletSection({ holdings }: {
  * wrong place. The reference and the exact amount are what match the transfer
  * back to this customer, so both are the loudest things on the card.
  */
-function BankTransferCard({ bank, onDone }: { bank: BankDetails; onDone: (sent: boolean) => void }) {
+function BankTransferCard({ bank, depositId, onDone, onClaimed }: {
+  bank: BankDetails; depositId: string | null;
+  onDone: (sent: boolean) => void; onClaimed: () => void;
+}) {
   const { t } = useT();
   const [copied, setCopied] = useState<string | null>(null);
+  /*
+   * The receipt step, opened by "I have sent it".
+   *
+   * That button used to only put the panel away, which is a strange thing to
+   * do at the exact moment the customer is holding the one piece of
+   * information that would credit them. A bank credit reaches nTZS without
+   * the reference — the rail drops the narration — so it is matched off a
+   * statement, in minutes, and sometimes by a person. The receipt on their
+   * confirmation identifies the payment outright.
+   */
+  const [asking, setAsking] = useState(false);
+  const [receipt, setReceipt] = useState("");
+  const [claiming, setClaiming] = useState(false);
+  const [said, setSaid] = useState<{ good: boolean; text: string } | null>(null);
+
+  const claim = async () => {
+    if (!depositId || !receipt.trim()) return;
+    setClaiming(true); setSaid(null);
+    try {
+      const r = await fetch("/api/ntzs/deposit/claim", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ depositId, receipt }),
+      });
+      const j = await r.json();
+      if (!j.ok) { setSaid({ good: false, text: j.error ?? t("Could not confirm that payment.") }); return; }
+      setSaid({ good: j.claim !== "not_found", text: j.note });
+      onClaimed();
+      /* Credited means there is nothing left on this panel to do. Not-found
+         means try again shortly, so it stays open with the box filled in. */
+      if (j.status === "settled") setTimeout(() => onDone(true), 1800);
+    } catch {
+      setSaid({ good: false, text: t("Could not reach CAPX. Try again in a moment.") });
+    } finally {
+      setClaiming(false);
+    }
+  };
   const copy = (label: string, value: string) => {
     navigator.clipboard?.writeText(value).then(() => {
       setCopied(label);
@@ -991,12 +1037,52 @@ function BankTransferCard({ bank, onDone }: { bank: BankDetails; onDone: (sent: 
       </p>
       {/* The finishing step of the flow, so it looks like one: a real button,
           not a muted link the eye skips past under a paragraph of guidance. */}
-      <button
-        onClick={() => onDone(true)}
-        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border-2 border-[var(--fg)] py-3 text-sm font-semibold transition-colors hover:bg-[var(--fg)] hover:text-[var(--bg)] active:scale-[0.98]"
-      >
-        {t("I have sent it")} <Arrow />
-      </button>
+      {!asking ? (
+        <button
+          onClick={() => (depositId ? setAsking(true) : onDone(true))}
+          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border-2 border-[var(--fg)] py-3 text-sm font-semibold transition-colors hover:bg-[var(--fg)] hover:text-[var(--bg)] active:scale-[0.98]"
+        >
+          {t("I have sent it")} <Arrow />
+        </button>
+      ) : (
+        <div className="mt-4 rounded-xl surface p-3.5">
+          <div className="eyebrow">{t("Receipt number")}</div>
+          <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">
+            {t("On the confirmation your bank or Selcom sent you — it looks like SB1106Z92ST. Enter it and your shillings arrive in seconds instead of waiting on our statement.")}
+          </p>
+          <div className="mt-2 flex gap-2">
+            <input
+              value={receipt}
+              onChange={(e) => setReceipt(e.target.value.toUpperCase())}
+              onKeyDown={(e) => { if (e.key === "Enter") void claim(); }}
+              placeholder="SB1106Z92ST"
+              aria-label={t("Receipt number")}
+              className="tnum min-w-0 flex-1 rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm uppercase outline-none focus:border-[var(--color-accent)]"
+            />
+            <button
+              onClick={() => void claim()} disabled={claiming || receipt.trim().length < 6}
+              className="shrink-0 rounded-full bg-[var(--fg)] px-4 text-sm font-medium text-[var(--bg)] disabled:opacity-40"
+            >
+              {claiming ? t("Checking…") : t("Confirm")}
+            </button>
+          </div>
+          {said && (
+            <p className={`mt-2 text-[12px] leading-relaxed ${
+              said.good ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
+              {said.text}
+            </p>
+          )}
+          {/* Not everybody has the receipt to hand, and the money is credited
+              on the statement sync regardless — so this is a shortcut, never
+              a toll gate. */}
+          <button
+            onClick={() => onDone(true)}
+            className="mt-2 w-full py-1 text-[11px] text-[var(--muted)] underline transition-colors hover:text-[var(--fg)]"
+          >
+            {t("I do not have it — credit it when it arrives")}
+          </button>
+        </div>
+      )}
       {/*
         * And the other answer.
         *

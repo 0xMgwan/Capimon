@@ -199,7 +199,11 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
           ["payer_account_number", "required for bank_transfer — this is how the money is matched back to them"],
         ],
         returns: "202 with the deposit, its route and status. A bank transfer also returns `bank`: the account, the one-off reference and when it expires.",
-        note: "Mobile money prompts the phone and settles on its own. A bank transfer takes nothing until the customer sends it — show them the reference verbatim, because that is what matches the money to them." },
+        note: "Mobile money prompts the phone and settles on its own. A bank transfer takes nothing until the customer sends it, so show them the account, the exact amount and the reference verbatim. What actually matches the money back to them is `payer_account_number`, not the reference: Tanzanian bank credits arrive without the payer's narration, so a reference typed perfectly into a transfer description still may not survive the rail. Send the account they are paying from, and if you can, collect the receipt afterwards and call the claim below — that is the difference between seconds and a statement sync." },
+      { method: "POST", path: "/v1/deposits/:id/claim", what: "Confirm a bank transfer with the receipt your customer was given.",
+        body: [["receipt", "required — the Selcom receipt on their payment confirmation, e.g. SB1106Z92ST from a bank or 111610T7ZY from a Selcom wallet"]],
+        returns: "200 with `claim: credited` or `already_credited` and the deposit's new status; 202 with `claim: not_found` when the payment has not reached us yet.",
+        note: "A bank push is the one funding route nobody can watch: nothing is prompted, nothing is pulled, and the narration does not survive, so the credit is matched off a statement in minutes — or by hand when it cannot be matched at all. The receipt identifies the payment outright and the shillings mint in seconds. `not_found` is NOT a failure and never means pay again: the money has simply not landed yet, so retry in a minute. Safe to repeat. The other refusals are specific on purpose — `amount_mismatch`, `paid_before_deposit`, `receipt_used`, `receipt_unavailable` and `ambiguous` all mean a person is handling it and your customer must not send a second payment." },
       { method: "POST", path: "/v1/withdrawals", what: "Pay a customer out — shillings to mobile money or a bank, or USDC to a wallet.",
         body: [
           ["user", "required"],

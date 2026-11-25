@@ -1,5 +1,5 @@
 import "server-only";
-import { createDeposit, rampQuote, rampOnramp, MIN_TZS_BY_ROUTE, NtzsError,
+import { createDeposit, claimDeposit, rampQuote, rampOnramp, MIN_TZS_BY_ROUTE, NtzsError,
          type PaymentMethod, type BankInstructions } from "./ntzs";
 import { db, migrate } from "./db";
 import { omnibusUserId, collectionRoute, capabilities } from "./omnibus";
@@ -278,5 +278,110 @@ async function bankDeposit(
     return refuse(err?.code ?? "deposit_failed",
       err?.message ?? "Could not prepare the bank transfer.", err?.status ?? 502,
       { depositId: localId });
+  }
+}
+
+/**
+ * Confirms a customer's bank transfer with the receipt their bank gave them.
+ *
+ * The reference CAPX shows is the thing the customer is told to quote, and it
+ * is also the thing the rail throws away: nTZS matches a bank credit by the
+ * sending account because the narration does not survive. That works, and it
+ * works on a statement sync rather than on arrival, so a transfer sent at ten
+ * past is credited at some point after that — and one that cannot be matched
+ * waits for a person.
+ *
+ * The receipt on the payer's own confirmation removes the guess. This hands it
+ * to nTZS and then settles straight away, so the money appears while the
+ * customer is still looking at the screen they typed it into.
+ *
+ * It cannot credit anything on its own say-so. nTZS has to find that exact
+ * payment, for that exact amount, on its own account; everything here does is
+ * tell it where to look.
+ */
+export async function claimBankDeposit(input: {
+  userId: string; depositId: string; receipt: string;
+}): Promise<DepositResult | { ok: true; depositId: string; route: "bank";
+                               status: string; claim: string; note: string }> {
+  const receipt = input.receipt.trim();
+  if (!receipt) return refuse("receipt_required", "Enter the receipt number from your payment confirmation.");
+
+  await migrate();
+  const sql = db();
+  const [row] = await sql<{ id: string; ntzs_deposit_id: string | null; status: string;
+                            method: string | null }[]>`
+    select id::text, ntzs_deposit_id, status, metadata->>'paymentMethod' as method
+      from capx.deposits
+     where id = ${input.depositId}::uuid and user_id = ${input.userId}::uuid`;
+
+  /* The same answer for a deposit that is not theirs as for one that does not
+     exist. Anything else turns this into a way to find out which deposit ids
+     are real. */
+  if (!row) return refuse("unknown_deposit", "No deposit of yours matches that.", 404);
+  if (row.method !== "bank_transfer") {
+    return refuse("not_bank_transfer",
+      "Only a bank transfer is confirmed with a receipt.", 409);
+  }
+  if (!row.ntzs_deposit_id) {
+    return refuse("deposit_not_open",
+      "That transfer was never opened with nTZS, so there is nothing to confirm.", 409);
+  }
+  if (row.status === "settled") {
+    return { ok: true, depositId: row.id, route: "bank", status: "settled",
+             claim: "already_credited", note: "This deposit is already credited." };
+  }
+
+  try {
+    const result = await claimDeposit(row.ntzs_deposit_id, receipt);
+
+    if (result.claim === "not_found") {
+      /* Not a failure. The transfer has not reached nTZS's account yet, and
+         the only correct thing to do is ask again shortly. */
+      return { ok: true, depositId: row.id, route: "bank", status: row.status,
+               claim: "not_found",
+               note: "That payment has not reached us yet. Try again in a minute — "
+                   + "nothing is wrong and you do not need to pay again." };
+    }
+
+    /* Credited upstream, so look at it now rather than waiting for the sweep:
+       the customer is standing in front of this. */
+    const { settlePending } = await import("@/app/api/ntzs/settle/route");
+    await settlePending(input.userId).catch(() => null);
+
+    const [after] = await sql<{ status: string }[]>`
+      select status from capx.deposits where id = ${row.id}::uuid`;
+
+    return {
+      ok: true, depositId: row.id, route: "bank",
+      status: after?.status ?? row.status, claim: result.claim,
+      note: after?.status === "settled"
+        ? "Confirmed and credited."
+        : "Confirmed with nTZS. The shillings are minting and land in a moment.",
+    };
+  } catch (e) {
+    const err = e instanceof NtzsError ? e : null;
+    /*
+     * The refusals that need their own words, because the right next step
+     * differs and "something went wrong" would send somebody to pay twice.
+     */
+    const said: Record<string, string> = {
+      invalid_receipt: "That is not a receipt number. Use the one on your payment confirmation — "
+                     + "it looks like SB1106Z92ST from a bank, or 111610T7ZY from a Selcom wallet.",
+      receipt_used: "That receipt has already credited another deposit. One payment credits one "
+                  + "deposit, so there is nothing more to claim with it.",
+      receipt_unavailable: "That payment has been set aside for a manual check. Our team has been "
+                         + "told and will credit it — do not pay again.",
+      amount_mismatch: "The payment does not match this deposit's amount. Our team credits what "
+                     + "actually arrived, so do not pay again.",
+      paid_before_deposit: "That payment was made before this transfer was opened, so it cannot "
+                         + "confirm it. Our team will match it by hand.",
+      ambiguous: "That receipt matches more than one payment, so it has to be confirmed by hand. "
+               + "Our team will do it.",
+      too_many_attempts: "Too many attempts on this deposit. Wait an hour, or contact us.",
+      deposit_not_open: "That transfer is no longer waiting for payment.",
+    };
+    const code = err?.code ?? "claim_failed";
+    return refuse(code, said[code] ?? err?.message ?? "Could not confirm that payment.",
+      err?.status ?? 502, { depositId: row.id });
   }
 }

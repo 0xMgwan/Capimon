@@ -399,6 +399,44 @@ export async function getDeposit(id: string) {
   );
 }
 
+/**
+ * Confirms a bank transfer with the receipt the payer was given.
+ *
+ * A bank push is matched back to its deposit by the sending account, because
+ * the reference does not survive the rail: banks and Selcom wallets routinely
+ * drop the narration, so the one thing the customer was told to quote is the
+ * one thing that does not arrive. What is left is a statement sync, which
+ * nTZS describes as minutes rather than seconds, and a credit it cannot match
+ * at all goes to a person to resolve by hand.
+ *
+ * The receipt closes that. It is on the payer's own confirmation — SB1106Z92ST
+ * from a bank, 111610T7ZY from a Selcom wallet — and naming it identifies the
+ * credit exactly, so the mint happens in seconds instead of whenever the
+ * statement is read.
+ *
+ * Safe to repeat, which matters: `202 claim: not_found` means the money has
+ * simply not landed yet, and the only correct response is to ask again in a
+ * minute.
+ */
+export type DepositClaim = {
+  id: string;
+  /** credited | already_credited (200), or not_found (202). */
+  claim: "credited" | "already_credited" | "not_found";
+  status?: string;
+  message?: string;
+};
+
+export async function claimDeposit(id: string, receipt: string) {
+  return call<DepositClaim>(`/api/v1/deposits/${encodeURIComponent(id)}/claim`, {
+    method: "POST",
+    /* Not idempotency-keyed, deliberately. The endpoint is already safe to
+       repeat and keys a retry to one payment: a fresh key on every attempt
+       would be a new request each time, which is the opposite of what a
+       "retry in a minute" instruction wants. */
+    body: { receipt: receipt.replace(/\s+/g, "").toUpperCase() },
+  });
+}
+
 /* ----------------------------------------------------------------- swap -- */
 
 /**

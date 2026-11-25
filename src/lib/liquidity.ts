@@ -110,6 +110,14 @@ export type Provider = {
   spreadBps: number;
   /** Also the custodian broker, in which case the broker share is their pay. */
   alsoBroker: boolean;
+  /**
+   * Where they settle on chain, or null while that is still being arranged.
+   *
+   * A provider without one can hold a position and be allocated an order; it
+   * is settlement they cannot be a party to, because the engine moves tokens
+   * between addresses and the registry gates both ends.
+   */
+  walletAddress: string | null;
   active: boolean;
 };
 
@@ -117,7 +125,7 @@ type Row = {
   id: string; name: string; user_id: string; committed_tzs: string | null;
   max_daily_tzs: string | null; floor_tzs: string; band_pct: string | null;
   min_margin_pct: string | null; spread_bps: string | null;
-  also_broker: boolean; active: boolean;
+  also_broker: boolean; wallet_address: string | null; active: boolean;
 };
 
 const toProvider = (r: Row): Provider => ({
@@ -129,12 +137,13 @@ const toProvider = (r: Row): Provider => ({
   minMarginPct: r.min_margin_pct === null ? null : Number(r.min_margin_pct),
   spreadBps: r.spread_bps === null ? DEFAULT_SPREAD_BPS : Number(r.spread_bps),
   alsoBroker: r.also_broker,
+  walletAddress: r.wallet_address,
   active: r.active,
 });
 
 const SELECT = `id::text, name, user_id::text, committed_tzs::text, max_daily_tzs::text,
                 floor_tzs::text, band_pct::text, min_margin_pct::text,
-                spread_bps::text, also_broker, active`;
+                spread_bps::text, also_broker, wallet_address, active`;
 
 /** The provider behind a desk token, or null. */
 export async function providerByToken(token: string): Promise<Provider | null> {

@@ -1177,6 +1177,25 @@ export async function migrate() {
            * kind of inference that is right until it quietly is not.
            */
           "also_broker boolean not null default false",
+          /*
+           * Where this maker settles on chain.
+           *
+           * A ledger account is enough to hold a claim and not enough to be a
+           * counterparty: SettlementEngine.settle() moves a token and cash
+           * between two addresses, and InvestorRegistry gates both. So a
+           * maker without one can take a position in the ledger and cannot be
+           * the party on the other side of a settled trade.
+           *
+           * Nullable, and nullable on purpose. A provider funded today
+           * settles against the treasury like every trade does now; the
+           * address is what moves them onto the engine, and making it
+           * required would have meant no provider could exist until the
+           * custody question with their bank was answered. Stored lowercase,
+           * because an address compared case-sensitively against a
+           * checksummed copy of itself is a bug that only appears for some
+           * addresses.
+           */
+          "wallet_address text",
         ],
       };
       for (const [table, columns] of Object.entries(lateColumns)) {

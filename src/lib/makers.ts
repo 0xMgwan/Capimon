@@ -53,6 +53,22 @@ export type MakerCapacity = {
   capacity: number;
   /** Why they can do nothing, when they can do nothing. */
   reason: string | null;
+  /**
+   * Whether this maker could be a party to a settled trade.
+   *
+   * Separate from `capacity`, and separate on purpose: a funded maker with
+   * no settlement address can be allocated an order today and settles
+   * against the treasury like every trade currently does. What it cannot be
+   * is the `seller` passed to the engine. Carrying both means the switch to
+   * on-chain settlement is a filter applied here rather than a rediscovery
+   * of which makers were ready.
+   */
+  settlement: {
+    address: string | null;
+    approved: boolean | null;
+    canSettle: boolean;
+    reason: string | null;
+  };
 };
 
 export type Fill = { id: string; kind: MakerKind; name: string; amount: number };
@@ -152,6 +168,16 @@ export async function makersFor(
   const treasuryCapacity = side === "buy"
     ? market?.availableShares ?? 0
     : omnibus.tzs;
+  const { partyStatus } = await import("./settlementParties");
+  const { treasuryAddress } = await import("./treasury");
+
+  /* The treasury's address is configured rather than stored on a row, but it
+     is checked against the same registry as everybody else — being CAPX's
+     own wallet is not approval. */
+  const treasuryParty = await partyStatus(
+    (() => { try { return treasuryAddress(); } catch { return null; } })(),
+  );
+
   out.push({
     id: "treasury",
     kind: "treasury",
@@ -159,19 +185,21 @@ export async function makersFor(
     capacity: Math.max(0, treasuryCapacity),
     reason: treasuryCapacity > 0 ? null
       : side === "buy" ? "no uncommitted shares in custody" : "the float is empty",
+    settlement: treasuryParty,
   });
 
   for (const p of await providers().catch(() => [])) {
+    const party = await partyStatus(p.walletAddress);
     if (!p.active) {
       out.push({ id: p.id, kind: "provider", name: p.name, capacity: 0,
-        reason: "paused by the provider" });
+        reason: "paused by the provider", settlement: party });
       continue;
     }
     if (side === "buy") {
       /* What they hold of this security is what they can sell back. */
       const held = await balanceOf(p.userId, S).catch(() => 0);
       out.push({ id: p.id, kind: "provider", name: p.name, capacity: Math.max(0, held),
-        reason: held > 0 ? null : `holds no ${S}` });
+        reason: held > 0 ? null : `holds no ${S}`, settlement: party });
     } else {
       /* Their own terms decide this — committed size, daily cap, the floor
          under their balance — so it is read through capacityOf rather than
@@ -179,7 +207,8 @@ export async function makersFor(
       const cap = await capacityOf(p).catch(() => null);
       out.push({ id: p.id, kind: "provider", name: p.name,
         capacity: Math.max(0, cap?.availableTzs ?? 0),
-        reason: (cap?.availableTzs ?? 0) > 0 ? null : cap?.reason ?? "unavailable" });
+        reason: (cap?.availableTzs ?? 0) > 0 ? null : cap?.reason ?? "unavailable",
+        settlement: party });
     }
   }
 

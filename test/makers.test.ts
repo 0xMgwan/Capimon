@@ -13,7 +13,8 @@ import { allocate, totalCapacity, type MakerCapacity } from "../src/lib/makers";
  */
 
 const m = (name: string, capacity: number, kind: "treasury" | "provider" = "provider"): MakerCapacity =>
-  ({ id: name.toLowerCase(), kind, name, capacity, reason: capacity > 0 ? null : "none" });
+  ({ id: name.toLowerCase(), kind, name, capacity, reason: capacity > 0 ? null : "none",
+     settlement: { address: null, approved: null, canSettle: false, reason: "test" } });
 
 const BOOK = [
   m("CAPX treasury", 800, "treasury"),

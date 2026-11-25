@@ -781,3 +781,50 @@ export function facilitySizingFrom(args: {
     committedGapTzs,
   };
 }
+
+
+/**
+ * Whether a provider's inventory may be sold into a customer's order.
+ *
+ * Routing a buy to a provider is `releaseInventory` performed at the moment
+ * somebody actually wants the shares, rather than on a schedule — which is
+ * strictly better, since the inventory returns to the pool exactly when there
+ * is demand for it. What must not come with that improvement is a quieter
+ * version of the same sale: the gates releaseInventory applies are terms the
+ * provider agreed, and a customer's order is not a reason to skip them.
+ *
+ * So the same three are checked here. The band, because a stale mark is as
+ * bad to sell on as to buy on. Their margin floor, because the standing bid
+ * buys on the day somebody needed to exit, which is often the day the mark is
+ * low, and selling back at any price would book that loss automatically and
+ * without being asked. And an unverifiable floor is not a floor, so a cost
+ * basis this table never saw declines the sale rather than guessing one.
+ *
+ * The float headroom that releaseInventory also checks is deliberately not
+ * here. That one exists because releasing credits a provider shillings
+ * against a float that has to carry the claim; in a customer's buy the
+ * customer's own shillings pay for it, so no claim is created and there is
+ * nothing for the float to carry.
+ */
+export async function canReleaseTo(
+  p: Provider, symbol: string, mark: number,
+): Promise<{ ok: boolean; reason: string | null }> {
+  if (!p.active) return { ok: false, reason: "paused by the provider" };
+  if (!(mark > 0)) return { ok: false, reason: "no published mark" };
+
+  if (!(await withinBand(p, symbol, mark))) {
+    return { ok: false, reason: "the mark has drifted from the exchange's close" };
+  }
+
+  if (p.minMarginPct !== null) {
+    const cost = await avgCostOf(p.id, symbol).catch(() => null);
+    if (cost === null) {
+      return { ok: false, reason: "their cost basis cannot be established" };
+    }
+    if (mark < cost * (1 + p.minMarginPct / 100)) {
+      return { ok: false, reason: `the mark is below their ${p.minMarginPct}% floor` };
+    }
+  }
+
+  return { ok: true, reason: null };
+}

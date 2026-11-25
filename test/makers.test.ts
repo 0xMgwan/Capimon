@@ -118,3 +118,141 @@ test("largest-first tends toward the pro-rata split over many orders", () => {
       `${k} took ${(share * 100).toFixed(1)}% against ${(target * 100).toFixed(1)}% posted`);
   }
 });
+
+// ── the ledger entries a routed trade writes ─────────────────────────────
+
+import { tradeLegs, legsBalance } from "../src/lib/makers";
+
+const near = (v: number, want: number, what: string) =>
+  assert.ok(Math.abs(v - want) < 1e-9, `${what}: ${v} should be ${want}`);
+
+const balanced = (legs: ReturnType<typeof tradeLegs>, symbol = "CRDB") => {
+  const b = legsBalance(legs);
+  near(b.get("TZS") ?? 0, 0, "shillings");
+  near(b.get(symbol) ?? 0, 0, "shares");
+};
+
+test("a treasury-only buy writes the legs the order path always wrote", () => {
+  const legs = tradeLegs({
+    orderId: "o1", side: "buy", symbol: "CRDB",
+    qty: 4, tzs: 11_000, netTzs: 10_725, fee: 275,
+    fills: [{ id: "treasury", kind: "treasury", amount: 4 }],
+  });
+  balanced(legs);
+  assert.ok(legs.some((l) => l.party === "house" && "account" in l && l.account === "inventory"));
+  assert.ok(!legs.some((l) => l.party === "provider"));
+});
+
+test("a provider's fill credits the provider, not the float", () => {
+  /* They gave up the shares, so the proceeds are theirs. Writing these
+     against the house would have the float pay for inventory it never held
+     and credit itself for a sale it never made. */
+  const legs = tradeLegs({
+    orderId: "o2", side: "buy", symbol: "CRDB",
+    qty: 4, tzs: 11_000, netTzs: 10_725, fee: 275,
+    fills: [{ id: "fimco", kind: "provider", userId: "u-fimco", amount: 4 }],
+  });
+  balanced(legs);
+  const cash = legs.find((l) => l.party === "provider" && l.asset === "TZS");
+  assert.ok(cash && cash.amount === 10_725);
+  assert.ok(!legs.some((l) => l.party === "house" && "account" in l && l.account === "float"));
+});
+
+test("a split fill balances and pays each maker their share", () => {
+  const legs = tradeLegs({
+    orderId: "o3", side: "buy", symbol: "CRDB",
+    qty: 10, tzs: 27_500, netTzs: 26_812.5, fee: 687.5,
+    fills: [
+      { id: "fimco", kind: "provider", userId: "u-fimco", amount: 6 },
+      { id: "treasury", kind: "treasury", amount: 4 },
+    ],
+  });
+  balanced(legs);
+  const fimco = legs.find((l) => l.party === "provider" && l.asset === "TZS");
+  near(fimco!.amount, 26_812.5 * 0.6, "FIMCO's 60% share");
+});
+
+test("a three-way split still balances exactly", () => {
+  /* Thirds do not sum back to the whole in floating point. An unbalanced
+     ledger is refused by assertBalanced, so the trade would fail after the
+     customer had already been quoted. */
+  const legs = tradeLegs({
+    orderId: "o4", side: "buy", symbol: "CRDB",
+    qty: 1, tzs: 1_000, netTzs: 975, fee: 25,
+    fills: [
+      { id: "a", kind: "provider", userId: "ua", amount: 1 / 3 },
+      { id: "b", kind: "provider", userId: "ub", amount: 1 / 3 },
+      { id: "c", kind: "provider", userId: "uc", amount: 1 / 3 },
+    ],
+  });
+  balanced(legs);
+});
+
+test("a sell reverses every leg", () => {
+  /* On a sell the quote's netTzs is the gross — what leaves the float — and
+     tzs is what the customer is left with after the fee. The two are the
+     other way round from a buy, which is exactly the sort of thing a legs
+     builder gets backwards, so the balance assertion below is the check. */
+  const legs = tradeLegs({
+    orderId: "o5", side: "sell", symbol: "CRDB",
+    qty: 4, tzs: 10_725, netTzs: 11_000, fee: 275,
+    fills: [{ id: "treasury", kind: "treasury", amount: 4 }],
+  });
+  balanced(legs);
+  const shares = legs.find((l) => l.party === "customer" && l.asset === "CRDB");
+  assert.ok(shares!.amount < 0, "the customer gives up shares");
+  const cash = legs.find((l) => l.party === "customer" && l.asset === "TZS");
+  assert.ok(cash!.amount > 0, "and is paid");
+});
+
+test("the fee is taken once and never split across makers", () => {
+  /* A maker is paid for what they sold. The platform fee is CAPX's
+     relationship with the customer and has nothing to do with who had the
+     inventory. */
+  const legs = tradeLegs({
+    orderId: "o6", side: "buy", symbol: "CRDB",
+    qty: 10, tzs: 27_500, netTzs: 26_812.5, fee: 687.5,
+    fills: [
+      { id: "a", kind: "provider", userId: "ua", amount: 5 },
+      { id: "b", kind: "provider", userId: "ub", amount: 5 },
+    ],
+  });
+  const fees = legs.filter((l) => l.party === "house" && "account" in l && l.account === "fee");
+  assert.equal(fees.length, 1);
+  assert.equal(fees[0].amount, 687.5);
+});
+
+test("every leg carries a distinct reference", () => {
+  /* The ledger's ref index is unique, so two makers sharing one would make
+     the second fill silently vanish. */
+  const legs = tradeLegs({
+    orderId: "o7", side: "buy", symbol: "CRDB",
+    qty: 9, tzs: 24_750, netTzs: 24_131.25, fee: 618.75,
+    fills: [
+      { id: "a", kind: "provider", userId: "ua", amount: 3 },
+      { id: "b", kind: "provider", userId: "ub", amount: 3 },
+      { id: "treasury", kind: "treasury", amount: 3 },
+    ],
+  });
+  const refs = legs.map((l) => l.ref);
+  assert.equal(new Set(refs).size, refs.length, refs.join(" "));
+  balanced(legs);
+});
+
+test("a provider selling into a customer buy balances both ways", () => {
+  /* The whole point of routing: a provider's inventory returns to the pool
+     at the moment somebody wants it, rather than on a cron. Both the buy and
+     the matching sell must balance, or releaseInventory and this path would
+     disagree about the same position. */
+  for (const side of ["buy", "sell"] as const) {
+    const gross = 27_500;
+    const fee = 687.5;
+    const legs = tradeLegs({
+      orderId: `o8-${side}`, side, symbol: "CRDB", qty: 10,
+      tzs: side === "buy" ? gross + fee : gross - fee,
+      netTzs: gross, fee,
+      fills: [{ id: "fimco", kind: "provider", userId: "u-fimco", amount: 10 }],
+    });
+    balanced(legs);
+  }
+});

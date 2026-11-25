@@ -222,3 +222,97 @@ export async function quoteAllocation(
   const makers = await makersFor(symbol, side);
   return { ...allocate(makers, want), makers };
 }
+
+
+/**
+ * The ledger entries a routed trade writes, one set per maker who filled.
+ *
+ * Today every fill comes from the treasury and the legs are the ones the
+ * order path has always written: house inventory gives up the shares, house
+ * float takes the cash. The moment a provider fills, those two legs belong to
+ * the provider instead — they gave up the shares, so the proceeds are theirs
+ * — and writing them against the house would have the float pay for inventory
+ * it did not hold and credit itself for a sale it did not make.
+ *
+ * Pure, and tested on the identity that matters: every asset leg and every
+ * cash leg sums to zero. An unbalanced trade is the one bug in this file that
+ * cannot be caught by looking at a screen, because both halves would look
+ * individually plausible.
+ *
+ * The fee is taken once, off the whole order, and never split across makers.
+ * A maker is paid the proceeds of what they sold; the platform fee is CAPX's
+ * relationship with the customer and has nothing to do with who happened to
+ * have the inventory.
+ */
+export type TradeLegSpec =
+  | { party: "customer"; asset: string; amount: number; ref: string }
+  | { party: "house"; account: "fee" | "float" | "inventory"; asset: string; amount: number; ref: string }
+  | { party: "provider"; userId: string; asset: string; amount: number; ref: string };
+
+export function tradeLegs(args: {
+  orderId: string;
+  side: "buy" | "sell";
+  symbol: string;
+  /** Whole-order figures, already quoted and rounded. */
+  qty: number;
+  tzs: number;
+  netTzs: number;
+  fee: number;
+  /** Who filled, and how much of `qty` each. Must sum to `qty`. */
+  fills: readonly { id: string; kind: MakerKind; userId?: string; amount: number }[];
+}): TradeLegSpec[] {
+  const { orderId, side, symbol, qty, tzs, netTzs, fee } = args;
+  const sign = side === "buy" ? 1 : -1;
+
+  const legs: TradeLegSpec[] = [
+    { party: "customer", asset: "TZS", amount: -sign * tzs, ref: `${orderId}:cash` },
+    { party: "customer", asset: symbol, amount: sign * qty, ref: `${orderId}:asset` },
+    { party: "house", account: "fee", asset: "TZS", amount: fee, ref: `${orderId}:house-fee` },
+  ];
+
+  /*
+   * The cash is apportioned by share of the quantity, and the last maker
+   * takes the remainder rather than their computed share.
+   *
+   * Three fills of a third each do not sum back to the whole in floating
+   * point, and a cash leg short by a thousandth of a shilling is an
+   * unbalanced ledger — which `assertBalanced` refuses, so the trade would
+   * fail after the customer had been quoted. Giving the remainder to the last
+   * fill costs that maker a rounding error and keeps the identity exact.
+   */
+  let cashLeft = netTzs;
+  let qtyLeft = qty;
+
+  args.fills.forEach((f, i) => {
+    const last = i === args.fills.length - 1;
+    const share = last ? cashLeft : Math.round((netTzs * (f.amount / qty)) * 100) / 100;
+    const amount = last ? qtyLeft : f.amount;
+    cashLeft -= share;
+    qtyLeft -= amount;
+
+    if (f.kind === "treasury" || !f.userId) {
+      legs.push(
+        { party: "house", account: "float", asset: "TZS", amount: sign * share,
+          ref: `${orderId}:house-cash${i ? `:${i}` : ""}` },
+        { party: "house", account: "inventory", asset: symbol, amount: -sign * amount,
+          ref: `${orderId}:house-asset${i ? `:${i}` : ""}` },
+      );
+    } else {
+      legs.push(
+        { party: "provider", userId: f.userId, asset: "TZS", amount: sign * share,
+          ref: `${orderId}:maker-cash:${f.id}` },
+        { party: "provider", userId: f.userId, asset: symbol, amount: -sign * amount,
+          ref: `${orderId}:maker-asset:${f.id}` },
+      );
+    }
+  });
+
+  return legs;
+}
+
+/** What every set of legs must satisfy, per asset. */
+export function legsBalance(legs: readonly TradeLegSpec[]): Map<string, number> {
+  const by = new Map<string, number>();
+  for (const l of legs) by.set(l.asset, (by.get(l.asset) ?? 0) + l.amount);
+  return by;
+}

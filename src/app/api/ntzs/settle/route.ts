@@ -55,6 +55,31 @@ const STALE_AFTER_MS = 5 * 60_000;
 const BANK_STALE_AFTER_MS = 5 * 60_000;
 
 /**
+ * Tells the partner their customer's money landed.
+ *
+ * The docs name `deposit.credited` as the one to wire up if money looks slow
+ * to arrive, and until now the collection path never sent it. A partner who
+ * followed that advice for mobile money heard nothing at all: the credit
+ * happened on a cron, in a sweep with no request behind it and nobody to
+ * report to. Announcing it here is the same event the stablecoin path already
+ * sends, from the one place every collection is credited.
+ *
+ * Best-effort on purpose. A webhook endpoint that is down must not leave a
+ * deposit uncredited — the money has arrived and the ledger already says so.
+ */
+async function announce(d: { partner_id: string | null; partner_ref: string | null;
+                             id: string; user_id: string },
+                        payload: Record<string, unknown>) {
+  if (!d.partner_id) return;
+  try {
+    const { emit } = await import("@/lib/partners");
+    await emit(d.partner_id, "deposit.credited", {
+      deposit_id: d.id, user_id: d.user_id, reference: d.partner_ref, ...payload,
+    });
+  } catch { /* the credit stands either way */ }
+}
+
+/**
  * Settles pending deposits: confirm the collection landed and credit the
  * depositor. Every route but ramp credits shillings and leaves them in the
  * omnibus to be swapped at buy time; ramp settles straight to USDC and is
@@ -99,22 +124,28 @@ export async function settlePending(
   await migrate();
   const sql = db();
 
+  /* The partner who brought the deposit, and their own name for the customer,
+     so a credit can be announced to them the moment it happens rather than
+     waiting to be discovered by a poll. */
   const pending = await sql<{ id: string; user_id: string; ntzs_deposit_id: string;
                              amount_tzs: number; age_ms: number;
+                             partner_id: string | null; partner_ref: string | null;
                              metadata: { route?: string; quotedUsdc?: number; paymentMethod?: string } }[]>`
-    select id::text, user_id::text, ntzs_deposit_id, amount_tzs, metadata,
-           extract(epoch from (now() - created_at)) * 1000 as age_ms
-      from capx.deposits
+    select d.id::text, d.user_id::text, d.ntzs_deposit_id, d.amount_tzs, d.metadata,
+           d.partner_id::text, u.partner_ref,
+           extract(epoch from (now() - d.created_at)) * 1000 as age_ms
+      from capx.deposits d
+      join capx.users u on u.id = d.user_id
      -- 'expired' is still watched: it means "stop showing this as in flight",
      -- never "stop crediting it if the money arrives".
-     where ntzs_deposit_id is not null
+     where d.ntzs_deposit_id is not null
        and (${opts.maxAgeMs ?? null}::bigint is null
-            or (status in ('pending','uncertain')
-                and created_at > now() - make_interval(secs => ${(opts.maxAgeMs ?? 0) / 1000})))
+            or (d.status in ('pending','uncertain')
+                and d.created_at > now() - make_interval(secs => ${(opts.maxAgeMs ?? 0) / 1000})))
        and (${opts.maxAgeMs ?? null}::bigint is not null
-            or status in ('pending','uncertain','expired'))
-       ${onlyUserId ? sql`and user_id = ${onlyUserId}::uuid` : sql``}
-     order by created_at asc
+            or d.status in ('pending','uncertain','expired'))
+       ${onlyUserId ? sql`and d.user_id = ${onlyUserId}::uuid` : sql``}
+     order by d.created_at asc
      limit ${opts.maxAgeMs ? 10 : 20}`;
 
   const results: Record<string, string>[] = [];
@@ -231,6 +262,8 @@ export async function settlePending(
           title: `${d.amount_tzs.toLocaleString()} TZS added`,
           body: "Your deposit cleared and is ready to invest.",
         });
+        await announce(d, { route, amount_tzs: d.amount_tzs, token: "NTZS", asset: "TZS",
+                            amount: d.amount_tzs, status: "settled" });
         results.push({ id: d.id, outcome: `credited ${d.amount_tzs.toLocaleString()} TZS` });
         continue;
       }
@@ -262,6 +295,9 @@ export async function settlePending(
         title: `$${usdc.toFixed(2)} added`,
         body: `Your ${d.amount_tzs.toLocaleString()} TZS deposit cleared.`,
       });
+      await announce(d, { route: "ramp", amount_tzs: d.amount_tzs, token: "USDC",
+                          asset: "USDC", amount: usdc, usdc_credited: usdc,
+                          status: "settled" });
       results.push({ id: d.id, outcome: `credited ${usdc.toFixed(2)} USDC` });
     } catch (e) {
       const message = e instanceof Error ? e.message : "settlement failed";

@@ -2,6 +2,9 @@ import { partnerRoute, send, sendFail, fail, partnerCustomer } from "@/lib/partn
 import { db, migrate } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
+/* A started collection is watched for about ninety seconds after the
+   response has gone out, and that work is cut off at whatever this says. */
+export const maxDuration = 120;
 
 /**
  * Funding a partner's customer, and reading what has already landed.
@@ -235,6 +238,17 @@ export const POST = partnerRoute(
       deposit_id: result.depositId, user_id: customer.id, reference: ref,
       amount_tzs: Number(body.amount_tzs ?? body.amount), route: result.route,
     }).catch(() => {});
+
+    /*
+     * And then watch it, rather than leaving it to the ten-minute sweep.
+     *
+     * A partner who wired up `deposit.credited` as the docs tell them to had
+     * nothing looking at their collection at all: the credit waited on a cron
+     * while the customer had already approved the prompt. The response is
+     * already on its way out by the time this runs.
+     */
+    const { watchCollection } = await import("@/lib/depositWatch");
+    watchCollection(customer.id, result.depositId, result.route);
 
     return send({
       ok: true,

@@ -6,6 +6,9 @@ import { db, migrate } from "@/lib/db";
 import { requireDb, bad, boom, notConfigured } from "@/lib/apiHelpers";
 
 export const dynamic = "force-dynamic";
+/* The watcher below keeps looking for about ninety seconds after the response
+   has gone out, and is cut off at whatever this says. */
+export const maxDuration = 120;
 
 /**
  * The HTTP side of starting a deposit.
@@ -65,6 +68,18 @@ export async function POST(req: Request) {
       const { status, ...rest } = result;
       return NextResponse.json(rest, { status });
     }
+
+    /*
+     * Watched from the server as well as from the page.
+     *
+     * The wallet screen already asks us to look while it is open, which covers
+     * somebody standing and waiting. This covers everybody else: the prompt is
+     * approved on a handset, and whether the tab survived that has nothing to
+     * do with whether the money arrived.
+     */
+    const { watchCollection } = await import("@/lib/depositWatch");
+    watchCollection(user.id, result.depositId, result.route);
+
     return NextResponse.json(result);
   } catch (e) {
     return boom(e, "Could not start the deposit.");

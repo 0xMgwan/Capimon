@@ -345,6 +345,15 @@ export default function PartnerDocsPage() {
           before it answers, so it is a correct way to find out and a slow way to be told.
         </p>
         <p className="mt-3 text-[13px] leading-relaxed text-[var(--muted)]">
+          A mobile money collection works the same way and for a different reason: nothing happens
+          until your customer approves the prompt on their handset, so{" "}
+          <code className="text-[11.5px]">POST /v1/deposits</code> can only ever answer{" "}
+          <code className="text-[11.5px]">202</code>. We watch it from the moment it starts and
+          post <code className="text-[11.5px]">deposit.credited</code> the moment nTZS confirms
+          the payment, which is usually within seconds of them pressing accept. You do not have
+          to poll for it.
+        </p>
+        <p className="mt-3 text-[13px] leading-relaxed text-[var(--muted)]">
           A small deposit is credited as soon as it is mined, without waiting for the batch — the
           response carries <code className="text-[11.5px]">early: true</code> and the money is
           immediately spendable. It stays reversible for the minute or two until its block is safe,

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  tzs, qty, when, day, Pill, kycTone, statusTone, Tx, Addr,
+  tzs, qty, when, day, Pill, kycTone, statusTone, Tx, Addr, Ref,
   Table, Td, Row, Toolbar, Stat, downloadCsv, useSearch, useSort, sorted,
   type Choice,
 } from "./dse/shared";
@@ -60,6 +60,7 @@ type RegisterRow = {
 
 type Order = {
   id: string; userId: string; name: string | null; email: string; kycStatus: string;
+  reference: string;
   side: string; symbol: string; qty: number | null; price: number | null;
   amountTzs: number | null; status: string; error: string | null;
   createdAt: string; settledAt: string | null; txHash: string | null;
@@ -104,7 +105,8 @@ type File = {
                reason: string | null; reviewedBy: string | null; reviewedAt: string | null;
                filedAt: string; docMime: string; selfieMime: string }[];
   positions: { symbol: string; qty: number; bought: number; sold: number }[];
-  orders: { id: string; side: string; symbol: string; qty: number | null; price: number | null;
+  orders: { id: string; reference: string; side: string; symbol: string;
+            qty: number | null; price: number | null;
             amountTzs: number | null; status: string; createdAt: string;
             settledAt: string | null; txHash: string | null }[];
   ledger: { id: string; kind: string; asset: string; amount: number; ref: string | null;
@@ -480,7 +482,8 @@ function OrdersTab({ rows, onOpen }: { rows: Order[]; onOpen: (id: string) => vo
   const [status, setStatus] = useState("");
   const { sort, toggle } = useSort({ key: "created", dir: "desc" });
 
-  const searched = useSearch(rows, q, (r) => [r.name, r.email, r.symbol, r.id, r.txHash, r.error]);
+  const searched = useSearch(rows, q,
+    (r) => [r.name, r.email, r.symbol, r.reference, r.id, r.txHash, r.error]);
   const filtered = useMemo(() => searched.filter((r) =>
     (!sec || r.symbol === sec) && (!side || r.side === side) && (!status || r.status === status)),
     [searched, sec, side, status]);
@@ -494,11 +497,13 @@ function OrdersTab({ rows, onOpen }: { rows: Order[]; onOpen: (id: string) => vo
     <section className="mt-6">
       <h2 className="text-sm font-medium">Order blotter</h2>
       <p className="mt-1 text-[12px] text-[var(--muted)]">
-        Every order in a DSE security, settled or not, with the chain transaction where there
-        was one.
+        Every order in a DSE security, settled or not. Each carries a reference derived from
+        its own terms — security, date and a digest of the quantity, price, consideration and
+        settlement time — so a trade can be quoted elsewhere and a figure that changes after
+        you have recorded the reference no longer matches it. Click a reference to copy it.
       </p>
       <Toolbar
-        q={q} onQ={setQ} placeholder="Search shareholder, security, order id or hash…"
+        q={q} onQ={setQ} placeholder="Search shareholder, security, reference or order id…"
         shown={view.length} total={rows.length}
         filters={[
           { label: "Security", value: sec, onChange: setSec,
@@ -509,10 +514,10 @@ function OrdersTab({ rows, onOpen }: { rows: Order[]; onOpen: (id: string) => vo
             options: choices("Any status", rows.map((r) => r.status)) },
         ]}
         onCsv={() => downloadCsv("dse-orders",
-          ["placed", "shareholder", "email", "side", "security", "quantity", "price_tzs",
-           "consideration_tzs", "status", "settled", "tx_hash", "order_id"],
-          view.map((r) => [r.createdAt, r.name, r.email, r.side, r.symbol, r.qty, r.price,
-            r.amountTzs, r.status, r.settledAt, r.txHash, r.id]))}
+          ["placed", "reference", "shareholder", "email", "side", "security", "quantity",
+           "price_tzs", "consideration_tzs", "status", "settled", "tx_hash", "order_id"],
+          view.map((r) => [r.createdAt, r.reference, r.name, r.email, r.side, r.symbol, r.qty,
+            r.price, r.amountTzs, r.status, r.settledAt, r.txHash, r.id]))}
       />
       <Table sort={sort} onSort={toggle} empty="No orders match that."
         cols={[
@@ -521,7 +526,7 @@ function OrdersTab({ rows, onOpen }: { rows: Order[]; onOpen: (id: string) => vo
           { key: "qty", label: "Quantity", align: "right" },
           { key: "price", label: "Price", align: "right" },
           { key: "amount", label: "Consideration", align: "right" },
-          { key: "status", label: "Status" }, { label: "Transaction" },
+          { key: "status", label: "Status" }, { label: "Reference" },
         ]}>
         {view.map((t) => (
           <Row key={t.id}>
@@ -549,7 +554,13 @@ function OrdersTab({ rows, onOpen }: { rows: Order[]; onOpen: (id: string) => vo
                 </div>
               )}
             </Td>
-            <Td><Tx hash={t.txHash} /></Td>
+            <Td>
+              <Ref value={t.reference} />
+              {/* Shown underneath when there is one, rather than instead: a
+                  DSE trade settles on CAPX's book, so the reference is the
+                  record and a chain transaction, where one exists, is extra. */}
+              {t.txHash && <div className="mt-1"><Tx hash={t.txHash} /></div>}
+            </Td>
           </Row>
         ))}
       </Table>
@@ -1050,7 +1061,7 @@ function CustomerFile({ file, busy, token, onClose }: {
             <Table cols={[
               { label: "When" }, { label: "Side" }, { label: "Security" },
               { label: "Quantity", align: "right" }, { label: "Price", align: "right" },
-              { label: "TZS", align: "right" }, { label: "Status" }, { label: "Transaction" },
+              { label: "TZS", align: "right" }, { label: "Status" }, { label: "Reference" },
             ]} empty="None.">
               {file.orders.map((t) => (
                 <Row key={t.id}>
@@ -1061,7 +1072,10 @@ function CustomerFile({ file, busy, token, onClose }: {
                   <Td align="right" className="tnum">{t.price === null ? "—" : tzs(t.price)}</Td>
                   <Td align="right" className="tnum">{t.amountTzs === null ? "—" : tzs(t.amountTzs)}</Td>
                   <Td><Pill tone={statusTone(t.status)}>{t.status}</Pill></Td>
-                  <Td><Tx hash={t.txHash} /></Td>
+                  <Td>
+                    <Ref value={t.reference} />
+                    {t.txHash && <div className="mt-1"><Tx hash={t.txHash} /></div>}
+                  </Td>
                 </Row>
               ))}
             </Table>

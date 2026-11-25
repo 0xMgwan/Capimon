@@ -81,6 +81,32 @@ export function Addr({ address, chainId, kind = "address", label }: {
   );
 }
 
+/**
+ * A trade's contract-note reference.
+ *
+ * Styled like a hash because it sits where a hash would, and deliberately
+ * not shaped like one: `CRDB-261124-7F3A9C2E` could not be pasted into a
+ * block explorer by mistake, which a sixty-six character hex string that
+ * leads nowhere invites. Click copies it, because the whole use of a
+ * reference is being quoted somewhere else.
+ */
+export function Ref({ value }: { value: string | null | undefined }) {
+  const [copied, setCopied] = useState(false);
+  if (!value) return <span className="text-[var(--muted)]">—</span>;
+  return (
+    <button type="button" title="Copy this reference"
+      onClick={() => {
+        navigator.clipboard?.writeText(value)
+          .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1400); })
+          .catch(() => {});
+      }}
+      className="tnum whitespace-nowrap text-left text-[11px] underline decoration-dotted underline-offset-2 hover:decoration-solid">
+      {value}
+      {copied && <span className="ml-1 text-[var(--color-up)]">copied</span>}
+    </button>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 
 export type SortDir = "asc" | "desc";

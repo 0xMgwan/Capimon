@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { isDeskPath } from "@/lib/desks";
 import { motion } from "motion/react";
 import { useAccount } from "wagmi";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
@@ -146,6 +147,9 @@ export function MobileTabs() {
   }, [isConnected, account]);
 
   if (!isConnected && !account) return null;
+  /* A desk has its own navigation; a customer tab bar across the bottom of it
+     is a row of links out of the work somebody is in the middle of. */
+  if (isDeskPath(path)) return null;
 
   /*
    * Home is wherever your money is.

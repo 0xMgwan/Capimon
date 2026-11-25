@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { isDeskPath } from "@/lib/desks";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { createPortal } from "react-dom";
@@ -43,7 +44,7 @@ export function Nav() {
    * and they make an internal tool look like a marketing page. The desks keep
    * the wordmark and lose the rest.
    */
-  const isDesk = path?.startsWith("/admin") ?? false;
+  const isDesk = isDeskPath(path);
   const navLinks = isDesk ? [] : links;
   // The menu belongs to the route it was opened on, so navigating closes it.
   const [menuAt, setMenuAt] = useState<string | null>(null);

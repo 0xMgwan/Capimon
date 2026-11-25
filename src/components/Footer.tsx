@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { usePathname } from "next/navigation";
+import { isDeskPath } from "@/lib/desks";
 import { Lockup } from "./Logo";
 import { useT } from "@/lib/i18n";
 import { useCapimonAccount } from "@/lib/useCapimonAccount";
@@ -56,7 +57,7 @@ export function Footer() {
      customer links and a marketing disclosure under a custody ledger is
      furniture from somewhere else. */
   const path = usePathname();
-  if (path?.startsWith("/admin")) return null;
+  if (isDeskPath(path)) return null;
 
   /*
    * Signed in, the footer is mostly furniture.

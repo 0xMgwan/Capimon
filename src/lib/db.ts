@@ -796,6 +796,38 @@ export async function migrate() {
           detail     jsonb not null default '{}'::jsonb
         )`;
 
+      /*
+       * Who looked at what, on the oversight portal.
+       *
+       * DSE reads the Dar es Salaam book in full, identity documents
+       * included, and a party that can read a customer's NIDA and their
+       * selfie should leave a record when they do. Not as a deterrent — the
+       * access is agreed and legitimate — but because the customer whose
+       * document it is may one day ask who has seen it, and "we do not keep
+       * that" is not an answer anybody should have to give.
+       *
+       * Written for every read of a named customer and every identity image,
+       * not for the aggregate pages, since recording that somebody opened a
+       * list of totals tells nobody anything and would bury the rows that
+       * matter. Append-only by use: nothing updates or deletes these.
+       */
+      await sql`
+        create table if not exists capx.access_log (
+          id         bigserial primary key,
+          actor      text not null,          -- DSE | CAPX | FIMCO
+          action     text not null,          -- customer.view | kyc.document | …
+          subject    text,                   -- user id, security, document id
+          detail     jsonb not null default '{}'::jsonb,
+          ip         text,
+          created_at timestamptz not null default now()
+        )`;
+      await sql`
+        create index if not exists access_log_at
+          on capx.access_log (created_at desc)`;
+      await sql`
+        create index if not exists access_log_subject
+          on capx.access_log (subject, created_at desc)`;
+
       await sql`
         create table if not exists capx.ops_contacts (
           /* Which party these addresses belong to: "fimco" today. */

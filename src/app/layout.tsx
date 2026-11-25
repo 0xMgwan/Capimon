@@ -7,6 +7,7 @@ import { MarqueeKeeper } from "@/components/MarqueeKeeper";
 import { Footer } from "@/components/Footer";
 import { TickerTape } from "@/components/TickerTape";
 import { DseTape } from "@/components/DseTape";
+import { SiteOnly } from "@/components/SiteOnly";
 import { MobileTabs } from "@/components/MobileTabs";
 import { TradeFeed } from "@/components/TradeFeed";
 import { SafeArea } from "@/components/SafeArea";
@@ -118,8 +119,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {/* The full DSE board, from tablets up. On a phone two tapes ate the
                 top of the screen; the main ticker already leads with the
                 listings CAPX trades. */}
-            <div className="hidden sm:block"><DseTape /></div>
-            <TickerTape />
+            <SiteOnly>
+              <div className="hidden sm:block"><DseTape /></div>
+              <TickerTape />
+            </SiteOnly>
             <Nav />
           </div>
           {/*
@@ -144,9 +147,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               * the top of a phone is a third row of chrome, and this is
               * weather rather than navigation.
               */}
-            <div className="safe-x mx-auto w-full max-w-[1400px] px-4 pt-2.5 sm:px-8">
-              <TradeFeed />
-            </div>
+            <SiteOnly>
+              <div className="safe-x mx-auto w-full max-w-[1400px] px-4 pt-2.5 sm:px-8">
+                <TradeFeed />
+              </div>
+            </SiteOnly>
             <main className="safe-x">{children}</main>
             <Footer />
           </div>

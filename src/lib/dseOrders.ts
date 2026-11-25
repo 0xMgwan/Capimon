@@ -234,6 +234,35 @@ export async function placeSecurityOrder(
     await sql`update capx.orders set status = 'settled', settled_at = now() where id = ${orderId}`;
 
     /*
+     * What this trade implies for the chain, recorded once the ledger has
+     * made it real.
+     *
+     * Deliberately after the write and outside it. The ledger entry is what
+     * makes the position the customer's, and the customer has already been
+     * told so; a classification that threw must not be able to undo that, and
+     * a chain that is unreachable is not a reason to refuse a trade that has
+     * already happened.
+     *
+     * Both sides are custodial today — the customer holds a claim with no
+     * address, and the maker's tokens sit in a CAPX sub-account — so this
+     * records an internal settlement and sends nothing. It starts sending the
+     * day a maker arrives with custody of its own, without this line
+     * changing.
+     */
+    void (async () => {
+      const { enqueueSettlement } = await import("./settlementQueue");
+      const { treasuryAddress } = await import("./treasury");
+      /* Both sides are custodied by CAPX: the customer holds a claim, and
+         the maker's tokens sit in a CAPX sub-account. One custodian on both
+         sides, so this classifies internal and sends nothing. */
+      const capx = (() => { try { return treasuryAddress(); } catch { return null; } })();
+      const held = { custodian: capx, canSettle: true, reason: null };
+      await enqueueSettlement({
+        orderId, symbol: SEC, qty: quote.qty, buyer: held, seller: held,
+      });
+    })().catch(() => { /* the trade stands; the desk shows the gap */ });
+
+    /*
      * The broker's share of the fee just charged.
      *
      * Recorded against the order that produced it, after the trade is

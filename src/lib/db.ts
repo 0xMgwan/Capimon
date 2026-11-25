@@ -744,6 +744,44 @@ export async function migrate() {
 
       await sql`
         /*
+         * The chain leg of a trade the ledger has already settled.
+         *
+         * One row per settled order, including the ones that will never be
+         * sent: a trade between two custodial parties moves no tokens
+         * between custodians, so there is nothing to transact, and recording
+         * that explicitly is the difference between an answer and a gap.
+         *
+         * order_id is unique, which is the whole idempotency story — a
+         * settlement is a transfer of real tokens and a second one for the
+         * same trade would be a loss, so the database refuses it rather than
+         * any code having to remember to.
+         */
+        create table if not exists capx.settlements (
+          order_id       uuid primary key references capx.orders(id) on delete cascade,
+          symbol         text not null,
+          qty            numeric(38,18) not null,
+          /* internal — same custody both sides; external — tokens must move. */
+          kind           text not null,
+          /* internal | pending | sent | confirmed | failed | blocked */
+          status         text not null,
+          buyer_address  text,
+          seller_address text,
+          tx_hash        text,
+          attempts       integer not null default 0,
+          /* When a failed send may be tried again. Null means now. */
+          next_attempt_at timestamptz,
+          reason         text,
+          created_at     timestamptz not null default now(),
+          sent_at        timestamptz,
+          confirmed_at   timestamptz
+        )`;
+
+      await sql`
+        create index if not exists settlements_due on capx.settlements (next_attempt_at)
+         where status = 'pending'`;
+
+      await sql`
+        /*
          * A payout waiting for the shillings to arrive.
          *
          * Refusing a withdrawal is honest and unpleasant: the customer did

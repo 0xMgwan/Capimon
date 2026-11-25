@@ -36,15 +36,32 @@ import "server-only";
  * nothing is worse than an absent one, which at least refuses.
  */
 
+/**
+ * Four credentials, not two.
+ *
+ * The exchange's environment carries `applicationId` and `accessSecret`
+ * alongside `stakeholderUsername` and `stakeholderPassword` — an application
+ * identity and a user identity, which is a different shape from the client
+ * id and secret this file first assumed. The names below are theirs, so that
+ * whoever fills them in is matching labels rather than translating.
+ *
+ * How the four are presented on the token request — which ride in the body,
+ * which in headers, and at what path — is not something to infer from the
+ * variable names a second time. `tokenRequest` below is the one piece still
+ * waiting on their collection, and it says so rather than guessing.
+ */
 const BASE_URL = process.env.DSE_CSD_BASE_URL ?? "";
-const CLIENT_ID = process.env.DSE_CSD_CLIENT_ID ?? "";
-const CLIENT_SECRET = process.env.DSE_CSD_CLIENT_SECRET ?? "";
+const APPLICATION_ID = process.env.DSE_CSD_APPLICATION_ID ?? "";
+const ACCESS_SECRET = process.env.DSE_CSD_ACCESS_SECRET ?? "";
+const STAKEHOLDER_USERNAME = process.env.DSE_CSD_STAKEHOLDER_USERNAME ?? "";
+const STAKEHOLDER_PASSWORD = process.env.DSE_CSD_STAKEHOLDER_PASSWORD ?? "";
 
 /** Our own BPID: the party receiving a pledge. */
 export const DSE_BPID = process.env.DSE_CSD_BPID ?? "";
 
 export const dseCustodyConfigured =
-  BASE_URL.length > 0 && CLIENT_ID.length > 0 && CLIENT_SECRET.length > 0;
+  BASE_URL.length > 0 && APPLICATION_ID.length > 0 && ACCESS_SECRET.length > 0
+  && STAKEHOLDER_USERNAME.length > 0 && STAKEHOLDER_PASSWORD.length > 0;
 
 export class DseCustodyError extends Error {
   constructor(
@@ -138,11 +155,34 @@ let inFlight: Promise<Token> | null = null;
 /** Renew this far before expiry, so a long request cannot straddle it. */
 const RENEW_MARGIN_MS = 10 * 60_000;
 
+/**
+ * The one call still taken on trust, and the only one that should be.
+ *
+ * Everything else in this file is built from what the exchange wrote down:
+ * the endpoint paths, the field mapping, the result codes, the meaning of a
+ * 2000. This is not — the path and the body below are inferred from four
+ * variable names, and an earlier inference from two of them was already
+ * wrong. It is isolated here so that correcting it is one function rather
+ * than a hunt, and `TOKEN_PATH` is separate so a different path costs a line.
+ *
+ * What is needed to close it is the auth request from their own collection:
+ * method, path, which of the four go in the body and which in headers. Until
+ * then this will fail against the real service, which is the right way for an
+ * unverified guess to behave — loudly, at the first call, rather than by
+ * quietly authenticating as something unintended.
+ */
+const TOKEN_PATH = process.env.DSE_CSD_TOKEN_PATH ?? "/stakeholder/api/v1/auth/token";
+
 async function requestToken(): Promise<Token> {
-  const res = await fetch(`${BASE_URL}/stakeholder/api/v1/auth/token`, {
+  const res = await fetch(`${BASE_URL}${TOKEN_PATH}`, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify({ clientId: CLIENT_ID, clientSecret: CLIENT_SECRET }),
+    body: JSON.stringify({
+      applicationId: APPLICATION_ID,
+      accessSecret: ACCESS_SECRET,
+      stakeholderUsername: STAKEHOLDER_USERNAME,
+      stakeholderPassword: STAKEHOLDER_PASSWORD,
+    }),
     cache: "no-store",
     signal: AbortSignal.timeout(20_000),
   });

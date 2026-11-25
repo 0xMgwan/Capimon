@@ -273,7 +273,18 @@ export default function PartnerDocsPage() {
           Keys come in two modes and the mode is in the key itself, so a live key pasted into a
           test config is obvious on sight. A <code className="text-[11px]">cpx_test_</code> key
           reads everything and creates customers; it cannot move money. Only the hash of a key is
-          stored, so a lost key is rotated, never recovered.
+          stored, so a lost key is rotated, never recovered — it is also mailed to you when it is
+          issued, which is the copy to keep.
+        </p>
+        <p className="mt-3 text-[12.5px] leading-relaxed text-[var(--muted)]">
+          <span className="text-[var(--fg)]">Reading costs nothing and waits for nobody. </span>
+          A test key is issued the moment you ask for one, on a name and an email, and every
+          endpoint on this page that only reads — markets, history with volume, backing,
+          attestation, fees and quotes — answers it in full against the same data CAPX draws its
+          own charts from. There is no sandbox and no sample set, because a second copy of the
+          numbers would be a second thing to be wrong. Approval is what lets you move money for
+          real customers; it is not what lets you look.{" "}
+          <a href="/partners#apply" className="underline underline-offset-2">Get a key</a>.
         </p>
       </section>
 
@@ -354,8 +365,11 @@ export default function PartnerDocsPage() {
       ))}
 
       <p className="mt-14 border-t hairline pt-6 text-xs leading-relaxed text-[var(--muted)]">
-        Questions, or ready for a live key?{" "}
-        <a href="/partners#apply" className="underline underline-offset-2">Apply</a>, or open your{" "}
+        Want to try it? A{" "}
+        <a href="/partners#apply" className="underline underline-offset-2">test key</a> takes two
+        fields and reads everything here. Ready to move money for real customers?{" "}
+        <a href="/partners#apply" className="underline underline-offset-2">Apply</a> and a person
+        reads it. Already have a key — open your{" "}
         <a href="/partners/dashboard" className="underline underline-offset-2">dashboard</a>.
       </p>
     </div>

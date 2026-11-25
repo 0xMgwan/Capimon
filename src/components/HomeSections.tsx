@@ -690,3 +690,74 @@ export function ClosingCTA() {
     </section>
   );
 }
+
+/* ------------------------------------------------------------------ */
+
+const DEV_CURL = `curl -H "Authorization: Bearer $KEY" \\
+  ".../v1/markets/CRDB/history?days=90"
+
+{ "candles": [ { "t": 1764028800, "open": 420,
+    "high": 425, "low": 418, "close": 425,
+    "volume": 18400 }, … ],
+  "venue": "DSE", "currency": "TZS",
+  "source": "dse" }`;
+
+/**
+ * The API, on the page people actually land on.
+ *
+ * It existed only at /partners, which meant the one audience who would have
+ * recognised it on sight — somebody building something that needs Dar es
+ * Salaam prices — had to already know to go looking. The band leads with the
+ * part that costs them nothing, because the first question a developer has is
+ * not what it costs but whether the data is any good, and the answer to that
+ * is a response body rather than a sentence.
+ */
+export function DevelopersBand() {
+  const { t } = useT();
+  return (
+    <section className="border-y hairline">
+      <div className="mx-auto grid max-w-[1400px] gap-8 px-5 py-12 sm:px-8 sm:py-16 lg:grid-cols-[1fr_minmax(340px,440px)] lg:items-center lg:gap-16">
+        <div className="max-w-xl">
+          <div className="eyebrow">{t("Developers")}</div>
+          <h2 className="display mt-3 text-[clamp(1.5rem,4vw,2.6rem)]">
+            {t("The whole market, behind one key.")}
+          </h2>
+          <p className="mt-3 text-[17px] leading-relaxed text-[var(--muted)]">
+            {t("Dar es Salaam and US prices, candles with volume, what backs each security and what CAPX holds against what it owes — one REST API, the same data this page is drawn from. Build the shares into your own product, or just read the feed.")}
+          </p>
+          <p className="mt-3 text-[14px] leading-relaxed text-[var(--muted)]">
+            {t("Reading it is free and needs nobody's approval: a name and an email, and the key is in your inbox. Approval is for moving money.")}
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link href="/partners#apply"
+              className="group inline-flex items-center gap-2 rounded-full bg-[var(--fg)] px-6 py-3 text-sm font-medium text-[var(--bg)] transition-transform active:scale-95">
+              {t("Get a free test key")} <Arrow />
+            </Link>
+            <Link href="/partners/docs"
+              className="inline-flex items-center gap-2 rounded-full border hairline px-6 py-3 text-sm font-medium transition-colors hover:surface">
+              {t("API documentation")}
+            </Link>
+          </div>
+        </div>
+
+        {/* A response body rather than a feature list: it answers "is the
+            data real" in the only way that is checkable. */}
+        <div className="rounded-3xl border hairline p-5 sm:p-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="eyebrow">{t("Price history")}</div>
+            <span className="inline-flex items-center gap-2 rounded-full border hairline px-2.5 py-1 text-[11px]">
+              <LiveBars />
+              {t("live")}
+            </span>
+          </div>
+          <pre className="mt-4 overflow-x-auto text-[11.5px] leading-relaxed">
+{DEV_CURL}
+          </pre>
+          <p className="mt-4 text-[11px] leading-relaxed text-[var(--muted)]">
+            {t("Both boards in one list, each labelled with the currency it trades in. A DSE series is in shillings, one point per session the exchange printed; a US series is in dollars and total-return, so a split leaves no step in the line.")}
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}

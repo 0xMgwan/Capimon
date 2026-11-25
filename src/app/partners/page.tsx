@@ -55,9 +55,9 @@ export default function PartnersPage() {
         <h2 className="text-lg font-medium">How it goes</h2>
         <ol className="mt-4 grid gap-4 sm:grid-cols-4">
           {[
-            ["Apply", "Takes a few minutes. You get a test key straight away and can start building."],
-            ["Build", "Read markets, create customers, file their verification — all on the test key."],
-            ["Approval", "A person reads your application. Your live key arrives with it."],
+            ["Take a key", "A name and an email. The test key is issued immediately and mailed to you — no approval, no card."],
+            ["Read everything", "Prices, charts, volumes, backing, attestation, fees and quotes. Real data, not a sandbox. Create customers and file their verification on the same key."],
+            ["Apply, when it is worth it", "Only money needs approving. Tell us what you are building, a person reads it, and your live key arrives with it."],
             ["Go live", "Swap the key. Nothing else in your integration changes."],
           ].map(([h, b], i) => (
             <li key={h}>

@@ -2,7 +2,7 @@ import { Hero } from "@/components/Hero";
 import { HomeGate } from "@/components/HomeGate";
 import { SandboxNotice } from "@/components/SandboxNotice";
 import {
-  StackStrip, DseSection, ProductsSection, AutoInvestBand, LiveBoard, StatsBand, BeliefSection, PillarsSection, ClosingCTA,
+  StackStrip, DseSection, ProductsSection, AutoInvestBand, LiveBoard, StatsBand, BeliefSection, PillarsSection, DevelopersBand, ClosingCTA,
 } from "@/components/HomeSections";
 
 export default function Home() {
@@ -39,6 +39,15 @@ export default function Home() {
         <BeliefSection />
         <PillarsSection />
       </div>
+
+      {/*
+       * Shown on a phone as well as a desktop, unlike the four narrative
+       * sections above it. Somebody who would use the API is as likely to
+       * find CAPX on a phone as anywhere else, and until now the only mention
+       * of it on this site was a footer link to /partners — which the one
+       * audience who would recognise it had to already know to look for.
+       */}
+      <DevelopersBand />
 
       <ClosingCTA />
     </HomeGate>

@@ -241,8 +241,7 @@ export function DseOversight() {
 
       <p className="mt-3 max-w-3xl text-[13px] leading-relaxed text-[var(--muted)]">
         Everything CAPX holds in Dar es Salaam listings: who owns what, every order behind it,
-        what backs each token, and the money in and out. US-listed shares and dollar balances
-        are a separate book and never reach this page.
+        what backs each token, and the money in and out.
       </p>
 
       <div className="mt-6 flex flex-wrap gap-1.5">
@@ -1100,8 +1099,8 @@ function CustomerFile({ file, busy, token, onClose }: {
 
             <h3 className="mt-6 text-sm font-medium">Ledger</h3>
             <p className="mt-1 text-[11.5px] leading-relaxed text-[var(--muted)]">
-              The entries every other figure in this file is derived from. Shares and shillings
-              only; dollar entries belong to the other board and are not sent here.
+              The entries every other figure in this file is derived from, in shares and
+              shillings.
             </p>
             <Table cols={[
               { label: "When" }, { label: "Kind" }, { label: "Asset" },

@@ -667,3 +667,108 @@ export async function releaseInventory(): Promise<{ releasedTzs: number; release
    */
   return releases.length ? { releasedTzs, releases } : null;
 }
+
+
+/**
+ * Whether the facility is big enough for the book it stands behind.
+ *
+ * Every limit above is one a provider agreed to, and nothing compared any of
+ * them to what they would actually be asked for. A committed size is a number
+ * somebody typed during a conversation about the book as it was; the book
+ * grows, and the number does not. The failure mode is quiet and total: the
+ * desk shows a healthy capacity, every provider is inside their terms, and
+ * the facility is a third of what one bad week needs.
+ *
+ * ## Why the requirement is the shortfall and not the redemption value
+ *
+ * The tempting figure is what a full redemption would pay out. It is wrong,
+ * and by a lot. Follow one position: a customer deposits 10,000, buys shares
+ * with it, and the price triples.
+ *
+ *   deposit    float +10,000, they are owed 10,000 in cash — square
+ *   buy        the cash claim becomes a share claim; a DSE order moves no
+ *              money, so the float still holds the 10,000 and now owes none
+ *              of it. Their 10,000 is free.
+ *   price 3x   they hold shares worth 30,000. Still no cash is owed.
+ *   sell       the ledger owes them 30,000 and the float holds 10,000.
+ *
+ * The gap that opens is 20,000, not 30,000, because the shillings they paid
+ * in never left. So the facility has to prefund the gain — the part nobody
+ * paid in — rather than the position. Sized against deposits it is short by
+ * the whole appreciation; sized against the redemption value it is a third
+ * too large and the provider's capital is idle.
+ *
+ * `requiredTzs` is therefore the redemption shortfall, which is that gap
+ * measured on the real book rather than on the idealised one: it carries any
+ * cash claims the float is already behind on, which the clean arithmetic
+ * above assumes away. `unrealisedTzs` comes with it because the structural
+ * part of the requirement and the incidental part want different answers —
+ * one is financed, the other is fixed.
+ *
+ * ## Why committed and drawable are both reported
+ *
+ * A commitment that is not funded clears nothing. absorbClaims can only spend
+ * shillings that are already in the omnibus, so an agreed 50,000,000 behind a
+ * funded 4,000,000 is a 4,000,000 facility with a letter attached. The two
+ * numbers failing for different reasons need different fixes — one is a call
+ * to the provider, the other is a renegotiation — so collapsing them into a
+ * single "capacity" would hide which one to make.
+ */
+export type FacilitySizing = {
+  /** Shillings a full redemption would ask for that the float does not hold. */
+  requiredTzs: number;
+  /** The part of it that is gain nobody paid in. Negative when below cost. */
+  unrealisedTzs: number;
+  /** What active providers have agreed to, where they have agreed a figure. */
+  committedTzs: number;
+  /** Active providers with no agreed ceiling, whose size cannot be summed. */
+  uncommitted: string[];
+  /** What could actually be drawn right now, across all providers. */
+  drawableTzs: number;
+  /** drawable ÷ required. Null when nothing is required. */
+  coverPct: number | null;
+  /** Required beyond what is funded: the call to make today. */
+  fundingGapTzs: number;
+  /** Required beyond what is even agreed: the terms to renegotiate. */
+  committedGapTzs: number;
+};
+
+export function facilitySizingFrom(args: {
+  requiredTzs: number;
+  unrealisedTzs: number;
+  providers: readonly {
+    name: string; active: boolean;
+    committedTzs: number | null; availableTzs: number;
+  }[];
+}): FacilitySizing {
+  const required = Math.max(0, args.requiredTzs);
+  const live = args.providers.filter((p) => p.active);
+
+  const committedTzs = live.reduce((t, p) => t + (p.committedTzs ?? 0), 0);
+  const uncommitted = live.filter((p) => p.committedTzs === null).map((p) => p.name);
+  const drawableTzs = live.reduce((t, p) => t + p.availableTzs, 0);
+
+  /*
+   * A provider with no ceiling is not unlimited cover.
+   *
+   * Their committed figure is null because no size was agreed, so they add
+   * nothing to the agreed total — but with one of them present the total is
+   * not the facility's real commitment either. Reporting the shortfall
+   * against it would read as a renegotiation that is not needed, so it is
+   * suppressed and the names are handed over instead. What they can actually
+   * do today still shows up in drawable, where it is a fact rather than an
+   * assumption.
+   */
+  const committedGapTzs = uncommitted.length ? 0 : Math.max(0, required - committedTzs);
+
+  return {
+    requiredTzs: required,
+    unrealisedTzs: args.unrealisedTzs,
+    committedTzs,
+    uncommitted,
+    drawableTzs,
+    coverPct: required > 0 ? (drawableTzs / required) * 100 : null,
+    fundingGapTzs: Math.max(0, required - drawableTzs),
+    committedGapTzs,
+  };
+}

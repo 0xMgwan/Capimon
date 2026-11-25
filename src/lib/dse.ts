@@ -238,3 +238,55 @@ export async function dseHistory(symbol: string, days = 180): Promise<DseCandle[
     return [];
   }
 }
+
+export type DseSession = {
+  /** The session this row belongs to, as an ISO date. */
+  day: string;
+  /** Shares that changed hands. */
+  volume: number;
+  /** Shillings that changed hands. */
+  turnoverTzs: number;
+  close: number;
+};
+
+/**
+ * How much of a security actually traded, session by session.
+ *
+ * The same endpoint the history chart reads, keeping the two columns the
+ * chart throws away. Volume is the one that answers "could this position be
+ * sold", and it is the only place the exchange says so.
+ *
+ * A row comes back for every session in the window, including the ones where
+ * the security did not trade: the previous close is carried forward and the
+ * volume is zero. Checked against the live feed, where all twenty-six listed
+ * equities returned a row per session over ninety days and four of them —
+ * EABL, USL, SWALA, YETU — were zero volume throughout.
+ *
+ * So there is deliberately no volume filter here, unlike dseHistory above,
+ * which drops rows without a closing price. A zero-volume session is not a
+ * blank row to tidy away; it is the exchange stating that nobody traded, and
+ * it is the single strongest piece of evidence the DSE publishes about
+ * whether a position could be sold. Filtering it out would measure the
+ * liquidity of the days that had some.
+ */
+export async function dseSessions(symbol: string, days = 90): Promise<DseSession[]> {
+  try {
+    const d = await dseFetch<{ success: boolean; data: Row[] }>(
+      `/api/get/market/prices/for/range/duration?security_code=${
+        encodeURIComponent(symbol.toUpperCase())}&days=${days}&class=EQUITY`,
+    );
+    return (d.data ?? [])
+      .map((r) => ({
+        day: String(r.trade_date).slice(0, 10),
+        volume: Number(r.volume ?? 0),
+        turnoverTzs: Number(r.turnover ?? 0),
+        close: Number(r.closing_price ?? 0),
+      }))
+      .filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s.day))
+      .sort((a, b) => a.day.localeCompare(b.day));
+  } catch {
+    /* Unreadable is not empty. An empty array would read as "nothing trades",
+       which is the most alarming possible rendering of an outage. */
+    return [];
+  }
+}

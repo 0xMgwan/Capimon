@@ -183,7 +183,8 @@ export async function GET(req: Request) {
     }
 
     // Reported separately: an unreachable dependency is not a shortfall.
-    const [solvency, ntzs, onchain, caps, route, feePos, sweeps, redemption, flow] = await Promise.all([
+    const [solvency, ntzs, onchain, caps, route, feePos, sweeps, redemption, flow,
+           dseDepth] = await Promise.all([
       treasuryConfigured ? checkSolvency().catch(() => null) : null,
       ntzsConfigured ? ntzsTreasury().catch(() => null) : null,
       treasuryConfigured ? treasuryHoldings({ prices: true }).catch(() => null) : null,
@@ -198,6 +199,15 @@ export async function GET(req: Request) {
       /* What actually moves the float, day by day — the number that sizes a
          facility, as distinct from the stress figure above it. */
       import("@/lib/netFlow").then((m) => m.netFlow(30)).catch(() => null),
+      /*
+       * How long selling the underlying would actually take.
+       *
+       * Every figure above is measured against the oracle mark, and this is
+       * the one that says whether that mark is a price the book could be sold
+       * at. depth.ts asks the US market the same question by quoting it; the
+       * DSE has nothing to quote, so this reads what it published.
+       */
+      import("@/lib/dseDepth").then((m) => m.dseLiquidity()).catch(() => null),
     ]);
 
     /*
@@ -217,7 +227,8 @@ export async function GET(req: Request) {
       import("@/lib/liquidity").then(async (m) => {
         const list = await m.providers();
         const rows = await Promise.all(list.map(async (p) => ({
-          name: p.name, active: p.active, ...(await m.capacityOf(p)),
+          name: p.name, active: p.active, committedTzs: p.committedTzs,
+          ...(await m.capacityOf(p)),
         })));
         return {
           providers: rows,
@@ -225,6 +236,25 @@ export async function GET(req: Request) {
         };
       }).catch(() => null),
     ]);
+
+    /*
+     * Whether the facility is sized for the book, as distinct from whether
+     * each provider is inside their own terms.
+     *
+     * Composed here from two figures already fetched rather than read again:
+     * capacityOf is several ledger and oracle reads per provider, and the
+     * redemption exposure is a pass over the whole book. The arithmetic is
+     * the part worth having in one place, so it is a pure function in
+     * lib/liquidity.ts and this is its only caller.
+     */
+    const { facilitySizingFrom } = await import("@/lib/liquidity");
+    const sizing = redemption && facility
+      ? facilitySizingFrom({
+          requiredTzs: redemption.shortfallTzs,
+          unrealisedTzs: redemption.unrealisedTzs,
+          providers: facility.providers,
+        })
+      : null;
     const fees = { position: feePos, sweeps };
 
     /*
@@ -260,6 +290,8 @@ export async function GET(req: Request) {
                (select count(*)::int from capx.deposits where status = 'settled') as deposits`,
       redemption,
       flow,
+      dseDepth,
+      sizing,
       queue: queue[0]
         ? { waiting: queue[0].waiting, owedTzs: Number(queue[0].owed),
             oldest: queue[0].oldest, failed: queue[0].failed }

@@ -67,9 +67,31 @@ type Admin = {
   } | null;
   queue: { waiting: number; owedTzs: number; oldest: string | null; failed: number } | null;
   facility: {
-    providers: { name: string; active: boolean; availableTzs: number; cashTzs: number;
+    providers: { name: string; active: boolean; committedTzs: number | null;
+                 availableTzs: number; cashTzs: number;
                  inventoryTzs: number; drawnTodayTzs: number; reason: string | null }[];
     availableTzs: number;
+  } | null;
+  /** Whether the facility is sized for the book, not just inside its terms. */
+  sizing: {
+    requiredTzs: number; unrealisedTzs: number; committedTzs: number;
+    uncommitted: string[]; drawableTzs: number; coverPct: number | null;
+    fundingGapTzs: number; committedGapTzs: number;
+  } | null;
+  /** How long selling the underlying on the exchange would take. */
+  dseDepth: {
+    windowDays: number; participationPct: number; sessions: number;
+    calendarFrom: "benchmark" | "self";
+    securities: { symbol: string; sessions: number; tradedSessions: number; tradedPct: number;
+                  medianVolume: number; meanVolume: number; lumpiness: number | null;
+                  sellablePerSession: number; sellablePerSessionTzs: number;
+                  clientHeld: number; markTzs: number; positionTzs: number;
+                  /* Null where the server said Infinity: nothing trades, so
+                     this measurement cannot put a number on it. */
+                  daysToCover: number | null;
+                  verdict: "clear" | "days" | "weeks" | "illiquid" }[];
+    worstDaysToCover: number | null; worst: string | null; perSessionTzs: number;
+    unpriced: string[];
   } | null;
   flow: {
     days: { day: string; depositsTzs: number; withdrawalsTzs: number; netCashTzs: number;
@@ -869,6 +891,108 @@ export function AdminPanel() {
               ))}
             </div>
           )}
+
+          {/*
+            * Whether the facility is the right size, which the rows above do
+            * not answer.
+            *
+            * Each one says a provider is inside their own terms. None of them
+            * says those terms are big enough for the book they stand behind,
+            * and a committed size is a figure agreed when the book was
+            * smaller. Appreciation is what breaks it: a customer's gain is
+            * money nobody paid in, so a book that has tripled needs a
+            * facility sized to the gain rather than to the deposits — and
+            * every provider can be comfortably inside their limits while the
+            * facility covers a third of what one bad week asks for.
+            */}
+          {data.sizing && data.sizing.requiredTzs > 0 && (
+            <div className="mt-4 rounded-xl surface p-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-3">
+                <div className="eyebrow">Sized for the book</div>
+                <div className="tnum text-[12px] text-[var(--muted)]">
+                  {data.sizing.coverPct === null ? "—" : `${Math.round(data.sizing.coverPct)}% covered`}
+                </div>
+              </div>
+
+              {/* Required, agreed, funded — three bars against the largest of
+                  them, so a commitment that outruns its funding is visible as
+                  a gap rather than inferred from two numbers. */}
+              {(() => {
+                const s = data.sizing!;
+                const peak = Math.max(s.requiredTzs, s.committedTzs, s.drawableTzs, 1);
+                const bars: { label: string; v: number; tone: string }[] = [
+                  { label: "needed if everyone sold", v: s.requiredTzs, tone: "bg-[#b45309]" },
+                  { label: "agreed with providers", v: s.committedTzs,
+                    tone: "bg-[var(--muted)] opacity-50" },
+                  { label: "funded and drawable now", v: s.drawableTzs,
+                    tone: s.fundingGapTzs > 0 ? "bg-[var(--color-down)]" : "bg-[var(--color-up)]" },
+                ];
+                return (
+                  <div className="mt-3 grid gap-2">
+                    {bars.map((b) => (
+                      <div key={b.label} className="flex items-center gap-3 text-[12px]">
+                        <span className="w-44 shrink-0 text-[var(--muted)]">{b.label}</span>
+                        <span className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--fg)]/8">
+                          <span className={`block h-full rounded-full ${b.tone}`}
+                                style={{ width: `${Math.max(0, Math.min(100, (b.v / peak) * 100))}%` }} />
+                        </span>
+                        <span className="tnum w-28 shrink-0 text-right">
+                          {Math.round(b.v).toLocaleString()} TZS
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              <p className="mt-3 text-[12px] leading-relaxed text-[var(--muted)]">
+                Of the{" "}
+                <span className="tnum text-[var(--fg)]">
+                  {Math.round(data.sizing.requiredTzs).toLocaleString()} TZS
+                </span>{" "}
+                a full redemption would ask for beyond the float,{" "}
+                <span className="tnum text-[var(--fg)]">
+                  {Math.round(Math.max(0, data.sizing.unrealisedTzs)).toLocaleString()} TZS
+                </span>{" "}
+                is gain nobody paid in — the part that has to be prefunded by somebody, because
+                the customer only ever deposited what they spent.
+                {data.sizing.fundingGapTzs > 0 && (
+                  <>
+                    {" "}The providers are{" "}
+                    <span className="tnum text-[var(--color-down)]">
+                      {Math.round(data.sizing.fundingGapTzs).toLocaleString()} TZS
+                    </span>{" "}
+                    short of it in funded shillings
+                    {data.sizing.committedGapTzs > 0 ? (
+                      <>
+                        , and{" "}
+                        <span className="tnum text-[#b45309]">
+                          {Math.round(data.sizing.committedGapTzs).toLocaleString()} TZS
+                        </span>{" "}
+                        short even of what has been agreed — so this is terms to renegotiate, not
+                        a balance to top up.
+                      </>
+                    ) : data.sizing.uncommitted.length === 0 ? (
+                      <> — the size is agreed, the money is not in the omnibus yet, and a bid can
+                        only spend shillings that already are.</>
+                    ) : (
+                      /* The committed shortfall was suppressed rather than
+                         computed, so saying the agreed size is sufficient
+                         would assert the thing we declined to work out. The
+                         note below says why. */
+                      <>, which a bid cannot spend until it is in the omnibus.</>
+                    )}
+                  </>
+                )}
+                {data.sizing.uncommitted.length > 0 && (
+                  <>
+                    {" "}No size is agreed with {data.sizing.uncommitted.join(", ")}, so the agreed
+                    total is not the facility&rsquo;s real commitment.
+                  </>
+                )}
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -946,6 +1070,143 @@ export function AdminPanel() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/*
+        * Whether the marks everything above is measured in are prices the
+        * book could actually be sold at.
+        *
+        * Solvency is in shares, redemption converts those shares at the
+        * oracle mark, and the facility asks who would front the shillings.
+        * All three take the mark as a price somebody would pay. On the US
+        * board that is tested by quoting the market — depth.ts walks real
+        * orders until the impact stops being worth paying. The DSE has
+        * nothing to quote: no on-chain market, no aggregator, no standing
+        * bid. The only evidence of what can be sold is what has been sold.
+        *
+        * So this is the exchange's own published volume, and the figure is
+        * in sessions rather than shillings on purpose. However the gap gets
+        * financed — a provider, CAPX's balance sheet, the next customer's
+        * deposit — this is how long the financing has to last. And if the
+        * position is large against what the exchange trades, the facility
+        * does not help: a provider buys at the same mark and inherits the
+        * same problem one seat along.
+        */}
+      {data.dseDepth && data.dseDepth.securities.length > 0 && (
+        <div id="dse-depth" className="mt-4 scroll-mt-24 rounded-2xl border hairline p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <div>
+              <div className="eyebrow">Sessions to sell the book on the DSE</div>
+              <div className={`tnum mt-1.5 text-2xl font-medium ${
+                data.dseDepth.worstDaysToCover === null
+                  || data.dseDepth.worstDaysToCover > 20 ? "text-[var(--color-down)]"
+                  : data.dseDepth.worstDaysToCover > 5 ? "text-[#b45309]"
+                  : data.dseDepth.worstDaysToCover > 1 ? "" : "text-[var(--color-up)]"}`}>
+                {data.dseDepth.worstDaysToCover === null
+                  ? "no evidence it trades"
+                  : data.dseDepth.worstDaysToCover < 0.05
+                    ? "under one"
+                    : data.dseDepth.worstDaysToCover.toLocaleString(undefined, {
+                        maximumFractionDigits: 1 })}
+                {data.dseDepth.worst && data.dseDepth.worstDaysToCover !== null && (
+                  <span className="ml-2 text-[13px] font-normal text-[var(--muted)]">
+                    worst leg {data.dseDepth.worst}
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 text-[12px] text-[var(--muted)]">
+                At {data.dseDepth.participationPct}% of a typical session, over{" "}
+                {data.dseDepth.sessions} session{data.dseDepth.sessions === 1 ? "" : "s"} in the
+                last {data.dseDepth.windowDays} days
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="eyebrow">Raisable in one session</div>
+              <div className="tnum mt-1.5 text-2xl font-medium">
+                {Math.round(data.dseDepth.perSessionTzs).toLocaleString()} TZS
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-1.5">
+            {data.dseDepth.securities.map((s) => (
+              <div key={s.symbol}
+                   className="flex items-center gap-3 rounded-xl surface px-3.5 py-2 text-[12px]">
+                <span className="w-14 shrink-0 font-medium">{s.symbol}</span>
+                <span className="tnum shrink-0 text-[var(--muted)]">
+                  {Math.round(s.positionTzs).toLocaleString()} TZS held
+                </span>
+                {/* The one part of the row allowed to give way: it is detail,
+                    and the verdict beside it is the finding. */}
+                <span className="tnum hidden min-w-0 flex-1 truncate text-[var(--muted)] lg:inline">
+                  · traded {s.tradedSessions}/{s.sessions} sessions, median{" "}
+                  {Math.round(s.medianVolume).toLocaleString()} shares
+                </span>
+                <span className={`ml-auto shrink-0 whitespace-nowrap ${
+                  s.verdict === "clear" ? "text-[var(--color-up)]"
+                    : s.verdict === "days" ? "text-[var(--muted)]"
+                    : s.verdict === "weeks" ? "text-[#b45309]" : "text-[var(--color-down)]"}`}>
+                  {s.verdict === "clear" ? "clears in a session"
+                    : s.verdict === "days" ? "a few sessions"
+                    : s.verdict === "weeks" ? "weeks of sessions"
+                    : "not an exit at this size"}
+                </span>
+                <span className="tnum w-16 shrink-0 text-right">
+                  {s.daysToCover === null
+                    ? "—"
+                    : `${s.daysToCover.toLocaleString(undefined, { maximumFractionDigits: 1 })}d`}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/*
+            * The lumpy case, which the median alone reads as worse than it is.
+            *
+            * A security whose mean session is far above its median does trade
+            * in size — just in blocks, when a block turns up. That is a real
+            * exit and a useless one to plan a withdrawal around, so it is
+            * named rather than averaged away.
+            */}
+          {(() => {
+            const lumpy = data.dseDepth!.securities.filter(
+              (s) => s.lumpiness !== null && s.lumpiness >= 3 && s.daysToCover !== null
+                && s.daysToCover > 1);
+            if (!lumpy.length) return null;
+            return (
+              <p className="mt-3 text-[12px] leading-relaxed text-[var(--muted)]">
+                {lumpy.map((s) => s.symbol).join(", ")} trade{lumpy.length === 1 ? "s" : ""} in
+                blocks rather than evenly — the average session is several times the typical one.
+                The size is real and its timing is not ours to choose, so it is an exit that
+                cannot be scheduled against a customer who is waiting.
+              </p>
+            );
+          })()}
+
+          {data.dseDepth.unpriced.length > 0 && (
+            <p className="mt-3 text-[12px] leading-relaxed text-[#b45309]">
+              No mark could be read for {data.dseDepth.unpriced.join(", ")}, so the shilling
+              figures leave {data.dseDepth.unpriced.length === 1 ? "it" : "them"} out. The session
+              counts are still the exchange&rsquo;s own.
+            </p>
+          )}
+
+          {data.dseDepth.calendarFrom === "self" && (
+            <p className="mt-3 text-[12px] leading-relaxed text-[#b45309]">
+              The benchmark securities that establish the exchange&rsquo;s session calendar could
+              not be read, so these securities supplied their own. Usually the same grid — but a
+              security that has stopped printing is then measured only over the window it was
+              still trading in, which flatters it. Treat a reassuring figure here with suspicion.
+            </p>
+          )}
+
+          <p className="mt-3 text-[12px] leading-relaxed text-[var(--muted)]">
+            This is what the redemption figure above assumes away. A shortfall that would be met
+            by selling the underlying takes this long to meet, plus settlement — so it sets how
+            long a liquidity line has to stand, not merely how large it has to be. Faster release
+            of the pledged shares shortens it directly.
+          </p>
         </div>
       )}
 

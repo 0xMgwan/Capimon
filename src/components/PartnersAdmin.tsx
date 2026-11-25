@@ -60,8 +60,9 @@ export function PartnersAdmin() {
     setBusy(true);
     try {
       const r = await fetch(
-        `/api/admin/partners?token=${encodeURIComponent(token)}&customers=${p.id}` +
-        (q ? `&q=${encodeURIComponent(q)}` : ""), { cache: "no-store" });
+        `/api/admin/partners?customers=${p.id}` +
+        (q ? `&q=${encodeURIComponent(q)}` : ""),
+        { headers: { authorization: `Bearer ${token}` }, cache: "no-store" });
       const j = await r.json();
       if (j.ok) setCustomers((c) => ({ ...c, [p.id]: j.customers ?? [] }));
     } finally { setBusy(false); }
@@ -70,8 +71,8 @@ export function PartnersAdmin() {
   const load = useCallback(async (t: string) => {
     setBusy(true); setErr(null);
     try {
-      const r = await fetch(`/api/admin/partners?token=${encodeURIComponent(t)}`,
-        { cache: "no-store" });
+      const r = await fetch("/api/admin/partners",
+        { headers: { authorization: `Bearer ${t}` }, cache: "no-store" });
       const j = await r.json();
       if (!j.ok) throw new Error(j.code === "unauthorised" ? "That token was not accepted." : j.error);
       setList(j.partners ?? []);

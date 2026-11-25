@@ -144,7 +144,8 @@ export function DseOversight() {
     if (!t) return;
     setBusy(true); setErr(null);
     try {
-      const r = await fetch(`/api/dse/oversight?token=${encodeURIComponent(t)}`, { cache: "no-store" });
+      const r = await fetch("/api/dse/oversight",
+        { headers: { authorization: `Bearer ${t}` }, cache: "no-store" });
       const j = await r.json();
       if (!j.ok) {
         throw new Error(j.code === "unauthorised" ? "That token was not accepted." : j.error);
@@ -170,8 +171,8 @@ export function DseOversight() {
     setFileBusy(true); setFile(null); setErr(null);
     try {
       const r = await fetch(
-        `/api/dse/customer?id=${encodeURIComponent(userId)}&token=${encodeURIComponent(token)}`,
-        { cache: "no-store" });
+        `/api/dse/customer?id=${encodeURIComponent(userId)}`,
+        { headers: { authorization: `Bearer ${token}` }, cache: "no-store" });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error ?? "Could not open that file.");
       setFile(j as File);
@@ -511,8 +512,8 @@ function AnchorPanel({ anchors, token }: { anchors: Anchor[]; token: string }) {
     setBusy(day); setErr(null);
     try {
       const r = await fetch(
-        `/api/dse/anchor?day=${encodeURIComponent(day)}&token=${encodeURIComponent(token)}`,
-        { cache: "no-store" });
+        `/api/dse/anchor?day=${encodeURIComponent(day)}`,
+        { headers: { authorization: `Bearer ${token}` }, cache: "no-store" });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error ?? "Could not build that manifest.");
       downloadCsv(`dse-anchor-${day}`,

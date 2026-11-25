@@ -48,10 +48,35 @@ function same(a: string, b: string) {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
+/**
+ * Image routes, and only image routes, may still be opened with a token in
+ * the query string.
+ *
+ * A desk token in a URL is the worst place to keep one: it lands in browser
+ * history, in a download manager's list, in any referrer the page sends, and
+ * in every access log between here and the browser. On the KYC and custody
+ * document routes that URL also points at somebody's identity document.
+ *
+ * Every other caller now sends the token as a bearer header, which is why the
+ * fallback below is a list rather than a blanket. These three cannot: an
+ * `<img src>` and an `<a href>` carry no headers, so removing it here would
+ * simply stop the desk showing the documents it exists to review.
+ *
+ * The answer is a short-lived signed URL per image — minted on request,
+ * expiring in under a minute, granting one document rather than the whole
+ * desk — and this list is what that work deletes. Until then the exposure is
+ * narrowed from every endpoint to these, and written down rather than left to
+ * be discovered.
+ */
+const TOKEN_IN_URL_ALLOWED = ["/api/admin/kyc/image", "/api/dse/document"];
+
 function presented(req: Request): string {
   const url = new URL(req.url);
-  return (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "")
-    || url.searchParams.get("token") || "";
+  const header = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+  if (header) return header;
+  return TOKEN_IN_URL_ALLOWED.some((p) => url.pathname.startsWith(p))
+    ? url.searchParams.get("token") ?? ""
+    : "";
 }
 
 export function roleOf(req: Request): OpsRole | null {

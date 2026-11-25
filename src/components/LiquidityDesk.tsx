@@ -60,7 +60,8 @@ export function LiquidityDesk() {
   const load = useCallback(async (t: string) => {
     setBusy(true); setErr(null);
     try {
-      const r = await fetch(`/api/lp?token=${encodeURIComponent(t)}`, { cache: "no-store" });
+      const r = await fetch("/api/lp",
+        { headers: { authorization: `Bearer ${t}` }, cache: "no-store" });
       const j = await r.json();
       if (!j.ok) throw new Error(j.code === "unauthorised" ? "That token was not accepted." : j.error);
       setData({ admin: !!j.admin, providers: j.providers ?? [], releasableTzs: j.releasableTzs ?? null });

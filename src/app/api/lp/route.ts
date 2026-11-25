@@ -6,10 +6,11 @@ import { roleOf } from "@/lib/adminAuth";
 
 export const dynamic = "force-dynamic";
 
+/* Header only. A provider's desk token in a query string would sit in their
+   browser history and in every log between here and them, and nothing on
+   this route is an image or a link that cannot carry a header. */
 const tokenFrom = (req: Request) =>
-  (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "")
-  || new URL(req.url).searchParams.get("token")
-  || "";
+  (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
 
 /**
  * A liquidity provider's own view of the facility.

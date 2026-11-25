@@ -120,7 +120,8 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
     if (!t) return;
     setBusy(true); setErr(null);
     try {
-      const r = await fetch(`/api/admin/custody?token=${encodeURIComponent(t)}`, { cache: "no-store" });
+      const r = await fetch("/api/admin/custody",
+        { headers: { authorization: `Bearer ${t}` }, cache: "no-store" });
       const j = await r.json();
       if (!j.ok) throw new Error(j.code === "unauthorised" ? "That token was not accepted." : j.error);
       setData({
@@ -135,7 +136,8 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
        * whose it is, and the desk deciding whether to mint more should be able
        * to see both on one screen.
        */
-      const h = await fetch(`/api/admin/holders?token=${encodeURIComponent(t)}`, { cache: "no-store" })
+      const h = await fetch("/api/admin/holders",
+        { headers: { authorization: `Bearer ${t}` }, cache: "no-store" })
         .then((r) => r.json())
         .catch(() => null);
       setHolders(h?.ok ? h.holders : []);

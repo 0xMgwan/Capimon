@@ -58,6 +58,18 @@ export type DseMarket = {
   clientShares: number;
   /** What is left to sell. */
   availableShares: number;
+  /**
+   * The most clients may hold before new buys stop, from measured DSE depth.
+   *
+   * Null when the depth cannot be read, which does not cap. Separate from
+   * `haltReason` because it is one-sided on purpose: a book past its cap
+   * refuses new money and keeps paying people out. Halting a sell because a
+   * position is hard to liquidate would trap exactly the customers the
+   * measurement is worried about.
+   */
+  depthCapShares: number | null;
+  /** Shares that may still be bought before the cap binds. */
+  buyHeadroomShares: number | null;
   feeBps: number;
   tradable: boolean;
   /** Why not, when it is not. */
@@ -92,14 +104,22 @@ export async function dseMarket(symbol: string): Promise<DseMarket | null> {
    */
   if (sec.kind !== "external") refreshIfStale(S);
 
-  const [oracle, custodyShares, liabilities] = await Promise.all([
+  const [oracle, custodyShares, liabilities, depthCapShares] = await Promise.all([
     readOraclePrice(S).catch(() => null),
     treasuryShares(sec).catch(() => 0),
     totalLiabilities().catch(() => []),
+    /* Only a DSE-traded share has exchange depth to measure; an external
+       token is bought at another venue and this says nothing about it. */
+    sec.kind === "external"
+      ? Promise.resolve(null)
+      : import("./dseDepth").then((m) => m.securityCap(S)).catch(() => null),
   ]);
 
   const clientShares = liabilities.find((l) => l.asset === S)?.amount ?? 0;
   const availableShares = Math.max(0, floorTo(custodyShares - clientShares, QTY_DP));
+  const buyHeadroomShares = depthCapShares === null
+    ? null
+    : Math.max(0, floorTo(depthCapShares - clientShares, QTY_DP));
 
   let haltReason: string | null = null;
   // Going live is CAPX's decision on the desk; until then nobody can buy.
@@ -143,6 +163,8 @@ export async function dseMarket(symbol: string): Promise<DseMarket | null> {
     custodyShares,
     clientShares,
     availableShares,
+    depthCapShares,
+    buyHeadroomShares,
     feeBps: FEE_BPS,
     tradable: haltReason === null,
     haltReason,

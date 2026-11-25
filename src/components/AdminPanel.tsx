@@ -85,6 +85,8 @@ type Admin = {
     securities: { symbol: string; sessions: number; tradedSessions: number; tradedPct: number;
                   medianVolume: number; meanVolume: number; lumpiness: number | null;
                   sellablePerSession: number; sellablePerSessionTzs: number;
+                  /* The most clients may hold before new buys are refused. */
+                  capShares: number; capTzs: number;
                   clientHeld: number; markTzs: number; positionTzs: number;
                   /* Null where the server said Infinity: nothing trades, so
                      this measurement cannot put a number on it. */
@@ -1140,8 +1142,8 @@ export function AdminPanel() {
                 {/* The one part of the row allowed to give way: it is detail,
                     and the verdict beside it is the finding. */}
                 <span className="tnum hidden min-w-0 flex-1 truncate text-[var(--muted)] lg:inline">
-                  · traded {s.tradedSessions}/{s.sessions} sessions, median{" "}
-                  {Math.round(s.medianVolume).toLocaleString()} shares
+                  · traded {s.tradedSessions}/{s.sessions} sessions · buys capped at{" "}
+                  {Math.round(s.capTzs).toLocaleString()} TZS
                 </span>
                 <span className={`ml-auto shrink-0 whitespace-nowrap ${
                   s.verdict === "clear" ? "text-[var(--color-up)]"
@@ -1160,6 +1162,30 @@ export function AdminPanel() {
               </div>
             ))}
           </div>
+
+          {/*
+            * Which securities the cap has actually closed.
+            *
+            * The figures above describe the exchange; this is the one line
+            * that says what the platform is doing about it right now, and a
+            * desk fielding "why can I not buy TBL" should not have to derive
+            * it from two columns.
+            */}
+          {(() => {
+            const shut = data.dseDepth!.securities.filter(
+              (s) => s.clientHeld >= s.capShares && s.capShares >= 0 && s.positionTzs > 0);
+            if (!shut.length) return null;
+            return (
+              <p className="mt-3 text-[12px] leading-relaxed text-[#b45309]">
+                Closed to new buys: {shut.map((s) => s.symbol).join(", ")}. Clients already hold
+                as much as the exchange could sell back within five sessions, so further buying
+                would add to a position that cannot be exited at the mark.{" "}
+                <span className="text-[var(--muted)]">
+                  Selling is unaffected, and the liquidity facility is exempt.
+                </span>
+              </p>
+            );
+          })()}
 
           {/*
             * The lumpy case, which the median alone reads as worse than it is.

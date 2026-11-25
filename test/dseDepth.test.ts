@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  median, liquidityFrom, verdictFor, PARTICIPATION_PCT,
+  median, liquidityFrom, verdictFor, PARTICIPATION_PCT, capFrom, MAX_COVER_SESSIONS,
 } from "../src/lib/dseDepth";
 import { facilitySizingFrom } from "../src/lib/liquidity";
 
@@ -255,4 +255,60 @@ test("no providers at all is zero cover rather than no answer", () => {
   assert.equal(s.coverPct, 0);
   assert.equal(s.fundingGapTzs, 20_000);
   assert.equal(s.committedGapTzs, 20_000);
+});
+
+// ── the cap that acts on the depth ───────────────────────────────────────
+
+test("the cap is what five sessions of participation could sell", () => {
+  const x = liquidityFrom({
+    symbol: "CRDB", calendar: CALENDAR,
+    sessions: CALENDAR.map((d) => session(d, 40_000)),
+    clientHeld: 5_000, markTzs: 500,
+  });
+  /* 40,000 median, a quarter sellable, five sessions of it. */
+  assert.equal(x.sellablePerSession, 10_000);
+  assert.equal(x.capShares, 50_000);
+  assert.equal(x.capTzs, 25_000_000);
+  assert.ok(x.clientHeld < x.capShares, "a liquid security is nowhere near its cap");
+});
+
+test("a security that never trades is capped at nothing", () => {
+  /* EABL, USL, SWALA and YETU each traded zero shares in ninety sessions.
+     A cap of zero closes them to new money; it does not stop anyone selling. */
+  const x = liquidityFrom({
+    symbol: "EABL", calendar: CALENDAR, sessions: CALENDAR.map((d) => session(d, 0)),
+    clientHeld: 0, markTzs: 3_000,
+  });
+  assert.equal(x.capShares, 0);
+  assert.equal(x.capTzs, 0);
+  assert.equal(x.daysToCover, 0, "holding nothing takes no sessions");
+});
+
+test("the cap binds on a thin security long before inventory does", () => {
+  /* TBL: a median session of 1,697 shares. The treasury could hold far more
+     than this and still be unable to sell it back. */
+  const x = liquidityFrom({
+    symbol: "TBL", calendar: CALENDAR,
+    sessions: CALENDAR.map((d, i) => session(d, i === 9 ? 2_000_000 : 1_697)),
+    clientHeld: 9_000, markTzs: 11_000,
+  });
+  assert.equal(x.medianVolume, 1_697);
+  assert.equal(x.capShares, 1_697 * 0.25 * 5);
+  assert.ok(x.clientHeld > x.capShares,
+    "a 9,000-share position is already past what five sessions could clear");
+});
+
+test("the cap and the verdict agree on where the line is", () => {
+  /* A position exactly at its cap takes exactly MAX_COVER_SESSIONS to sell,
+     which is the last value verdictFor still calls "days". The number a desk
+     reads and the number the gate enforces must not drift apart. */
+  const x = liquidityFrom({
+    symbol: "XYZ", calendar: CALENDAR,
+    sessions: CALENDAR.map((d) => session(d, 4_000)),
+    clientHeld: capFrom(1_000), markTzs: 500,
+  });
+  assert.equal(x.sellablePerSession, 1_000);
+  assert.equal(x.clientHeld, x.capShares);
+  assert.equal(x.daysToCover, MAX_COVER_SESSIONS);
+  assert.equal(x.verdict, "days", "at the cap, still inside the band a desk reads as fine");
 });

@@ -4,6 +4,7 @@ import { balanceOf, recordTrade } from "./ledger";
 import { assertSolvent } from "./solvency";
 import { notify } from "./notify";
 import { dseMarket, quoteBuyTzs, quoteSellQty, sellQtyOrAll } from "./dseTrading";
+import { MAX_COVER_SESSIONS } from "./dseDepth";
 import { kycRefusal, type SessionUser } from "./auth";
 
 /**
@@ -146,6 +147,35 @@ export async function placeSecurityOrder(
         `Only ${market.availableShares} ${SEC} ${market.availableShares === 1 ? "share is" : "shares are"} available. ` +
         `The rest of the custody position is already spoken for.`,
         "insufficient_inventory");
+    }
+    /*
+     * And never more than the exchange could sell back.
+     *
+     * Inventory says whether CAPX holds the share. This says whether the
+     * position could be turned into shillings if the people holding it asked
+     * — which is a different question and, on most of the DSE board, the one
+     * that binds first. A book larger than the exchange trades is not exited
+     * at the mark; it is exited by moving the mark, which makes every figure
+     * derived from it wrong at exactly the moment they matter.
+     *
+     * The facility is exempt. A provider buying inventory is the release
+     * valve for a drain, they have agreed in advance to warehouse the
+     * position, and refusing them here would have the cap cause the squeeze
+     * it exists to prevent — the same reason facility orders pay no platform
+     * fee rather than being charged for taking on the problem.
+     */
+    if (!input.facility
+        && market.buyHeadroomShares !== null
+        && quote.qty > market.buyHeadroomShares) {
+      return bad(
+        market.buyHeadroomShares <= 0
+          ? `${SEC} is closed to new buys: clients already hold as much as the exchange could ` +
+            `sell back within ${MAX_COVER_SESSIONS} sessions. Selling is unaffected.`
+          : `Only ${market.buyHeadroomShares} more ${SEC} ` +
+            `${market.buyHeadroomShares === 1 ? "share" : "shares"} can be bought right now — ` +
+            `beyond that the position would take longer than ${MAX_COVER_SESSIONS} sessions to ` +
+            `sell on the exchange. Selling is unaffected.`,
+        "depth_cap", 409);
     }
   } else if (quote.qty > held) {
     return bad(`You hold ${held} ${SEC}.`, "insufficient_balance");

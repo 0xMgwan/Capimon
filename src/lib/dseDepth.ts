@@ -51,6 +51,25 @@ export const PARTICIPATION_PCT = 25;
     quiet month, short enough that last year's liquidity is not evidence. */
 export const WINDOW_DAYS = 90;
 
+/**
+ * How many sessions of liquidation the book is allowed to need.
+ *
+ * The cap this produces is the one control that acts on the depth rather than
+ * reporting it. DSE settles T+3, so a position that clears in five sessions
+ * is roughly eight days of funding between a customer asking for their money
+ * and the shillings existing — long, and survivable. Past that the position
+ * is only exitable by moving the price it is marked at, which makes the mark
+ * fiction and every figure built on it fiction too.
+ *
+ * Five is also where `verdictFor` already stops saying "days", so the number
+ * a desk reads and the number the gate enforces are the same number.
+ */
+export const MAX_COVER_SESSIONS = 5;
+
+/** The largest client-held position the exchange can be asked to absorb. */
+export const capFrom = (sellablePerSession: number) =>
+  sellablePerSession * MAX_COVER_SESSIONS;
+
 export type Verdict = "clear" | "days" | "weeks" | "illiquid";
 
 /**
@@ -92,6 +111,14 @@ export type Liquidity = {
   /** Shares one seller could expect to move in a session. */
   sellablePerSession: number;
   sellablePerSessionTzs: number;
+  /**
+   * The most clients may hold before new buys are refused.
+   *
+   * Zero where nothing trades, which closes the security to new money rather
+   * than letting a position build in something that cannot be sold at all.
+   */
+  capShares: number;
+  capTzs: number;
   /** Shares owed to customers. */
   clientHeld: number;
   markTzs: number;
@@ -186,6 +213,8 @@ export function liquidityFrom(args: {
     lumpiness: medianVolume > 0 ? meanVolume / medianVolume : null,
     sellablePerSession,
     sellablePerSessionTzs: sellablePerSession * markTzs,
+    capShares: capFrom(sellablePerSession),
+    capTzs: capFrom(sellablePerSession) * markTzs,
     clientHeld,
     markTzs,
     positionTzs,
@@ -313,7 +342,16 @@ export async function dseLiquidity(opts: { force?: boolean } = {}): Promise<DseL
 
   for (const sec of list) {
     const clientHeld = heldBy.get(sec.symbol) ?? 0;
-    if (!(clientHeld > 0)) continue;
+    /*
+     * Securities nobody holds are measured too.
+     *
+     * They were skipped when this only reported, and that was wrong the
+     * moment it also capped: a newly listed security has no position, so it
+     * would have had no row, so it would have had no cap — leaving the one
+     * case the cap exists for, a thin security taking its first money,
+     * entirely ungated. The depth of a security has nothing to do with
+     * whether we happen to hold it.
+     */
     /* A mark we cannot read is zero, not a guess — the same rule redemption
        uses, and for the same reason: an invented price looks complete. */
     const markTzs = await readOraclePrice(sec.symbol)
@@ -349,4 +387,27 @@ export async function dseLiquidity(opts: { force?: boolean } = {}): Promise<DseL
 
   cache = { at: Date.now(), data };
   return data;
+}
+
+/**
+ * The cap for one security, for the order path to enforce.
+ *
+ * Only the cap comes from here. The position it is compared against is read
+ * live where the order is placed, because depth moves once a day and a book
+ * moves with every trade — taking both from the same fifteen-minute cache
+ * would let a burst of buys run straight through a limit that still looked
+ * satisfied.
+ *
+ * Null when the depth cannot be established — the feed is down, the security
+ * is not DSE-traded, nothing is published. A cap is a prudential limit and
+ * not a safety interlock, so an unreadable measurement must not close the
+ * market: it is the same judgement depth.ts makes about a quote that failed,
+ * where treating our own inability to ask as evidence of a thin market would
+ * halt trading every time an upstream blinked.
+ */
+export async function securityCap(symbol: string): Promise<number | null> {
+  const liq = await dseLiquidity().catch(() => null);
+  if (!liq) return null;
+  const row = liq.securities.find((s) => s.symbol === symbol.toUpperCase());
+  return row ? row.capShares : null;
 }

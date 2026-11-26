@@ -534,21 +534,14 @@ function AnchorPanel({ anchors, token }: { anchors: Anchor[]; token: string }) {
   };
 
   return (
+    /* No heading or summary here any more: the section that folds this away
+       carries both, and two "Daily anchors" headings one above the other
+       read as a mistake rather than as structure. */
     <div>
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="text-sm font-medium">Daily anchors</h2>
-        <button onClick={() => setHow(!how)}
-          className="text-[11px] text-[var(--muted)] underline underline-offset-2">
-          {how ? "hide" : "how to check this yourself"}
-        </button>
-      </div>
-      <p className="mt-1 max-w-[70ch] text-[12px] leading-relaxed text-[var(--muted)]">
-        Once a day the trades that settled in Dar that day are hashed into a single number and
-        written to Base. From then on the day is fixed. Each row below re-derives that number
-        from the trades as they stand right now and compares it to the one on the chain — so
-        a figure that has moved since is arithmetic, not anybody&apos;s word against
-        anybody&apos;s.
-      </p>
+      <button onClick={() => setHow(!how)}
+        className="text-[11px] text-[var(--muted)] underline underline-offset-2">
+        {how ? "hide the method" : "how to check this yourself"}
+      </button>
 
       {broken.length > 0 && (
         <p className="mt-3 rounded-xl border px-3 py-2 text-[12px]"
@@ -656,8 +649,17 @@ function AnchorPanel({ anchors, token }: { anchors: Anchor[]; token: string }) {
   );
 }
 
-/* Enough of a root to recognise on screen; the click copies all 64. */
-const shortRoot = (r: string) => `${r.slice(0, 10)}…${r.slice(-6)}`;
+/*
+ * Enough of a root to recognise on screen; the click copies all 64.
+ *
+ * Tolerant of a missing one, which it was not. A row whose re-derived root
+ * is absent — a day still being computed, a read that came back short —
+ * threw here, and because this renders inside the anchors table it took the
+ * whole oversight portal down with it. The exchange losing its entire window
+ * into the book over one unset field is a bad trade for a dash.
+ */
+const shortRoot = (r: string | null | undefined) =>
+  (r && r.length > 16 ? `${r.slice(0, 10)}…${r.slice(-6)}` : r || "—");
 
 /* ------------------------------------------------------------------ */
 
@@ -670,6 +672,10 @@ function OrdersTab({ rows, anchors, token, onOpen }: {
   const [status, setStatus] = useState("");
   const { sort, toggle } = useSort({ key: "created", dir: "desc" });
 
+  /* Counted here as well as inside the panel, so a mismatch is visible on
+     the collapsed heading rather than only to somebody who opened it. */
+  const broken = anchors.filter((a) => a.status === "posted" && !a.matches).length;
+
   const searched = useSearch(rows, q,
     (r) => [r.name, r.email, r.symbol, r.reference, r.id, r.txHash, r.error]);
   const filtered = useMemo(() => searched.filter((r) =>
@@ -681,16 +687,29 @@ function OrdersTab({ rows, anchors, token, onOpen }: {
     qty: r.qty, price: r.price, amount: r.amountTzs, status: r.status, settled: r.settledAt,
   }[k]));
 
+  /*
+   * The blotter leads; the anchors follow, folded away.
+   *
+   * This tab opened on the daily anchors — the hashing, the chain, the
+   * re-derivation — and a supervisor arriving to look at trades had to read
+   * past all of it to reach the trades. The anchors are the clever part and
+   * the blotter is the part somebody actually came for, which is the wrong
+   * way round for a page whose job is to answer questions about orders.
+   *
+   * Folded rather than removed: it still works and it is still the thing
+   * that makes the blotter checkable, so it waits under a heading for
+   * whoever wants it instead of explaining itself to everybody who does not.
+   */
+  const [showAnchors, setShowAnchors] = useState(false);
+
   return (
     <section className="mt-6">
-      <AnchorPanel anchors={anchors} token={token} />
-
-      <h2 className="mt-10 text-sm font-medium">Order blotter</h2>
-      <p className="mt-1 text-[12px] text-[var(--muted)]">
-        Every order in a DSE security, settled or not. Each carries a reference derived from
-        its own terms — security, date and a digest of the quantity, price, consideration and
-        settlement time — so a trade can be quoted elsewhere and a figure that changes after
-        you have recorded the reference no longer matches it. Click a reference to copy it.
+      <h2 className="text-sm font-medium">Order blotter</h2>
+      <p className="mt-1 max-w-[70ch] text-[12px] leading-relaxed text-[var(--muted)]">
+        Every order in a DSE security, settled or not — shareholder, side, quantity, price,
+        consideration and settlement time. Each carries a reference derived from its own terms,
+        so a trade can be quoted elsewhere and a figure that changes afterwards no longer
+        matches it. Click a reference to copy it.
       </p>
       <Toolbar
         q={q} onQ={setQ} placeholder="Search shareholder, security, reference or order id…"
@@ -754,6 +773,36 @@ function OrdersTab({ rows, anchors, token, onOpen }: {
           </Row>
         ))}
       </Table>
+
+      <div className="mt-10 border-t hairline pt-6">
+        <button onClick={() => setShowAnchors(!showAnchors)}
+          className="flex w-full items-baseline justify-between gap-3 text-left">
+          <span className="text-sm font-medium">
+            Daily anchors
+            {/* A day that stopped matching cannot wait to be clicked on, so
+                the count sits on the heading whether the panel is open or
+                not — folding the proof away must not fold away its alarm. */}
+            {broken > 0 && (
+              <span className="ml-2 text-[11px] text-[var(--color-down)]">
+                {broken === 1 ? "1 day no longer matches" : `${broken} days no longer match`}
+              </span>
+            )}
+          </span>
+          <span className="shrink-0 text-[11px] text-[var(--muted)] underline underline-offset-2">
+            {showAnchors ? "hide" : "show"}
+          </span>
+        </button>
+        <p className="mt-1 max-w-[70ch] text-[12px] leading-relaxed text-[var(--muted)]">
+          Proof that the blotter above has not been edited since: each day&apos;s trades are
+          hashed into one number and written to Base, and every row re-derives it from the
+          trades as they stand now.
+        </p>
+        {showAnchors && (
+          <div className="mt-6">
+            <AnchorPanel anchors={anchors} token={token} />
+          </div>
+        )}
+      </div>
     </section>
   );
 }

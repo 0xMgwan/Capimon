@@ -164,3 +164,61 @@ test("the day just closed is yesterday in Dar, not yesterday here", () => {
      ago is the 24th, and anchoring the 25th would anchor a day still open. */
   assert.equal(previousEatDay(new Date("2026-11-25T00:10:00.000Z")), "2026-11-24");
 });
+
+// ── what the exchange is shown when a send fails ─────────────────────────
+
+import { describeSendFailure } from "../src/lib/treasury";
+
+/* The error that actually failed an anchor: lines carrying the RPC url, the
+   nonce, the signed transaction and the calldata as hex. */
+const REAL_429 = [
+  "HTTP request failed. Status: 429 URL: https://mainnet.base.org/ Request body:",
+  '{"method":"eth_sendRawTransaction","params":["0x02f8d9822105820160830f4240836acf"]}',
+  "Request Arguments: from: 0xF97CEfDb52331bd97ae206964467113d0d7B3629",
+  "nonce: 352 Details: Too Many Requests",
+  "Version: viem@2.55.19",
+].join("\n");
+
+test("a rate limit says so, and says it will be retried", () => {
+  const m = describeSendFailure(new Error(REAL_429));
+  assert.match(m, /rate-limited/);
+  assert.match(m, /retried/);
+});
+
+test("none of the transaction's internals survive into the message", () => {
+  /* The point of the whole function: the exchange's oversight page showed
+     the signed transaction, the nonce and the RPC endpoint. */
+  const m = describeSendFailure(new Error(REAL_429));
+  for (const leak of ["0x", "nonce", "mainnet.base.org", "viem", "eth_sendRawTransaction"]) {
+    assert.ok(!m.toLowerCase().includes(leak.toLowerCase()), `leaked ${leak}: ${m}`);
+  }
+  assert.ok(!m.includes("\n"), "stays one line");
+});
+
+test("an empty wallet is named as such, since it needs a person", () => {
+  const m = describeSendFailure(new Error("insufficient funds for gas * price + value"));
+  assert.match(m, /no ETH on Base/);
+});
+
+test("a nonce clash says the transaction may still confirm", () => {
+  /* The dangerous reading is "it failed, send another". It did not
+     necessarily fail, and sending another is how two anchors exist. */
+  assert.match(describeSendFailure(new Error("nonce too low")), /may still confirm/);
+  assert.match(describeSendFailure(new Error("already known")), /may still confirm/);
+});
+
+test("a timeout does not claim the transaction failed", () => {
+  assert.match(describeSendFailure(new Error("The request timed out.")), /may still have been accepted/);
+});
+
+test("an unrecognised failure keeps its first line and is capped", () => {
+  const long = `${"x".repeat(400)}\nsecond line with the raw transaction`;
+  const m = describeSendFailure(new Error(long));
+  assert.ok(m.length <= 160, `${m.length} characters`);
+  assert.ok(!m.includes("second line"));
+});
+
+test("an error with nothing in it still says something", () => {
+  assert.ok(describeSendFailure(new Error("")).length > 0);
+  assert.ok(describeSendFailure(undefined).length > 0);
+});

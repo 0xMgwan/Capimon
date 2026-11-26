@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { db, migrate } from "./db";
 import { dseSecurities } from "./dseSecurities";
+import { describeSendFailure } from "./treasury";
 
 /**
  * The day's trades, hashed into one number, written to Base.
@@ -270,7 +271,16 @@ export async function anchors(limit = 60): Promise<AnchorRow[]> {
     const live = await rootOn(r.day);
     return {
       day: r.day, root: r.root, trades: Number(r.trades), txHash: r.tx_hash,
-      status: r.status, error: r.error, postedAt: r.posted_at, createdAt: r.created_at,
+      status: r.status,
+      /*
+       * Rows written before failures were described are cleaned on the way
+       * out rather than migrated. The raw text stays in the column for
+       * anyone debugging, and the exchange sees a sentence — which matters
+       * because the rows that carry the worst of it are the old ones, and a
+       * migration would only fix them once.
+       */
+      error: r.error ? describeSendFailure(new Error(r.error)) : null,
+      postedAt: r.posted_at, createdAt: r.created_at,
       liveRoot: live.root, liveTrades: live.count,
       /* An anchor that never reached the chain has nothing to disagree with,
          so it is not called a match either way. */
@@ -335,7 +345,12 @@ export async function anchorDay(day: string): Promise<AnchorResult> {
        where day = ${day}::date`;
     return { ok: true, day, root, trades: count, txHash };
   } catch (e) {
-    const why = e instanceof Error ? e.message : "the anchor transaction failed";
+    /* The exchange reads this page. A raw viem error there is twelve lines
+       of hex carrying the RPC url, the nonce and the signed transaction —
+       unreadable to them and more of CAPX's internals than they should see.
+       The full text is in the server log. */
+    const why = describeSendFailure(e);
+    console.error(`anchor ${day} failed:`, e);
     await sql`update capx.dse_anchors set status = 'failed', error = ${why}
                where day = ${day}::date`;
     return { ok: false, day, error: why };
@@ -346,18 +361,47 @@ export async function anchorDay(day: string): Promise<AnchorResult> {
  * Catch up on whatever has not been anchored, newest day first.
  *
  * A cron that only ever anchors yesterday loses any day it was not run on,
- * permanently, because the day it missed is in the past and nothing will
- * come back for it. This walks back over the window and posts what is
- * missing, so one bad night costs a late anchor rather than a hole.
+ * permanently, because the day it missed is in the past and nothing will come
+ * back for it. So this walks back over a window and posts what is missing.
+ *
+ * The window alone was not enough, and a real day proved it. An anchor failed
+ * on a rate-limited RPC, and the retry only lasted as long as that day stayed
+ * inside the last seven — after which the failed row sat there forever,
+ * labelled failed, with nothing ever trying it again. A window catches a
+ * missed run; it cannot catch a failed one, because a failure leaves a row
+ * and the row is not what the window is looking for.
+ *
+ * So the candidates are the window *plus* every day already recorded as
+ * unposted, however old. A day that failed is retried until it is anchored or
+ * somebody deletes it, which for a record the exchange checks is the right
+ * way round.
+ *
+ * Newest first, so an old day that cannot be anchored delays only days older
+ * than itself. The run still stops at the first real failure rather than
+ * burning gas on a queue of sends that will fail the same way.
  */
 export async function anchorBacklog(days = 7): Promise<AnchorResult[]> {
   const out: AnchorResult[] = [];
   const today = eatDay(new Date());
+
+  const candidates = new Set<string>();
   for (let i = 1; i <= days; i++) {
-    const day = eatDay(new Date(new Date(`${today}T12:00:00.000Z`).getTime() - i * 86_400_000));
+    candidates.add(eatDay(
+      new Date(new Date(`${today}T12:00:00.000Z`).getTime() - i * 86_400_000)));
+  }
+
+  await migrate();
+  const unposted = await db()<{ day: string }[]>`
+    select to_char(day, 'YYYY-MM-DD') as day from capx.dse_anchors
+     where status <> 'posted'`.catch(() => []);
+  for (const r of unposted) candidates.add(r.day);
+
+  /* Newest first: a day that cannot be anchored holds up only days older
+     than itself, never the one that just closed. */
+  for (const day of [...candidates].sort().reverse()) {
     const result = await anchorDay(day);
     if (!("already" in result) || !result.already) out.push(result);
-    if (!result.ok) break; /* Something is wrong; do not burn gas on six more. */
+    if (!result.ok) break;
   }
   return out;
 }

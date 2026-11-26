@@ -2,7 +2,7 @@ import "server-only";
 import { createWalletClient, http, formatUnits, parseUnits, maxUint256 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
-import { publicClient } from "./chain";
+import { publicClient, sendTransport } from "./chain";
 import { b20Abi } from "./abis";
 import { ASSETS, USDC_BASE, BY_SYMBOL } from "./assets";
 import { getRoute, buildRoute } from "./aggregator";
@@ -204,7 +204,22 @@ export function signer() {
     wallet: createWalletClient({
       account,
       chain: base,
-      transport: http(process.env.BASE_RPC_URL ?? "https://mainnet.base.org"),
+      /*
+       * The same fallback the reader uses, which this did not have.
+       *
+       * Sending went to a single public endpoint with no retry while every
+       * read fanned out across five with one — so a rate limit on
+       * mainnet.base.org, which is a thing that simply happens on a free
+       * endpoint, failed the transaction outright. A daily anchor lost that
+       * way is a day DSE cannot verify.
+       *
+       * Retrying a send is safe here in a way it is not elsewhere: the
+       * transaction is already signed against a fixed nonce, so a resend is
+       * byte-identical and the network treats it as the same transaction.
+       * The worst case is that it was already accepted and the duplicate is
+       * ignored.
+       */
+      transport: sendTransport(),
       /*
        * Appended to every transaction this wallet signs — swaps, approvals,
        * transfers — so CAPX's onchain volume is attributed on Base.
@@ -851,4 +866,49 @@ export async function ensureTreasuryFunded(needUsdc: number, address?: `0x${stri
     );
   }
   return { swept: amount, onHand };
+}
+
+/**
+ * A send failure in one sentence somebody can act on.
+ *
+ * viem's errors are built for a developer with a debugger: the one that
+ * failed a daily anchor ran to twelve lines and carried the RPC URL, the
+ * nonce, the full signed transaction and the whole calldata as hex. That
+ * landed verbatim on the exchange's oversight page, where it is unreadable,
+ * unactionable, and more of CAPX's internals than a supervisor has any
+ * business seeing.
+ *
+ * So the cause is named and the rest is dropped. The raw text stays in the
+ * server logs, which is where a stack trace belongs.
+ */
+export function describeSendFailure(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e ?? "");
+  const t = raw.toLowerCase();
+
+  /* Transient, and the common one: a free endpoint rate-limiting a send.
+     Worth saying it will be retried, because it will. */
+  if (t.includes("429") || t.includes("too many requests") || t.includes("rate limit")) {
+    return "Base rate-limited the transaction. It will be retried on the next run.";
+  }
+  if (t.includes("insufficient funds")) {
+    return "The treasury wallet has no ETH on Base to pay for the transaction.";
+  }
+  if (t.includes("nonce too low") || t.includes("already known")
+      || t.includes("replacement transaction underpriced")) {
+    return "A transaction with this nonce is already in flight. It may still confirm.";
+  }
+  if (t.includes("timeout") || t.includes("timed out")) {
+    return "Base did not answer in time. The transaction may still have been accepted.";
+  }
+  if (t.includes("gas") && t.includes("price")) {
+    return "Base refused the gas price. It will be retried on the next run.";
+  }
+
+  /*
+   * Anything unrecognised keeps its first line and no more. A message with
+   * no newline is capped instead, so a single enormous line cannot get
+   * through on a technicality.
+   */
+  const first = raw.split("\n")[0].trim();
+  return first.length > 160 ? `${first.slice(0, 157)}…` : first || "The transaction could not be sent.";
 }

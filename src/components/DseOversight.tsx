@@ -618,8 +618,12 @@ function AnchorPanel({ anchors, token }: { anchors: Anchor[]; token: string }) {
                   ? <Tx hash={a.txHash} />
                   : <>
                       <Pill tone={a.status === "failed" ? "bad" : "warn"}>{a.status}</Pill>
+                      {/* break-words because what overflowed was a single
+                          unbroken hex string, which a max-width alone cannot
+                          wrap. The message itself is a sentence now, but old
+                          rows and anything unrecognised still want it. */}
                       {a.error && (
-                        <div className="mt-1 max-w-[32ch] text-[11px] text-[var(--color-down)]">
+                        <div className="mt-1 max-w-[32ch] break-words text-[11px] text-[var(--color-down)]">
                           {a.error}
                         </div>
                       )}

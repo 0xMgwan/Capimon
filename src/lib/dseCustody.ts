@@ -150,81 +150,122 @@ async function requestToken(): Promise<Token> {
      as Basic auth rather than in the body. */
   const basic = Buffer.from(`${APPLICATION_ID}:${ACCESS_SECRET}`, "utf8").toString("base64");
 
-  const res = await fetch(`${BASE_URL}${TOKEN_PATH}`, {
-    method: "POST",
-    headers: {
-      authorization: `Basic ${basic}`,
-      "content-type": "application/json",
-      accept: "application/json",
+  const fields = {
+    grant_type: "password",
+    username: STAKEHOLDER_USERNAME,
+    password: STAKEHOLDER_PASSWORD,
+  };
+
+  /*
+   * Their guide shows a JSON body; the OAuth spec says form-encoded.
+   *
+   * RFC 6749 defines the token endpoint as taking
+   * application/x-www-form-urlencoded, and most implementations refuse
+   * anything else with a 400 — which is exactly what the exchange returned
+   * for the JSON their own guide prints. A 400 is not a rejected
+   * credential: a wrong secret is a 401, and this never got as far as
+   * judging one.
+   *
+   * So both are attempted, documented shape first, because being wrong
+   * about which one their server wants is not worth another round trip to
+   * Dar. Whichever works is reported in the log so this can collapse to one
+   * attempt once it is known.
+   */
+  const attempts: { label: string; headers: Record<string, string>; body: string }[] = [
+    {
+      label: "json",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(fields),
     },
-    body: JSON.stringify({
-      grant_type: "password",
-      username: STAKEHOLDER_USERNAME,
-      password: STAKEHOLDER_PASSWORD,
-    }),
-    cache: "no-store",
-    signal: AbortSignal.timeout(20_000),
-  });
+    {
+      label: "form",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(fields).toString(),
+    },
+  ];
 
-  const text = await res.text();
-  let body: Record<string, unknown> = {};
-  try { body = text ? JSON.parse(text) : {}; } catch { /* reported below */ }
+  let last: DseCustodyError | null = null;
 
-  /*
-   * A refused request and an unreadable answer are different problems.
-   *
-   * These were one branch, and the message said "the CSD refused the
-   * credentials" for both — which sent somebody to check an application id
-   * that was fine. The status is what separates them: a 401 is a credential,
-   * a 404 is the path, and a 200 we could not parse is our own problem with
-   * the response shape.
-   */
-  if (!res.ok) {
-    throw new DseCustodyError(
-      "auth_failed",
-      res.status === 404
-        ? `The token endpoint was not found at ${TOKEN_PATH} (404). The path is wrong, not the credentials.`
-        : `The exchange refused the credentials (HTTP ${res.status}).`,
-      res.status || 502,
-    );
+  for (const attempt of attempts) {
+    const res = await fetch(`${BASE_URL}${TOKEN_PATH}`, {
+      method: "POST",
+      headers: {
+        authorization: `Basic ${basic}`,
+        accept: "application/json",
+        ...attempt.headers,
+      },
+      body: attempt.body,
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
+
+    const text = await res.text();
+    let body: Record<string, unknown> = {};
+    try { body = text ? JSON.parse(text) : {}; } catch { /* reported below */ }
+
+    if (!res.ok) {
+      /*
+       * The server's own words, where it gives them.
+       *
+       * An OAuth failure carries `error` and `error_description`, and those
+       * name the actual problem — "unsupported_grant_type",
+       * "invalid_client" — far better than a status code can. Dropping them
+       * was why a 400 read as a credential problem.
+       */
+      const detail = [body.error, body.error_description, body.message]
+        .filter((v): v is string => typeof v === "string" && v.length > 0)
+        .join(": ");
+
+      last = new DseCustodyError(
+        "auth_failed",
+        res.status === 404
+          ? `The token endpoint was not found at ${TOKEN_PATH} (404). The path is wrong, not the credentials.`
+          : `The exchange refused the token request (HTTP ${res.status}${
+              attempt.label === "form" ? ", form-encoded" : ", JSON"} body)`
+            + `${detail ? `: ${detail}` : ". It returned no reason."}`,
+        res.status || 502,
+      );
+
+      /* A 404 is the path and no body shape will fix it; anything else is
+         worth the second encoding before giving up. */
+      if (res.status === 404) throw last;
+      continue;
+    }
+
+    const nested = (body.data ?? {}) as Record<string, unknown>;
+    const token = [body.access_token, nested.access_token, body.accessToken, nested.accessToken]
+      .find((v): v is string => typeof v === "string" && v.length > 0);
+
+    if (!token) {
+      /* Key names only. The values are the credentials and a bearer token. */
+      console.error("CSD token response had no recognisable token. Top-level keys:",
+        Object.keys(body), "data keys:", Object.keys(nested));
+      throw new DseCustodyError(
+        "token_shape",
+        `The exchange accepted the ${attempt.label} request (HTTP ${res.status}) but the response `
+        + `carried no token in a shape this client recognises. The credentials are probably fine; `
+        + `the response format needs confirming. Its field names are in the server log.`,
+        502,
+      );
+    }
+
+    if (attempt.label !== "json") {
+      console.info(`CSD token obtained with a ${attempt.label}-encoded body.`);
+    }
+
+    /* An absent or unparseable expires_in is treated as one hour rather than
+       forever: a token believed valid past its life fails every call until
+       something clears the cache. */
+    const ttlS = Number(body.expires_in ?? nested.expires_in ?? nested.expiresIn);
+    const lifeMs = Number.isFinite(ttlS) && ttlS > 0 ? ttlS * 1000 : 3_600_000;
+
+    const refresh = [body.refresh_token, nested.refresh_token]
+      .find((v): v is string => typeof v === "string") ?? null;
+
+    return { value: token, refresh, expiresAt: Date.now() + lifeMs };
   }
 
-  /*
-   * The token, wherever they put it.
-   *
-   * Their other endpoints wrap everything in { code, success, data }, and
-   * this one is under /iam rather than /stakeholder, so it may or may not
-   * follow suit — the guide shows the request and never the response. Both
-   * shapes are accepted rather than guessed between, because guessing wrong
-   * here reports a working set of credentials as rejected.
-   */
-  const nested = (body.data ?? {}) as Record<string, unknown>;
-  const token = [body.access_token, nested.access_token, body.accessToken, nested.accessToken]
-    .find((v): v is string => typeof v === "string" && v.length > 0);
-
-  if (!token) {
-    /* Key names only. The values are the credentials and a bearer token. */
-    console.error("CSD token response had no recognisable token. Top-level keys:",
-      Object.keys(body), "data keys:", Object.keys(nested));
-    throw new DseCustodyError(
-      "token_shape",
-      `The exchange accepted the request (HTTP ${res.status}) but the response carried no token `
-      + `in a shape this client recognises. The credentials are probably fine; the response `
-      + `format needs confirming. Its field names are in the server log.`,
-      502,
-    );
-  }
-
-  /* An absent or unparseable expires_in is treated as one hour rather than
-     forever: a token believed valid past its life fails every call until
-     something clears the cache. */
-  const ttlS = Number(body.expires_in ?? nested.expires_in ?? nested.expiresIn);
-  const lifeMs = Number.isFinite(ttlS) && ttlS > 0 ? ttlS * 1000 : 3_600_000;
-
-  const refresh = [body.refresh_token, nested.refresh_token]
-    .find((v): v is string => typeof v === "string") ?? null;
-
-  return { value: token, refresh, expiresAt: Date.now() + lifeMs };
+  throw last ?? new DseCustodyError("auth_failed", "The token request failed.", 502);
 }
 
 /**

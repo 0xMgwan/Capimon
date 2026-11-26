@@ -49,6 +49,8 @@ type Backing = {
 };
 type Security = {
   symbol: string; name: string; token_address: string | null; decimals: number; status: string;
+  /** How the CSD identifies it. Without one it cannot be pledged. */
+  isin?: string | null;
   has_logo?: boolean; backing: Backing;
   /** "dse" — CAPX tokenised it; "external" — someone else's token, bought and held. */
   kind?: "dse" | "external"; issuer?: string | null; venue?: string | null; buyOnly?: boolean;
@@ -436,7 +438,7 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
                 * holdings move, and the status that comes back says which.
                 */}
               {isAdmin && s.kind === "dse" && (
-                <PledgeControls symbol={s.symbol} busy={busy} onAct={act}
+                <PledgeControls symbol={s.symbol} isin={s.isin ?? null} busy={busy} onAct={act}
                   csd={data.csd?.rows.find((r) => r.symbol === s.symbol) ?? null}
                   pledges={data.pledges.filter((x) => x.security === s.symbol)} />
               )}
@@ -1651,7 +1653,8 @@ function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone
   // Fixed per mount, so the preview is fresh after a replacement but stable while editing.
   const [bust] = useState(() => Date.now() % 1e6);
   const [f, setF] = useState({
-    symbol: preset?.symbol ?? "", name: preset?.name ?? "", tokenAddress: preset?.token_address ?? "",
+    symbol: preset?.symbol ?? "", name: preset?.name ?? "", isin: preset?.isin ?? "",
+    tokenAddress: preset?.token_address ?? "",
     decimals: String(preset?.decimals ?? 8), status: preset?.status ?? (asBroker ? "draft" : "live"),
   });
   /*
@@ -1717,6 +1720,19 @@ function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone
         * below writes the address itself. FIMCO never sees the field; CAPX
         * only needs it for a token that was created outside the desk.
         */}
+      {/*
+        * The ISIN, which only matters for a share CAPX pledges at the CSD.
+        *
+        * An external token is somebody else's and is bought at a venue
+        * rather than locked at the exchange, so asking for one there would
+        * be asking for a number that does not apply.
+        */}
+      {!external && (
+        <Field label="ISIN · needed to pledge" v={f.isin}
+          on={(v) => setF({ ...f, isin: v.toUpperCase() })}
+          ph="TZ0000000001"
+          hint="How the CSD identifies the security — it will not accept a ticker. Leaving it blank keeps whatever is on file." />
+      )}
       {!asBroker && (
         <Field label={external ? "Token address" : "Token address · optional"} v={f.tokenAddress}
           on={(v) => setF({ ...f, tokenAddress: v })}
@@ -1870,7 +1886,7 @@ function RegisterSecurity({ onAct, busy, asBroker = false, preset = null, onDone
               document: holdDoc?.data ?? null, documentName: holdDoc?.name ?? null,
             });
             if (filed === false) return;
-            setF({ symbol: "", name: "", tokenAddress: "", decimals: "8", status: "draft" });
+            setF({ symbol: "", name: "", isin: "", tokenAddress: "", decimals: "8", status: "draft" });
             setHold({ quantity: "", locked: "", docRef: "", expiresAt: "" });
             setHoldDoc(null);
             setLogo(null);
@@ -2226,8 +2242,9 @@ function Field({ label, v, on, ph, hint }: {
  * the number somebody almost always wants, and typing it by hand is how a
  * digit goes missing.
  */
-function PledgeControls({ symbol, busy, onAct, csd, pledges }: {
+function PledgeControls({ symbol, isin, busy, onAct, csd, pledges }: {
   symbol: string;
+  isin: string | null;
   busy: boolean;
   onAct: (body: Record<string, unknown>) => Promise<boolean>;
   csd: { pledged: number | null; free: number | null; issued: number;
@@ -2252,6 +2269,15 @@ function PledgeControls({ symbol, busy, onAct, csd, pledges }: {
         </div>
       </div>
 
+      {/* Said here rather than discovered on a refusal: without an ISIN the
+          CSD has no way to know which security is meant, so the buttons
+          cannot work and the reason is not guessable from them. */}
+      {!isin && (
+        <p className="mt-2 text-[11px] text-[#b45309]">
+          No ISIN on file, so this security cannot be pledged. Add one with Edit above.
+        </p>
+      )}
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input
           value={qty} onChange={(e) => setQty(e.target.value)} inputMode="numeric"
@@ -2259,7 +2285,7 @@ function PledgeControls({ symbol, busy, onAct, csd, pledges }: {
           className="w-56 rounded-full border hairline bg-transparent px-3.5 py-1.5 text-[12px] outline-none focus:border-[var(--color-accent)]"
         />
         <button
-          disabled={busy || !valid}
+          disabled={busy || !valid || !isin}
           onClick={() => void (async () => {
             if (await onAct({ action: "pledge", security: symbol, quantity: n })) setQty("");
           })()}
@@ -2268,7 +2294,7 @@ function PledgeControls({ symbol, busy, onAct, csd, pledges }: {
           Pledge
         </button>
         <button
-          disabled={busy || !valid}
+          disabled={busy || !valid || !isin}
           onClick={() => void (async () => {
             if (await onAct({ action: "release-pledge", security: symbol, quantity: n })) setQty("");
           })()}

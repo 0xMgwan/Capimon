@@ -49,7 +49,7 @@ export async function GET(req: Request) {
     const sql = db();
     const [securities, attestations, issuance, requests] = await Promise.all([
       sql`select symbol, name, token_address, decimals, chain_id, status,
-                 (metadata ? 'logo') as has_logo,
+                 isin, (metadata ? 'logo') as has_logo,
                  coalesce(metadata->>'kind', 'dse') as kind,
                  metadata->>'issuer' as issuer, metadata->>'venue' as venue,
                  coalesce((metadata->>'buyOnly')::boolean, false) as "buyOnly"
@@ -125,6 +125,24 @@ export async function POST(req: Request) {
       const symbol = String(body.symbol ?? "").trim().toUpperCase();
       const name = String(body.name ?? "").trim();
       if (!symbol || !name) return NextResponse.json({ ok: false, error: "symbol and name are required" }, { status: 400 });
+
+      /*
+       * The ISIN, which the CSD identifies the security by.
+       *
+       * Validated rather than stored as typed: an ISIN is two letters, nine
+       * alphanumerics and a check digit, and a wrong one is not a cosmetic
+       * error — it is a pledge instruction sent against somebody else's
+       * security. Blank leaves whatever is on file rather than clearing it,
+       * so saving an edit that does not touch this field cannot quietly
+       * remove the only thing that makes the security pledgeable.
+       */
+      const isinRaw = String(body.isin ?? "").trim().toUpperCase();
+      if (isinRaw && !/^[A-Z]{2}[A-Z0-9]{9}\d$/.test(isinRaw)) {
+        return NextResponse.json(
+          { ok: false, error: `"${isinRaw}" is not a valid ISIN. Expected a form like TZ0000000001.` },
+          { status: 400 });
+      }
+      const isin = isinRaw || null;
 
       const tokenAddress = body.tokenAddress ? String(body.tokenAddress).trim().toLowerCase() : null;
       let decimals = Number(body.decimals ?? 8);
@@ -212,20 +230,21 @@ export async function POST(req: Request) {
        */
       if (role === "fimco") {
         await sql`
-          insert into capx.securities (symbol, name, token_address, decimals, chain_id, status, metadata)
-          values (${symbol}, ${name}, ${tokenAddress}, ${decimals}, 8453, 'draft',
+          insert into capx.securities (symbol, name, token_address, decimals, chain_id, status, isin, metadata)
+          values (${symbol}, ${name}, ${tokenAddress}, ${decimals}, 8453, 'draft', ${isin},
                   ${sql.json({ ...listing, ...(logo ? { logo } : {}), registeredBy: ACTOR[role] })})
           on conflict (symbol) do update
             set name = excluded.name,
                 token_address = coalesce(capx.securities.token_address, excluded.token_address),
+                isin = coalesce(excluded.isin, capx.securities.isin),
                 metadata = capx.securities.metadata || excluded.metadata`;
         return NextResponse.json({ ok: true });
       }
 
       await sql`
-        insert into capx.securities (symbol, name, token_address, decimals, chain_id, status, metadata)
+        insert into capx.securities (symbol, name, token_address, decimals, chain_id, status, isin, metadata)
         values (${symbol}, ${name}, ${tokenAddress}, ${decimals},
-                ${Number(body.chainId ?? 8453)}, ${String(body.status ?? "draft")},
+                ${Number(body.chainId ?? 8453)}, ${String(body.status ?? "draft")}, ${isin},
                 ${sql.json({ ...listing, ...(logo ? { logo } : {}) })})
         on conflict (symbol) do update
           set name = excluded.name,
@@ -233,6 +252,7 @@ export async function POST(req: Request) {
               decimals = excluded.decimals,
               chain_id = excluded.chain_id,
               status = excluded.status,
+              isin = coalesce(excluded.isin, capx.securities.isin),
               -- A save without a new logo keeps the old one.
               metadata = capx.securities.metadata || excluded.metadata`;
       // A security CAPX has just registered or taken live should have a price

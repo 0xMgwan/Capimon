@@ -201,8 +201,32 @@ async function requestToken(): Promise<Token> {
         ...fields, client_id: APPLICATION_ID, client_secret: ACCESS_SECRET,
       }).toString(),
     },
+    /*
+     * The fourth: their own field names.
+     *
+     * Their 4000 is "validation error, missing or invalid field" from their
+     * own envelope, which means their application read the body and did not
+     * recognise what was in it — not a gateway, not a credential. The
+     * environment they issued names exactly four values, and a service that
+     * wraps every response in { code, success, data } may well take them
+     * under those names rather than OAuth's.
+     */
+    {
+      label: "JSON body, their own field names",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        applicationId: APPLICATION_ID,
+        accessSecret: ACCESS_SECRET,
+        stakeholderUsername: STAKEHOLDER_USERNAME,
+        stakeholderPassword: STAKEHOLDER_PASSWORD,
+      }),
+    },
   ];
 
+  /* Every attempt's outcome, because reporting only the last hid the fact
+     that the documented shape may fail differently from the guesses — and
+     which of them fails how is the whole of the evidence here. */
+  const tried: string[] = [];
   let last: DseCustodyError | null = null;
 
   for (const attempt of attempts) {
@@ -253,12 +277,12 @@ async function requestToken(): Promise<Token> {
           ? `the body was ${JSON.stringify(snippet)}`
           : `the response was empty (content-type ${res.headers.get("content-type") ?? "none"})`;
 
+      tried.push(`${attempt.label} → ${res.status} ${detail}`);
       last = new DseCustodyError(
         "auth_failed",
         res.status === 404
           ? `The token endpoint was not found at ${TOKEN_PATH} (404). The path is wrong, not the credentials.`
-          : `The exchange refused the token request (HTTP ${res.status}, tried `
-            + `${attempt.label}): ${detail}`,
+          : `The exchange refused the token request. ${tried.join(" · ")}`,
         res.status || 502,
       );
 
@@ -299,7 +323,13 @@ async function requestToken(): Promise<Token> {
     return { value: token, refresh, expiresAt: Date.now() + lifeMs };
   }
 
-  throw last ?? new DseCustodyError("auth_failed", "The token request failed.", 502);
+  if (last) {
+    /* Rebuilt once all attempts are in, so the message lists every shape
+       tried rather than whichever happened to be last. */
+    throw new DseCustodyError("auth_failed",
+      `The exchange refused the token request. Tried: ${tried.join(" · ")}`, last.status);
+  }
+  throw new DseCustodyError("auth_failed", "The token request failed.", 502);
 }
 
 /**

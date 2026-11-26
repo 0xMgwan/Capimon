@@ -170,25 +170,61 @@ async function requestToken(): Promise<Token> {
   let body: Record<string, unknown> = {};
   try { body = text ? JSON.parse(text) : {}; } catch { /* reported below */ }
 
-  if (!res.ok || typeof body.access_token !== "string") {
+  /*
+   * A refused request and an unreadable answer are different problems.
+   *
+   * These were one branch, and the message said "the CSD refused the
+   * credentials" for both — which sent somebody to check an application id
+   * that was fine. The status is what separates them: a 401 is a credential,
+   * a 404 is the path, and a 200 we could not parse is our own problem with
+   * the response shape.
+   */
+  if (!res.ok) {
     throw new DseCustodyError(
       "auth_failed",
-      `The CSD refused the credentials (${res.status}).`,
+      res.status === 404
+        ? `The token endpoint was not found at ${TOKEN_PATH} (404). The path is wrong, not the credentials.`
+        : `The exchange refused the credentials (HTTP ${res.status}).`,
       res.status || 502,
+    );
+  }
+
+  /*
+   * The token, wherever they put it.
+   *
+   * Their other endpoints wrap everything in { code, success, data }, and
+   * this one is under /iam rather than /stakeholder, so it may or may not
+   * follow suit — the guide shows the request and never the response. Both
+   * shapes are accepted rather than guessed between, because guessing wrong
+   * here reports a working set of credentials as rejected.
+   */
+  const nested = (body.data ?? {}) as Record<string, unknown>;
+  const token = [body.access_token, nested.access_token, body.accessToken, nested.accessToken]
+    .find((v): v is string => typeof v === "string" && v.length > 0);
+
+  if (!token) {
+    /* Key names only. The values are the credentials and a bearer token. */
+    console.error("CSD token response had no recognisable token. Top-level keys:",
+      Object.keys(body), "data keys:", Object.keys(nested));
+    throw new DseCustodyError(
+      "token_shape",
+      `The exchange accepted the request (HTTP ${res.status}) but the response carried no token `
+      + `in a shape this client recognises. The credentials are probably fine; the response `
+      + `format needs confirming. Its field names are in the server log.`,
+      502,
     );
   }
 
   /* An absent or unparseable expires_in is treated as one hour rather than
      forever: a token believed valid past its life fails every call until
      something clears the cache. */
-  const ttlS = Number(body.expires_in);
+  const ttlS = Number(body.expires_in ?? nested.expires_in ?? nested.expiresIn);
   const lifeMs = Number.isFinite(ttlS) && ttlS > 0 ? ttlS * 1000 : 3_600_000;
 
-  return {
-    value: body.access_token,
-    refresh: typeof body.refresh_token === "string" ? body.refresh_token : null,
-    expiresAt: Date.now() + lifeMs,
-  };
+  const refresh = [body.refresh_token, nested.refresh_token]
+    .find((v): v is string => typeof v === "string") ?? null;
+
+  return { value: token, refresh, expiresAt: Date.now() + lifeMs };
 }
 
 /**

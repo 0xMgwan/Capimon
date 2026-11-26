@@ -1301,6 +1301,29 @@ export async function migrate() {
       }
 
       /*
+       * Fill in the published ISINs for securities that have none.
+       *
+       * Only where it is null, so a value set on the desk is never
+       * overwritten — this is a default that saves somebody transcribing
+       * twelve characters into the field that decides which shares get
+       * pledged, not a claim to be authoritative about them.
+       *
+       * After the column loop, not before: the isin column is added there,
+       * and running this first meant every statement failed on a fresh
+       * database and was swallowed by the catch — so the seed would only
+       * have landed on the second migration, which is the kind of bug that
+       * never shows up where it was written.
+       */
+      {
+        const { DSE_ISINS } = await import("./dseIsins");
+        for (const [symbol, isin] of Object.entries(DSE_ISINS)) {
+          await sql`update capx.securities set isin = ${isin}
+                     where symbol = ${symbol} and isin is null`.catch(() => {});
+        }
+      }
+
+
+      /*
        * Mentions that predate the columns above.
        *
        * They were written as generic alerts with nowhere to go and nobody

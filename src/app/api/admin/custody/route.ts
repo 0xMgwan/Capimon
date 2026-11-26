@@ -136,13 +136,16 @@ export async function POST(req: Request) {
        * so saving an edit that does not touch this field cannot quietly
        * remove the only thing that makes the security pledgeable.
        */
-      const isinRaw = String(body.isin ?? "").trim().toUpperCase();
-      if (isinRaw && !/^[A-Z]{2}[A-Z0-9]{9}\d$/.test(isinRaw)) {
-        return NextResponse.json(
-          { ok: false, error: `"${isinRaw}" is not a valid ISIN. Expected a form like TZ0000000001.` },
-          { status: 400 });
+      const isinRaw = String(body.isin ?? "").trim();
+      let isin: string | null = null;
+      if (isinRaw) {
+        const { checkIsin } = await import("@/lib/isin");
+        const checked = checkIsin(isinRaw);
+        if (!checked.ok) {
+          return NextResponse.json({ ok: false, error: checked.reason }, { status: 400 });
+        }
+        isin = checked.isin;
       }
-      const isin = isinRaw || null;
 
       const tokenAddress = body.tokenAddress ? String(body.tokenAddress).trim().toLowerCase() : null;
       let decimals = Number(body.decimals ?? 8);

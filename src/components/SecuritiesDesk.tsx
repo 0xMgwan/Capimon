@@ -63,6 +63,20 @@ type Request_ = {
 type Contracts = { custodyRegistry: string; treasury: string | null };
 type DeskData = {
   role: Role; securities: Security[]; attestations: Attestation[]; issuance: Issuance[];
+  /** The exchange's holdings against our books. Null for a non-admin, or
+      when the CSD is not configured. */
+  csd: {
+    readable: boolean; account: string | null;
+    rows: { symbol: string; total: number | null; free: number | null;
+            pledged: number | null; reserved: number | null;
+            pendingSale: number | null; pendingBuy: number | null;
+            issued: number; clientHeld: number; overIssued: number;
+            headroom: number; note: string | null }[];
+  } | null;
+  pledges: { id: string; security: string; action: "hold" | "release";
+             quantity: number; status: string; requestId: string | null;
+             upstreamAccepted: boolean | null; reason: string | null;
+             createdAt: string; confirmedAt: string | null }[];
   requests: Request_[]; contracts: Contracts;
 };
 
@@ -87,6 +101,9 @@ const DONE: Record<string, string> = {
   "attest": "Filed. It now waits for CAPX to approve and tokenise it.",
   "approve-attestation": "Attestation approved. Publish it on-chain to open headroom.",
   "reject-attestation": "Attestation rejected.",
+  "pledge": "Instruction sent. It is a lock once the holdings move, not before.",
+  "release-pledge": "Release sent. It is released once the holdings move, not before.",
+  "confirm-pledge": "Re-read the holdings.",
   "request-issuance": "Mint requested. It now waits for CAPX approval.",
   "approve-request": "Request approved. Mint it with the issuer wallet.",
   "reject-request": "Request rejected.",
@@ -128,6 +145,7 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
         role: j.role === "fimco" ? "fimco" : "admin",
         securities: j.securities ?? [], attestations: j.attestations ?? [], issuance: j.issuance ?? [],
         requests: j.requests ?? [], contracts: j.contracts ?? { custodyRegistry: "", treasury: null },
+        csd: j.csd ?? null, pledges: j.pledges ?? [],
       });
 
       /*
@@ -326,6 +344,19 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
             No securities registered yet. Register one below to begin.
           </p>
         )}
+        {/*
+          * The exchange's holdings against our books.
+          *
+          * The question a filed attestation could never answer honestly: are
+          * the tokens outstanding covered by shares the exchange has
+          * actually locked? A document agrees with whatever it says. This
+          * compares what is issued against pledgedBalance, which the
+          * exchange maintains and nobody here can write.
+          */}
+        {isAdmin && data.csd && data.csd.rows.length > 0 && (
+          <CsdReconciliation csd={data.csd} />
+        )}
+
         {data.securities.map((s) => {
           const b = s.backing;
           const owed = b.clientHeld ?? 0;
@@ -390,6 +421,26 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
                 * mint was recorded and never executed, or executed and never
                 * recorded — and both need a person, not a refresh.
                 */}
+              {/*
+                * Lock or unlock at the CSD.
+                *
+                * Beside the backing figures on purpose: this is the thing
+                * those figures are meant to be evidence of, and a desk
+                * reading "Locked 100" should be one press from asking the
+                * exchange whether that is so.
+                *
+                * Admin only, because a filing is the broker's statement
+                * while an instruction sent in CAPX's name as pledgee is
+                * CAPX's act. The button says what it does and does not
+                * overclaim: an accepted instruction is not a lock until the
+                * holdings move, and the status that comes back says which.
+                */}
+              {isAdmin && s.kind === "dse" && (
+                <PledgeControls symbol={s.symbol} busy={busy} onAct={act}
+                  csd={data.csd?.rows.find((r) => r.symbol === s.symbol) ?? null}
+                  pledges={data.pledges.filter((x) => x.security === s.symbol)} />
+              )}
+
               {b.custodyMismatch && (
                 <p className="mt-2 rounded-xl border border-[var(--color-down)]/40 bg-[var(--color-down)]/[0.06] px-3 py-2 text-[11px] text-[var(--color-down)]">
                   {b.custodyMismatch} The smaller figure is in force until they agree.
@@ -2163,5 +2214,185 @@ function Field({ label, v, on, ph, hint }: {
         className="mt-1.5 w-full rounded-xl border hairline bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]" />
       {hint && <span className="mt-1 block text-[11px] text-[var(--muted)]">{hint}</span>}
     </label>
+  );
+}
+
+
+/**
+ * Pledge and release, with the state the exchange actually reports.
+ *
+ * The quantity is whole shares because the CSD refuses a decimal, and it is
+ * defaulted to the gap between what is issued and what is pledged — which is
+ * the number somebody almost always wants, and typing it by hand is how a
+ * digit goes missing.
+ */
+function PledgeControls({ symbol, busy, onAct, csd, pledges }: {
+  symbol: string;
+  busy: boolean;
+  onAct: (body: Record<string, unknown>) => Promise<boolean>;
+  csd: { pledged: number | null; free: number | null; issued: number;
+         overIssued: number; headroom: number; note: string | null } | null;
+  pledges: { id: string; action: "hold" | "release"; quantity: number;
+             status: string; reason: string | null; createdAt: string }[];
+}) {
+  const suggested = csd && csd.pledged !== null ? Math.max(0, csd.overIssued) : 0;
+  const [qty, setQty] = useState("");
+  const n = Math.floor(Number(qty));
+  const valid = Number.isFinite(n) && n > 0;
+  const open = pledges.filter((p) => p.status === "sending" || p.status === "unconfirmed");
+
+  return (
+    <div className="mt-3 rounded-2xl surface p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="eyebrow">At the exchange</div>
+        <div className="tnum text-[12px] text-[var(--muted)]">
+          {csd?.pledged === null || !csd
+            ? csd?.note ?? "not configured"
+            : <>pledged {csd.pledged.toLocaleString()} · free {(csd.free ?? 0).toLocaleString()}</>}
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <input
+          value={qty} onChange={(e) => setQty(e.target.value)} inputMode="numeric"
+          placeholder={suggested > 0 ? `${suggested} to cover what is issued` : "Whole shares"}
+          className="w-56 rounded-full border hairline bg-transparent px-3.5 py-1.5 text-[12px] outline-none focus:border-[var(--color-accent)]"
+        />
+        <button
+          disabled={busy || !valid}
+          onClick={() => void (async () => {
+            if (await onAct({ action: "pledge", security: symbol, quantity: n })) setQty("");
+          })()}
+          className="rounded-full bg-[var(--fg)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--bg)] disabled:opacity-40"
+        >
+          Pledge
+        </button>
+        <button
+          disabled={busy || !valid}
+          onClick={() => void (async () => {
+            if (await onAct({ action: "release-pledge", security: symbol, quantity: n })) setQty("");
+          })()}
+          className="rounded-full border hairline px-3.5 py-1.5 text-[12px] disabled:opacity-40"
+        >
+          Release
+        </button>
+      </div>
+
+      {/*
+        * An instruction that has not settled.
+        *
+        * The one state worth putting in front of somebody: the exchange took
+        * it and the holdings have not moved, or it never got an answer at
+        * all. Neither may be resent — their guide forbids it and there is no
+        * lookup by our own reference — so the only action offered is to read
+        * the holdings again.
+        */}
+      {open.map((p) => (
+        <div key={p.id} className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-[#b45309]/40 bg-[#b45309]/[0.06] px-3 py-2 text-[11px] text-[#b45309]">
+          <span className="tnum">
+            {p.action === "hold" ? "Pledge" : "Release"} of {p.quantity.toLocaleString()} —{" "}
+            {p.status === "sending" ? "sent, no answer received" : "accepted, holdings have not moved"}
+          </span>
+          <span className="text-[var(--muted)]">{p.reason ?? ""}</span>
+          <button
+            disabled={busy}
+            onClick={() => void onAct({ action: "confirm-pledge", id: p.id })}
+            className="ml-auto rounded-full border hairline px-2.5 py-0.5 text-[11px] text-[var(--fg)] disabled:opacity-40"
+          >
+            Check again
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+/**
+ * What the exchange holds, beside what CAPX has issued against it.
+ *
+ * Two findings, and they are not the same severity. Issued beyond pledged is
+ * over-issuance: tokens exist that no lock backs, and it is the only line
+ * here that is an emergency. Pledged beyond issued is headroom — shares
+ * locked that nothing has been minted against — which is a number to know
+ * and not a problem to fix.
+ */
+function CsdReconciliation({ csd }: {
+  csd: {
+    readable: boolean; account: string | null;
+    rows: { symbol: string; total: number | null; free: number | null;
+            pledged: number | null; reserved: number | null;
+            pendingSale: number | null; pendingBuy: number | null;
+            issued: number; clientHeld: number; overIssued: number;
+            headroom: number; note: string | null }[];
+  };
+}) {
+  const breached = csd.rows.filter((r) => r.overIssued > 0);
+
+  return (
+    <div className={`rounded-3xl border p-5 ${
+      breached.length ? "border-[var(--color-down)]/50 bg-[var(--color-down)]/[0.05]" : "hairline"}`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <div>
+          <div className="eyebrow">Exchange reconciliation</div>
+          <div className="mt-1 text-[12px] text-[var(--muted)]">
+            What the CSD says is locked, against what CAPX has issued
+            {csd.account ? ` · account ${csd.account}` : ""}
+          </div>
+        </div>
+        <div className={`text-sm font-medium ${
+          breached.length ? "text-[var(--color-down)]" : "text-[var(--color-up)]"}`}>
+          {!csd.readable ? "—" : breached.length ? `${breached.length} over-issued` : "Covered"}
+        </div>
+      </div>
+
+      {/*
+        * Unreadable is said, never shown as zeros. A reconciliation reporting
+        * nothing pledged would read as a total breach when it is an outage,
+        * and that is the most alarming possible rendering of a network
+        * problem.
+        */}
+      {!csd.readable && (
+        <p className="mt-3 rounded-xl border border-[#b45309]/40 bg-[#b45309]/[0.06] px-3 py-2 text-[11px] text-[#b45309]">
+          The exchange could not be read, so nothing below is a comparison.
+          These are CAPX&rsquo;s own figures only.
+        </p>
+      )}
+
+      <div className="mt-4 grid gap-1.5">
+        {csd.rows.map((r) => (
+          <div key={r.symbol}
+               className="flex flex-wrap items-center gap-3 rounded-xl surface px-3.5 py-2 text-[12px]">
+            <span className="w-14 shrink-0 font-medium">{r.symbol}</span>
+            <span className="tnum shrink-0 text-[var(--muted)]">
+              issued {r.issued.toLocaleString()}
+            </span>
+            <span className="tnum shrink-0 text-[var(--muted)]">
+              · pledged {r.pledged === null ? "—" : r.pledged.toLocaleString()}
+            </span>
+            <span className="tnum hidden shrink-0 text-[var(--muted)] lg:inline">
+              · free {r.free === null ? "—" : r.free.toLocaleString()}
+              {(r.pendingSale ?? 0) > 0 && ` · ${r.pendingSale} selling`}
+            </span>
+            <span className={`ml-auto shrink-0 whitespace-nowrap ${
+              r.overIssued > 0 ? "text-[var(--color-down)]"
+                : r.pledged === null ? "text-[var(--muted)]" : "text-[var(--color-up)]"}`}>
+              {r.overIssued > 0
+                ? `${r.overIssued.toLocaleString()} unbacked`
+                : r.pledged === null ? (r.note ?? "unknown")
+                : r.headroom > 0 ? `${r.headroom.toLocaleString()} headroom` : "exact"}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {breached.length > 0 && (
+        <p className="mt-3 rounded-xl border border-[var(--color-down)]/40 bg-[var(--color-down)]/[0.06] px-3 py-2 text-[11px] text-[var(--color-down)]">
+          Tokens exist that the exchange has not locked shares against. Pledge the
+          difference, or burn down to what is pledged — until then the filed
+          attestation is backing them and the CSD is not.
+        </p>
+      )}
+    </div>
   );
 }

@@ -75,6 +75,17 @@ export async function GET(req: Request) {
     return NextResponse.json(
       {
         ok: true, role, securities: withBacking, attestations, issuance, requests,
+        /*
+         * The exchange's own holdings against our books, and the recent
+         * instructions. Admin only: a pledge is sent in CAPX's name as
+         * pledgee, and the account it is sent against is CAPX's to know.
+         */
+        csd: role === "admin"
+          ? await import("@/lib/pledges").then((m) => m.csdReconciliation()).catch(() => null)
+          : null,
+        pledges: role === "admin"
+          ? await import("@/lib/pledges").then((m) => m.recentPledges(25)).catch(() => [])
+          : [],
         // What the desk needs to write out the exact on-chain commands.
         contracts: { custodyRegistry: SECURITIES_CONTRACTS.custodyRegistry, treasury: treasuryAddress() },
       },

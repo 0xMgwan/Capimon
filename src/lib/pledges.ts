@@ -281,3 +281,100 @@ export async function csdLocked(security: string): Promise<number | null> {
     return null;
   }
 }
+
+/**
+ * The CSD's holdings against CAPX's own books, security by security.
+ *
+ * The question the custody attestation could never answer honestly: are the
+ * tokens outstanding actually covered by shares the exchange has locked? A
+ * filing answers it with a document, and a document agrees with whatever it
+ * says. This compares what is issued against `pledgedBalance`, which the
+ * exchange maintains and neither CAPX nor the broker can write.
+ *
+ * `free` is reported beside it because the two failures look different and
+ * need different responses. Issued beyond pledged is over-issuance and is
+ * urgent. Shares sitting unpledged in the account are not a breach at all —
+ * they are headroom nobody has locked yet, which is only a problem if
+ * somebody believed they were backing something.
+ */
+export type CsdRow = {
+  symbol: string;
+  /** Null throughout when the exchange could not be read. */
+  total: number | null;
+  free: number | null;
+  pledged: number | null;
+  reserved: number | null;
+  pendingSale: number | null;
+  pendingBuy: number | null;
+  /** Tokens outstanding, and what customers are owed of them. */
+  issued: number;
+  clientHeld: number;
+  /** Issued beyond what the CSD has locked. The number that matters. */
+  overIssued: number;
+  /** Locked beyond what is issued: headroom, not a breach. */
+  headroom: number;
+  note: string | null;
+};
+
+export async function csdReconciliation(): Promise<{
+  readable: boolean;
+  account: string | null;
+  rows: CsdRow[];
+} | null> {
+  if (!dbConfigured) return null;
+  await migrate();
+
+  const { dseSecurities } = await import("./dseSecurities");
+  const { backing } = await import("./custody");
+  const list = (await dseSecurities().catch(() => [])).filter((d) => d.kind === "dse");
+  if (!list.length) return { readable: false, account: null, rows: [] };
+
+  /* One request for the whole account rather than one per security: the
+     holdings enquiry answers for every security it holds. */
+  let holdings: Awaited<ReturnType<
+    typeof import("./dseCustody")["holdingsByCds"]>> | null = null;
+  if (pledgingConfigured) {
+    try {
+      const { cdsAccount, holdingsByCds } = await import("./dseCustody");
+      holdings = await holdingsByCds(cdsAccount(INVESTOR_ACCOUNT));
+    } catch {
+      /* Unreadable, which is reported as such rather than as zeros — a
+         reconciliation showing nothing pledged would read as a total
+         breach when it is an outage. */
+      holdings = null;
+    }
+  }
+
+  const by = new Map((holdings ?? []).map((h) => [h.symbol, h]));
+
+  const rows: CsdRow[] = [];
+  for (const sec of list) {
+    const b = await backing(sec.symbol).catch(() => null);
+    const h = by.get(sec.symbol) ?? null;
+    const issued = b?.issued ?? 0;
+    const pledged = holdings === null ? null : h?.pledgedBalance ?? 0;
+
+    rows.push({
+      symbol: sec.symbol,
+      total: holdings === null ? null : h?.totalBalance ?? 0,
+      free: holdings === null ? null : h?.freeBalance ?? 0,
+      pledged,
+      reserved: holdings === null ? null : h?.reservedBalance ?? 0,
+      pendingSale: holdings === null ? null : h?.pendingSale ?? 0,
+      pendingBuy: holdings === null ? null : h?.pendingBuy ?? 0,
+      issued,
+      clientHeld: b?.clientHeld ?? 0,
+      overIssued: pledged === null ? 0 : Math.max(0, issued - pledged),
+      headroom: pledged === null ? 0 : Math.max(0, pledged - issued),
+      note: holdings === null
+        ? "the exchange could not be read"
+        : h ? null : "the account holds none of this security",
+    });
+  }
+
+  return {
+    readable: holdings !== null,
+    account: pledgingConfigured ? INVESTOR_ACCOUNT : null,
+    rows,
+  };
+}

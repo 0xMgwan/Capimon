@@ -69,6 +69,7 @@ type DeskData = {
       when the CSD is not configured. */
   csd: {
     readable: boolean; account: string | null;
+    canInstruct: boolean; blockedBecause: string | null;
     rows: { symbol: string; total: number | null; free: number | null;
             pledged: number | null; reserved: number | null;
             pendingSale: number | null; pendingBuy: number | null;
@@ -439,6 +440,7 @@ export function SecuritiesDesk({ portal = "desk" }: { portal?: "desk" | "fimco" 
                 */}
               {isAdmin && s.kind === "dse" && (
                 <PledgeControls symbol={s.symbol} isin={s.isin ?? null} busy={busy} onAct={act}
+                  blocked={data.csd && !data.csd.canInstruct ? data.csd.blockedBecause : null}
                   csd={data.csd?.rows.find((r) => r.symbol === s.symbol) ?? null}
                   pledges={data.pledges.filter((x) => x.security === s.symbol)} />
               )}
@@ -2242,9 +2244,11 @@ function Field({ label, v, on, ph, hint }: {
  * the number somebody almost always wants, and typing it by hand is how a
  * digit goes missing.
  */
-function PledgeControls({ symbol, isin, busy, onAct, csd, pledges }: {
+function PledgeControls({ symbol, isin, blocked, busy, onAct, csd, pledges }: {
   symbol: string;
   isin: string | null;
+  /** Why no instruction can be sent at all, when none can. */
+  blocked: string | null;
   busy: boolean;
   onAct: (body: Record<string, unknown>) => Promise<boolean>;
   csd: { pledged: number | null; free: number | null; issued: number;
@@ -2277,6 +2281,14 @@ function PledgeControls({ symbol, isin, busy, onAct, csd, pledges }: {
           No ISIN on file, so this security cannot be pledged. Add one with Edit above.
         </p>
       )}
+      {/* A setting missing for the whole desk rather than this security, so
+          it is worded that way — pressing the button would otherwise report
+          it as though this one listing were at fault. */}
+      {blocked && (
+        <p className="mt-2 text-[11px] text-[#b45309]">
+          Nothing can be pledged yet: {blocked}. Reading the exchange still works.
+        </p>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input
@@ -2285,7 +2297,7 @@ function PledgeControls({ symbol, isin, busy, onAct, csd, pledges }: {
           className="w-56 rounded-full border hairline bg-transparent px-3.5 py-1.5 text-[12px] outline-none focus:border-[var(--color-accent)]"
         />
         <button
-          disabled={busy || !valid || !isin}
+          disabled={busy || !valid || !isin || !!blocked}
           onClick={() => void (async () => {
             if (await onAct({ action: "pledge", security: symbol, quantity: n })) setQty("");
           })()}
@@ -2294,7 +2306,7 @@ function PledgeControls({ symbol, isin, busy, onAct, csd, pledges }: {
           Pledge
         </button>
         <button
-          disabled={busy || !valid || !isin}
+          disabled={busy || !valid || !isin || !!blocked}
           onClick={() => void (async () => {
             if (await onAct({ action: "release-pledge", security: symbol, quantity: n })) setQty("");
           })()}

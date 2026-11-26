@@ -43,6 +43,26 @@ const BROKER_CODE = (process.env.DSE_CSD_BROKER_CODE ?? "").trim();
 
 export const pledgingConfigured = INVESTOR_ACCOUNT.length > 0 && BROKER_CODE.length > 0;
 
+/**
+ * Whether an instruction could actually be sent, as opposed to read.
+ *
+ * Reading the holdings needs an account to ask about; sending an instruction
+ * also needs a BPID to name CAPX as the pledgee. The two are separable and
+ * are separated, because the reconciliation is useful on its own — it is the
+ * thing that says whether the tokens outstanding are covered, and waiting for
+ * a BPID to show it would be withholding the answer over an unrelated blank.
+ */
+export async function canInstruct(): Promise<{ ok: boolean; reason: string | null }> {
+  if (!pledgingConfigured) {
+    return { ok: false, reason: "no CSD account or broker code is configured" };
+  }
+  const { DSE_BPID } = await import("./dseCustody");
+  if (!DSE_BPID) {
+    return { ok: false, reason: "no BPID is configured, so CAPX cannot be named as the pledgee" };
+  }
+  return { ok: true, reason: null };
+}
+
 export type PledgeAction = "hold" | "release";
 
 export type PledgeStatus =
@@ -113,11 +133,17 @@ export async function instruct(args: {
   actor?: string;
 }): Promise<PledgeRow> {
   if (!dbConfigured) throw new Error("No database is configured.");
-  if (!pledgingConfigured) {
-    throw new Error(
-      "No CSD investor account or broker code is configured, so there is nothing to pledge against.",
-    );
-  }
+  /*
+   * Checked before anything is written, not after.
+   *
+   * The row exists to say an instruction may be in flight, which is the only
+   * way to find out what happened to one after a timeout. A missing BPID is
+   * knowable without sending anything, so recording an attempt for it would
+   * put a failure that never left the building into the one state reserved
+   * for a message that might be out there.
+   */
+  const able = await canInstruct();
+  if (!able.ok) throw new Error(`Cannot instruct the CSD: ${able.reason}.`);
 
   const S = args.security.toUpperCase();
   await migrate();
@@ -319,6 +345,9 @@ export type CsdRow = {
 export async function csdReconciliation(): Promise<{
   readable: boolean;
   account: string | null;
+  /** Whether an instruction could be sent, and why not when it could not. */
+  canInstruct: boolean;
+  blockedBecause: string | null;
   rows: CsdRow[];
 } | null> {
   if (!dbConfigured) return null;
@@ -326,8 +355,12 @@ export async function csdReconciliation(): Promise<{
 
   const { dseSecurities } = await import("./dseSecurities");
   const { backing } = await import("./custody");
+  const able = await canInstruct().catch(() => ({ ok: false, reason: "unknown" }));
   const list = (await dseSecurities().catch(() => [])).filter((d) => d.kind === "dse");
-  if (!list.length) return { readable: false, account: null, rows: [] };
+  if (!list.length) {
+    return { readable: false, account: null, canInstruct: able.ok,
+             blockedBecause: able.reason, rows: [] };
+  }
 
   /* One request for the whole account rather than one per security: the
      holdings enquiry answers for every security it holds. */
@@ -375,6 +408,8 @@ export async function csdReconciliation(): Promise<{
   return {
     readable: holdings !== null,
     account: pledgingConfigured ? INVESTOR_ACCOUNT : null,
+    canInstruct: able.ok,
+    blockedBecause: able.reason,
     rows,
   };
 }

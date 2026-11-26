@@ -744,6 +744,52 @@ export async function migrate() {
 
       await sql`
         /*
+         * Every pledge instruction sent to the CSD, and what became of it.
+         *
+         * The row is written before the instruction leaves, because the
+         * exchange forbids retrying a hold or a release automatically after
+         * a timeout and offers no lookup by our own reference. A row stuck
+         * at 'sending' is therefore the correct thing to find: it says an
+         * instruction may be in flight and the holdings are the only way to
+         * settle it, rather than leaving no trace at all.
+         *
+         * was_pledged is the balance read immediately before, because the
+         * confirmation is a comparison — a security can be pledged for more
+         * than one reason, and an absolute threshold would read somebody
+         * else's lock as ours.
+         */
+        create table if not exists capx.pledge_instructions (
+          id               uuid primary key default gen_random_uuid(),
+          security         text not null,
+          /* hold | release */
+          action           text not null,
+          /* Whole shares: the CSD refuses a decimal. */
+          quantity         numeric(38,0) not null,
+          isin             text not null,
+          investor_account text not null,
+          broker_code      text not null,
+          /* sending | accepted | confirmed | unconfirmed | failed */
+          status           text not null default 'sending',
+          /* Quoted to DSE support; their guide asks for it on every call. */
+          request_id       text,
+          /* The CSD's own answer, as distinct from the exchange's 2000. */
+          upstream_accepted boolean,
+          trade_date       text,
+          settlement_date  text,
+          was_pledged      numeric(38,6),
+          reason           text,
+          actor            text,
+          created_at       timestamptz not null default now(),
+          confirmed_at     timestamptz
+        )`;
+
+      await sql`
+        create index if not exists pledge_instructions_open
+          on capx.pledge_instructions (created_at)
+         where status in ('sending', 'accepted', 'unconfirmed')`;
+
+      await sql`
+        /*
          * The chain leg of a trade the ledger has already settled.
          *
          * One row per settled order, including the ones that will never be

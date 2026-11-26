@@ -398,6 +398,59 @@ export async function POST(req: Request) {
       }
     }
 
+    /*
+     * Lock or unlock shares at the CSD.
+     *
+     * The enforceable half of what a custody attestation has been standing
+     * in for: the attestation says a lock exists, this asks the exchange to
+     * place one and then reads back whether it did. Both are admin-only —
+     * an attestation is the broker's statement, but an instruction sent in
+     * CAPX's name as pledgee is CAPX's act.
+     */
+    if (action === "pledge" || action === "release-pledge") {
+      if (role !== "admin") {
+        return NextResponse.json(
+          { ok: false, error: "Only CAPX can instruct the CSD." }, { status: 403 });
+      }
+      const security = String(body.security ?? "").trim().toUpperCase();
+      const quantity = Number(body.quantity);
+      if (!security || !Number.isInteger(quantity) || quantity <= 0) {
+        return NextResponse.json(
+          { ok: false, error: "A security and a whole positive quantity are required." },
+          { status: 400 });
+      }
+      try {
+        const { instruct } = await import("@/lib/pledges");
+        const row = await instruct({
+          security, quantity, actor: ACTOR[role],
+          action: action === "pledge" ? "hold" : "release",
+        });
+        return NextResponse.json({ ok: true, instruction: row, backing: await backing(security) });
+      } catch (e) {
+        return NextResponse.json(
+          { ok: false, error: e instanceof Error ? e.message : "the instruction was refused" },
+          { status: 409 });
+      }
+    }
+
+    /* Re-reads the holdings for an instruction that has not settled. Never
+       resends: the exchange forbids an automatic retry, and this is the only
+       way to learn what became of one. */
+    if (action === "confirm-pledge") {
+      if (role !== "admin") {
+        return NextResponse.json(
+          { ok: false, error: "Only CAPX can instruct the CSD." }, { status: 403 });
+      }
+      try {
+        const { confirm } = await import("@/lib/pledges");
+        return NextResponse.json({ ok: true, instruction: await confirm(String(body.id ?? "")) });
+      } catch (e) {
+        return NextResponse.json(
+          { ok: false, error: e instanceof Error ? e.message : "could not confirm" },
+          { status: 409 });
+      }
+    }
+
     if (action === "check-issue") {
       const security = String(body.security ?? "").trim().toUpperCase();
       const verdict = await canIssue(security, Number(body.quantity));

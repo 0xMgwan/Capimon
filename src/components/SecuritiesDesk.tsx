@@ -41,7 +41,7 @@ type Backing = {
   security: string; custodian: string | null;
   underlying: number; locked: number; issued: number;
   recorded: number; drift: number; source: "chain" | "ledger";
-  custodySource: "chain" | "filed" | "none"; custodyMismatch: string | null;
+  custodySource: "csd" | "chain" | "filed" | "none"; custodyMismatch: string | null;
   ratioPct: number | null; headroom: number;
   /** Tokens customers hold claims on, and the rest — the only part that can be burned. */
   clientHeld?: number; unallocated?: number;

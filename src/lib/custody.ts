@@ -56,7 +56,13 @@ export type Backing = {
   /** False when the attestation has expired or none is approved. */
   fresh: boolean;
   /** Which record the custody figures came from. */
-  custodySource: "chain" | "filed" | "none";
+  /**
+   * Where the locked figure came from, best first.
+   *
+   * "csd" is the exchange's own `pledgedBalance`: the only one of the three
+   * that nobody involved in issuing the token wrote.
+   */
+  custodySource: "csd" | "chain" | "filed" | "none";
   /** Set when the filed copy and the published registry entry disagree. */
   custodyMismatch: string | null;
   expiresAt: string | null;
@@ -167,9 +173,32 @@ export async function backing(security: string): Promise<Backing> {
    * headroom, and the drift stays visible instead of being averaged away.
    */
   const committed = Math.max(issued, recorded);
-  const locked = usable
+  /*
+   * The CSD's own figure, which outranks both of the others.
+   *
+   * The attestation is a document saying a lock exists and the registry is
+   * CAPX's claim that it does. `pledgedBalance` is the exchange reporting
+   * what it has actually locked — a number neither CAPX nor the broker
+   * writes, and the only one of the three that is not somebody's assertion.
+   *
+   * It joins the minimum rather than replacing it. If the CSD says less is
+   * locked than the paperwork claims, the CSD is right and the difference is
+   * over-issuance waiting to happen; if it says more, the extra is not
+   * backing anything we have recorded and minting against it would be
+   * minting against a lock we cannot account for. Null is not zero: an
+   * unreachable exchange is not evidence that a pledge was released, and
+   * treating it as such would strand every token behind an outage.
+   */
+  const csd = await (await import("./pledges")).csdLocked(security).catch(() => null);
+  if (csd !== null && att && csd !== att.locked) {
+    custodyMismatch = (custodyMismatch ? `${custodyMismatch} ` : "")
+      + `The CSD reports ${csd} pledged against the filed ${att.locked}.`;
+  }
+
+  const claimedLocked = usable
     ? (att ? Math.min(usable.locked, att.locked) : usable.locked)
     : att?.locked ?? 0;
+  const locked = csd === null ? claimedLocked : Math.min(claimedLocked, csd);
   const underlying = usable
     ? (att ? Math.min(usable.quantity, att.quantity) : usable.quantity)
     : att?.quantity ?? 0;
@@ -191,7 +220,7 @@ export async function backing(security: string): Promise<Backing> {
     // Freshness is the registry's to decide once it has a statement: an entry
     // that has expired on-chain backs nothing, whatever the desk still shows.
     fresh: usable ? true : !!att,
-    custodySource,
+    custodySource: csd !== null ? "csd" as const : custodySource,
     custodyMismatch,
     expiresAt: usable?.expiresAt ?? att?.expires_at ?? null,
     lastVerified: usable?.issuedAt ?? att?.issued_at ?? null,

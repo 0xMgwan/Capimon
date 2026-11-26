@@ -348,6 +348,8 @@ export async function csdReconciliation(): Promise<{
   /** Whether an instruction could be sent, and why not when it could not. */
   canInstruct: boolean;
   blockedBecause: string | null;
+  /** Why the exchange could not be read. CAPX's desk only. */
+  unreadableBecause: string | null;
   rows: CsdRow[];
 } | null> {
   if (!dbConfigured) return null;
@@ -359,23 +361,32 @@ export async function csdReconciliation(): Promise<{
   const list = (await dseSecurities().catch(() => [])).filter((d) => d.kind === "dse");
   if (!list.length) {
     return { readable: false, account: null, canInstruct: able.ok,
-             blockedBecause: able.reason, rows: [] };
+             blockedBecause: able.reason, unreadableBecause: null, rows: [] };
   }
 
   /* One request for the whole account rather than one per security: the
      holdings enquiry answers for every security it holds. */
   let holdings: Awaited<ReturnType<
     typeof import("./dseCustody")["holdingsByCds"]>> | null = null;
+  let whyUnreadable: string | null = null;
   if (pledgingConfigured) {
     try {
       const { cdsAccount, holdingsByCds } = await import("./dseCustody");
       holdings = await holdingsByCds(cdsAccount(INVESTOR_ACCOUNT));
-    } catch {
-      /* Unreadable, which is reported as such rather than as zeros — a
-         reconciliation showing nothing pledged would read as a total
-         breach when it is an outage. */
+    } catch (e) {
+      /*
+       * Unreadable, reported as such rather than as zeros — a
+       * reconciliation showing nothing pledged would read as a total breach
+       * when it is a network problem. But the cause is kept, because "could
+       * not be read" with no reason leaves a desk nothing to do.
+       */
+      const { describeCsdFailure } = await import("./dseCustody");
+      whyUnreadable = describeCsdFailure(e);
+      console.error("CSD holdings read failed:", e);
       holdings = null;
     }
+  } else {
+    whyUnreadable = "no CSD account or broker code is configured";
   }
 
   const by = new Map((holdings ?? []).map((h) => [h.symbol, h]));
@@ -410,6 +421,7 @@ export async function csdReconciliation(): Promise<{
     account: pledgingConfigured ? INVESTOR_ACCOUNT : null,
     canInstruct: able.ok,
     blockedBecause: able.reason,
+    unreadableBecause: whyUnreadable,
     rows,
   };
 }

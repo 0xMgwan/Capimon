@@ -623,3 +623,46 @@ export async function confirmRelease(args: {
     shortBy: Math.max(0, args.quantity - freed),
   };
 }
+
+
+/**
+ * Why a call to the exchange did not work, in a sentence with a next step.
+ *
+ * An unreadable exchange is reported as unreadable everywhere else in this
+ * codebase, deliberately: treating it as zero would read as a total breach
+ * when it is a network problem. But "could not be read" is where the
+ * investigation starts, not where it ends, and swallowing the cause leaves
+ * the desk with nothing to act on — the first time this ran against real
+ * credentials it said exactly that and nothing more.
+ *
+ * So the cause is named for CAPX's own desk. It never reaches the exchange's
+ * oversight portal, which has no business seeing which of our settings is
+ * wrong.
+ */
+export function describeCsdFailure(e: unknown): string {
+  if (e instanceof DseCustodyError) {
+    switch (e.code) {
+      case "not_configured":
+        return "the CSD credentials are not all set on this deployment";
+      case "auth_failed":
+        return "the exchange rejected the credentials — check the application id and secret, "
+          + "and that the base URL is the UAT one";
+      case "unauthenticated":
+        return "the exchange rejected the access token twice, which usually means the "
+          + "stakeholder username or password is wrong";
+      case "bad_account":
+        return `the configured account was refused: ${e.message}`;
+      case "unreachable":
+        return "the exchange did not answer";
+      case "validation":
+        return `the exchange refused the request: ${e.message}`;
+      case "csd_error":
+        return "the CSD reported a server error";
+      default:
+        return e.message;
+    }
+  }
+  const raw = e instanceof Error ? e.message : String(e ?? "");
+  const first = raw.split("\n")[0].trim();
+  return first.length > 160 ? `${first.slice(0, 157)}\u2026` : first || "the call failed";
+}

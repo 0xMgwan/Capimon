@@ -70,6 +70,7 @@ type DeskData = {
   csd: {
     readable: boolean; account: string | null;
     canInstruct: boolean; blockedBecause: string | null;
+    unreadableBecause: string | null;
     rows: { symbol: string; total: number | null; free: number | null;
             pledged: number | null; reserved: number | null;
             pendingSale: number | null; pendingBuy: number | null;
@@ -2357,7 +2358,7 @@ function PledgeControls({ symbol, isin, blocked, busy, onAct, csd, pledges }: {
  */
 function CsdReconciliation({ csd }: {
   csd: {
-    readable: boolean; account: string | null;
+    readable: boolean; account: string | null; unreadableBecause: string | null;
     rows: { symbol: string; total: number | null; free: number | null;
             pledged: number | null; reserved: number | null;
             pendingSale: number | null; pendingBuy: number | null;
@@ -2394,6 +2395,15 @@ function CsdReconciliation({ csd }: {
         <p className="mt-3 rounded-xl border border-[#b45309]/40 bg-[#b45309]/[0.06] px-3 py-2 text-[11px] text-[#b45309]">
           The exchange could not be read, so nothing below is a comparison.
           These are CAPX&rsquo;s own figures only.
+          {csd.unreadableBecause && (
+            <>
+              {" "}
+              {/* The cause, for CAPX's desk. It never goes to the exchange's
+                  own portal, which has no business seeing which of our
+                  settings is wrong. */}
+              <span className="text-[var(--muted)]">Reason: {csd.unreadableBecause}.</span>
+            </>
+          )}
         </p>
       )}
 

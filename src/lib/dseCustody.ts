@@ -680,9 +680,17 @@ export function describeCsdFailure(e: unknown): string {
     switch (e.code) {
       case "not_configured":
         return "the CSD credentials are not all set on this deployment";
+      /*
+       * The thrown message, not a sentence written here.
+       *
+       * requestToken already distinguishes a 401 from a 404 from a 200 it
+       * could not parse, and each points somewhere different. Restating it
+       * as one fixed line threw that away and sent somebody to check an
+       * application id over what may have been a wrong path.
+       */
       case "auth_failed":
-        return "the exchange rejected the credentials — check the application id and secret, "
-          + "and that the base URL is the UAT one";
+      case "token_shape":
+        return e.message;
       case "unauthenticated":
         return "the exchange rejected the access token twice, which usually means the "
           + "stakeholder username or password is wrong";

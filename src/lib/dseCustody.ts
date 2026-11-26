@@ -173,14 +173,33 @@ async function requestToken(): Promise<Token> {
    */
   const attempts: { label: string; headers: Record<string, string>; body: string }[] = [
     {
-      label: "json",
-      headers: { "content-type": "application/json" },
+      label: "JSON body, Basic auth",
+      headers: { authorization: `Basic ${basic}`, "content-type": "application/json" },
       body: JSON.stringify(fields),
     },
     {
-      label: "form",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
+      label: "form body, Basic auth",
+      headers: { authorization: `Basic ${basic}`,
+                 "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams(fields).toString(),
+    },
+    /*
+     * The third variant: client credentials in the body instead of the
+     * header.
+     *
+     * RFC 6749 permits both and plenty of servers accept only this one. It
+     * is worth trying because the alternative is another round trip to Dar
+     * to ask which, and because a 400 with no error body at all is what a
+     * gateway returns when a required field is simply absent — which is
+     * what the client id would be, from its point of view, if it is
+     * expected here rather than in the header.
+     */
+    {
+      label: "form body, credentials in body",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        ...fields, client_id: APPLICATION_ID, client_secret: ACCESS_SECRET,
+      }).toString(),
     },
   ];
 
@@ -189,11 +208,7 @@ async function requestToken(): Promise<Token> {
   for (const attempt of attempts) {
     const res = await fetch(`${BASE_URL}${TOKEN_PATH}`, {
       method: "POST",
-      headers: {
-        authorization: `Basic ${basic}`,
-        accept: "application/json",
-        ...attempt.headers,
-      },
+      headers: { accept: "application/json", ...attempt.headers },
       body: attempt.body,
       cache: "no-store",
       signal: AbortSignal.timeout(20_000),
@@ -212,17 +227,38 @@ async function requestToken(): Promise<Token> {
        * "invalid_client" — far better than a status code can. Dropping them
        * was why a 400 read as a credential problem.
        */
-      const detail = [body.error, body.error_description, body.message]
-        .filter((v): v is string => typeof v === "string" && v.length > 0)
-        .join(": ");
+      /*
+       * Their words if they gave any, and otherwise the body itself.
+       *
+       * The first pass looked for OAuth's error fields and their envelope's
+       * message, found none of them, and reported "it returned no reason" —
+       * which was true and useless. A 400 carrying nothing an OAuth server
+       * would send is itself the finding: it points at a gateway refusing
+       * the request before the application saw it, and the only way to tell
+       * is to look at what actually came back.
+       */
+      const named = [body.error, body.error_description, body.message, body.code]
+        .filter((v): v is string => typeof v === "string" && v.length > 0);
+      if (Array.isArray(body.errors)) named.push(...body.errors.map(String));
+
+      /* The response, never the request: the request holds the password.
+         Truncated for the screen; the whole of it goes to the log. */
+      const snippet = text.trim().replace(/\s+/g, " ").slice(0, 200);
+      console.error(`CSD token attempt [${attempt.label}] -> HTTP ${res.status}`,
+        { contentType: res.headers.get("content-type"), body: text.slice(0, 2000) });
+
+      const detail = named.length
+        ? named.join(": ")
+        : snippet
+          ? `the body was ${JSON.stringify(snippet)}`
+          : `the response was empty (content-type ${res.headers.get("content-type") ?? "none"})`;
 
       last = new DseCustodyError(
         "auth_failed",
         res.status === 404
           ? `The token endpoint was not found at ${TOKEN_PATH} (404). The path is wrong, not the credentials.`
-          : `The exchange refused the token request (HTTP ${res.status}${
-              attempt.label === "form" ? ", form-encoded" : ", JSON"} body)`
-            + `${detail ? `: ${detail}` : ". It returned no reason."}`,
+          : `The exchange refused the token request (HTTP ${res.status}, tried `
+            + `${attempt.label}): ${detail}`,
         res.status || 502,
       );
 
@@ -242,16 +278,14 @@ async function requestToken(): Promise<Token> {
         Object.keys(body), "data keys:", Object.keys(nested));
       throw new DseCustodyError(
         "token_shape",
-        `The exchange accepted the ${attempt.label} request (HTTP ${res.status}) but the response `
+        `The exchange accepted the request (${attempt.label}, HTTP ${res.status}) but the response `
         + `carried no token in a shape this client recognises. The credentials are probably fine; `
         + `the response format needs confirming. Its field names are in the server log.`,
         502,
       );
     }
 
-    if (attempt.label !== "json") {
-      console.info(`CSD token obtained with a ${attempt.label}-encoded body.`);
-    }
+    console.info(`CSD token obtained with: ${attempt.label}.`);
 
     /* An absent or unparseable expires_in is treated as one hour rather than
        forever: a token believed valid past its life fails every call until

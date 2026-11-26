@@ -86,44 +86,21 @@ export class DseCustodyError extends Error {
 /* ------------------------------------------------------------ accounts -- */
 
 /**
- * Two account numbers that the API's own field names get backwards.
+ * The investor CDS account, for the holdings enquiry.
  *
- * The exchange flagged this themselves. On a pledge instruction `csdAccount`
- * is the *broker's* safe-custody account (B21/C) and `brokerCode` is the
- * *investor's* CDS account — each the opposite of what it reads like. And the
- * investor's CDS account is `cdsAccount` on the holdings enquiry but
- * `brokerCode` on the pledge: one value, two names, two endpoints.
- *
- * Branding them means the compiler refuses the swap. Passing two bare strings
- * in the wrong order type-checks perfectly and pledges against the wrong
- * account, which is not a mistake to find in production.
+ * Branded so it cannot be swapped with any other identifier at that call.
+ * There is deliberately no matching type for the pledge instruction's
+ * accounts: the exchange's guide and their email disagree about which of its
+ * two account fields means what, and a type asserting one of them would
+ * quietly make that choice permanent. Those stay named by meaning at the
+ * call site until DSE settles it — see the note on PledgeRequest.
  */
-export type SafeCustodyAccount = string & { readonly __brand: "SafeCustodyAccount" };
 export type CdsAccount = string & { readonly __brand: "CdsAccount" };
 
-/** A broker's safe-custody account, shaped like "B21/C". */
-export function safeCustodyAccount(raw: string): SafeCustodyAccount {
-  const v = raw.trim().toUpperCase();
-  if (!/^B\d{1,6}\/[A-Z]$/.test(v)) {
-    throw new DseCustodyError(
-      "bad_account",
-      `"${raw}" is not a safe-custody account. Expected a form like B21/C — ` +
-      `an investor's CDS account goes in a different field.`,
-      400,
-    );
-  }
-  return v as SafeCustodyAccount;
-}
-
-/**
- * An investor's CDS account.
- *
- * Deliberately loose on format and strict on the one thing that distinguishes
- * it: it must not look like a safe-custody account. The exact CDS numbering
- * is not documented to us yet, so refusing everything that does not match a
- * guessed pattern would reject valid accounts. Refusing the one pattern we
- * know belongs to the other field catches the mistake this type exists for.
- */
+/* Loose on format and strict on the one thing that distinguishes it: the
+   CDS numbering is not documented to us, so refusing everything that does
+   not match a guessed pattern would reject valid accounts, while refusing
+   the one shape known to belong elsewhere catches a swap. */
 export function cdsAccount(raw: string): CdsAccount {
   const v = raw.trim().toUpperCase();
   if (!v) throw new DseCustodyError("bad_account", "A CDS account is required.", 400);
@@ -156,32 +133,34 @@ let inFlight: Promise<Token> | null = null;
 const RENEW_MARGIN_MS = 10 * 60_000;
 
 /**
- * The one call still taken on trust, and the only one that should be.
+ * The token endpoint, which is not under /stakeholder at all.
  *
- * Everything else in this file is built from what the exchange wrote down:
- * the endpoint paths, the field mapping, the result codes, the meaning of a
- * 2000. This is not — the path and the body below are inferred from four
- * variable names, and an earlier inference from two of them was already
- * wrong. It is isolated here so that correcting it is one function rather
- * than a hunt, and `TOKEN_PATH` is separate so a different path costs a line.
- *
- * What is needed to close it is the auth request from their own collection:
- * method, path, which of the four go in the body and which in headers. Until
- * then this will fail against the real service, which is the right way for an
- * unverified guess to behave — loudly, at the first call, rather than by
- * quietly authenticating as something unintended.
+ * OAuth 2.0 password grant: the application identity goes in an HTTP Basic
+ * header and the stakeholder user's credentials go in the body. This was
+ * inferred twice before the exchange's guide arrived and was wrong both
+ * times — first as a client id and secret pair, then as all four in the
+ * body — which is why it is now transcribed from their document rather than
+ * reasoned about.
  */
-const TOKEN_PATH = process.env.DSE_CSD_TOKEN_PATH ?? "/stakeholder/api/v1/auth/token";
+const TOKEN_PATH = process.env.DSE_CSD_TOKEN_PATH
+  ?? "/iam/api/v1/stakeholders/oauth/token";
 
 async function requestToken(): Promise<Token> {
+  /* applicationId and accessSecret are the client id and secret, presented
+     as Basic auth rather than in the body. */
+  const basic = Buffer.from(`${APPLICATION_ID}:${ACCESS_SECRET}`, "utf8").toString("base64");
+
   const res = await fetch(`${BASE_URL}${TOKEN_PATH}`, {
     method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json" },
+    headers: {
+      authorization: `Basic ${basic}`,
+      "content-type": "application/json",
+      accept: "application/json",
+    },
     body: JSON.stringify({
-      applicationId: APPLICATION_ID,
-      accessSecret: ACCESS_SECRET,
-      stakeholderUsername: STAKEHOLDER_USERNAME,
-      stakeholderPassword: STAKEHOLDER_PASSWORD,
+      grant_type: "password",
+      username: STAKEHOLDER_USERNAME,
+      password: STAKEHOLDER_PASSWORD,
     }),
     cache: "no-store",
     signal: AbortSignal.timeout(20_000),
@@ -253,9 +232,29 @@ const RESULT: Record<string, { code: string; message: string; retry: "no" | "bac
   "5000": { code: "csd_error", message: "The CSD reported a server error.", retry: "verify" },
 };
 
-type Envelope<T> = { resultCode?: string | number; message?: string; data?: T } & Record<string, unknown>;
+/**
+ * The shape every call comes back in.
+ *
+ * `code` carries the result and `errors` the detail; the HTTP status does
+ * not, and their guide says so outright — an error can arrive with HTTP 200.
+ * So the body is read first and the status only consulted for transport
+ * failures.
+ *
+ * `data.upstream.accepted` is the CSD's own answer, as distinct from the
+ * exchange's. Their guide calls it the final confirmation.
+ */
+type Envelope<T> = {
+  code?: string | number;
+  success?: boolean;
+  message?: string;
+  data?: T;
+  errors?: unknown;
+  requestId?: string;
+} & Record<string, unknown>;
 
-async function call<T>(path: string, body: unknown, opts: { retried?: boolean } = {}): Promise<T> {
+async function call<T>(
+  path: string, body: unknown, opts: { retried?: boolean } = {},
+): Promise<{ data: T; requestId: string | null }> {
   const bearer = await authorization();
 
   let res: Response;
@@ -313,7 +312,7 @@ async function call<T>(path: string, body: unknown, opts: { retried?: boolean } 
     );
   }
 
-  const result = String(parsed.resultCode ?? "");
+  const result = String(parsed.code ?? "");
   const known = RESULT[result];
   if (result !== "2000") {
     throw new DseCustodyError(
@@ -321,13 +320,18 @@ async function call<T>(path: string, body: unknown, opts: { retried?: boolean } 
       /* Their message where there is one: the full code list is still to
          come, so an unrecognised code must carry its own number through
          rather than be flattened to "failed". */
-      String(parsed.message ?? known?.message ?? `The CSD returned result code ${result || "none"}.`),
+      String(parsed.message ?? known?.message ?? `The CSD returned result code ${result || "none"}.`)
+        + (Array.isArray(parsed.errors) && parsed.errors.length
+            ? ` (${parsed.errors.map(String).join("; ")})` : ""),
       200,
       known?.retry ?? "verify",
     );
   }
 
-  return (parsed.data ?? (parsed as unknown)) as T;
+  /* The requestId is what DSE support asks for, and their guide says to log
+     every one. It rides out with the data so a caller can store it beside
+     whatever the call produced. */
+  return { data: (parsed.data ?? null) as T, requestId: parsed.requestId ?? null };
 }
 
 /* ----------------------------------------------------------- holdings -- */
@@ -361,13 +365,13 @@ const num = (v: unknown): number => {
  * account rather than an investor's.
  */
 export async function holdingsByCds(account: CdsAccount): Promise<SecurityHolding[]> {
-  const data = await call<HoldingRow[] | { holdings?: HoldingRow[] }>(
+  const { data } = await call<HoldingRow[] | { holdings?: HoldingRow[] }>(
     "/stakeholder/api/v1/trading/holdings/by-cds",
     { cdsAccount: account },
   );
 
   const rows = Array.isArray(data) ? data : (data?.holdings ?? []);
-  return rows.map((r) => ({
+  return rows.map((r: HoldingRow) => ({
     symbol: String(r.security ?? r.securityCode ?? r.symbol ?? "").toUpperCase(),
     totalBalance: num(r.totalBalance),
     freeBalance: num(r.freeBalance),
@@ -375,7 +379,7 @@ export async function holdingsByCds(account: CdsAccount): Promise<SecurityHoldin
     reservedBalance: num(r.reservedBalance),
     pendingSale: num(r.pendingSale),
     pendingBuy: num(r.pendingBuy),
-  })).filter((h) => h.symbol);
+  })).filter((h: SecurityHolding) => h.symbol);
 }
 
 /** One security out of an account's holdings, or null if it holds none. */
@@ -405,68 +409,145 @@ export function pledgeQuantityFor(claimedShares: number): number {
   return Math.ceil(claimedShares - 1e-9);
 }
 
+/**
+ * The body both instructions take — a hold and a release are identical
+ * except for the path.
+ *
+ * ## The field mapping is contested, and this is the dangerous part
+ *
+ * The exchange's guide and the exchange's email say opposite things about
+ * two of these fields.
+ *
+ *   The guide (v1.0, November 2026) says `csdAccount` is the "investor's CSD
+ *   (safe custody) account number", example 123456, and `brokerCode` is the
+ *   "broker code of the pledgor", example BRK001.
+ *
+ *   Their email says the names are confusing and to use the opposite
+ *   mapping: `csdAccount` is the broker's safe-custody account, example
+ *   B21/C, and `brokerCode` is the investor's CDS account number.
+ *
+ * Both readings are coherent and only one can be right. Getting it wrong
+ * pledges against the wrong account, which is not a mistake that announces
+ * itself. So the arguments here are named by *meaning* rather than by their
+ * wire names, and the mapping to the wire happens in exactly one place
+ * below — if DSE confirms the email's version, that is two lines, not a
+ * hunt through the file.
+ *
+ * The versioned document wins until a person says otherwise, because it is
+ * the artefact they will point at later.
+ */
 export type PledgeRequest = {
-  /** The security's DSE code. */
-  symbol: string;
+  /** ISIN, not a ticker: the CSD identifies securities by TZ0000000001. */
+  securityIsin: string;
+  /** The security's short name, which the instruction also carries. */
+  securityDesc: string;
   /** Whole shares. A fraction is refused rather than silently truncated. */
   quantity: number;
-  /** The broker's safe-custody account the shares sit under — their `csdAccount`. */
-  custodyAccount: SafeCustodyAccount;
-  /** The investor's CDS account — their `brokerCode`, confusingly. */
-  investorAccount: CdsAccount;
+  /** The investor whose holding is pledged. */
+  investorAccount: string;
+  /** The pledgor's broker code. */
+  brokerCode: string;
 };
 
 export type PledgeAccepted = {
-  /** The CSD's references. Retain both: there is no lookup by our own. */
-  transactionId: string | null;
-  processingId: string | null;
+  /** BALANCE for a hold, RELEASE for a release. */
+  action: string;
+  /**
+   * Whether the CSD itself accepted it, which their guide calls the final
+   * confirmation — as distinct from the 2000, which is only the exchange
+   * saying it took the instruction. Null when absent, which their notes say
+   * to treat as unconfirmed rather than as a yes.
+   */
+  upstreamAccepted: boolean | null;
+  tradeDate: string | null;
+  settlementDate: string | null;
+  /** Log it: their guide asks for it on every support conversation. */
+  requestId: string | null;
 };
 
+const PLEDGE_PATH = {
+  hold: "/stakeholder/api/v1/pledge-instructions/balance",
+  release: "/stakeholder/api/v1/pledge-instructions/release",
+} as const;
+
 /**
- * Queues a pledge instruction. **This does not lock anything.**
+ * Places or releases a pledge. **Neither locks or unlocks anything on its
+ * own return.**
  *
- * A 2000 means the CSD took the instruction. Whether it holds is decided
- * later, during processing, against checks this response has not run. Nothing
- * may be minted on the strength of what comes back from here — call
- * `confirmPledge` and mint on that.
+ * A 2000 means the exchange accepted the instruction. `upstreamAccepted`
+ * says the CSD did, which is stronger and is what their guide calls final —
+ * and their email says validation continues during processing even then. The
+ * two statements do not agree, so this returns both and lets the caller
+ * require the holdings to move as well: see confirmPledge. Believing the
+ * weaker of two conflicting assurances costs a wasted poll, believing the
+ * stronger one costs tokens minted against shares that were never locked.
  *
- * The caller is expected to have written its intent to durable storage before
- * calling, because a timeout leaves no way to ask what happened: see the
- * "verify" disposition on the error.
+ * Their guide is explicit that a timeout must not be retried automatically.
+ * The caller is expected to have recorded its intent before calling, because
+ * there is no lookup by our own reference to ask with afterwards.
  */
-export async function pledge(req: PledgeRequest): Promise<PledgeAccepted> {
+async function instruct(
+  kind: "hold" | "release", req: PledgeRequest,
+): Promise<PledgeAccepted> {
   if (!DSE_BPID) {
     throw new DseCustodyError("not_configured", "No BPID is configured for CAPX.", 503);
   }
   if (!Number.isInteger(req.quantity) || req.quantity <= 0) {
     throw new DseCustodyError(
       "fractional_quantity",
-      `The CSD accepts whole shares only; ${req.quantity} was given. ` +
-      `Round with pledgeQuantityFor() so the lock covers the claims rather than trailing them.`,
+      `The CSD accepts whole shares only; ${req.quantity} was given. `
+      + `Round with pledgeQuantityFor() so the lock covers the claims rather than trailing them.`,
+      400,
+    );
+  }
+  if (!req.securityIsin.trim()) {
+    throw new DseCustodyError(
+      "no_isin",
+      `No ISIN is recorded for this security, and the CSD will not take a ticker.`,
       400,
     );
   }
 
-  const data = await call<Record<string, unknown>>(
-    "/stakeholder/api/v1/trading/pledge",
-    {
-      pledgeeBpid: DSE_BPID,
-      /* Their names, not ours. The branded types above are what stop these
-         two being handed over the wrong way round. */
-      csdAccount: req.custodyAccount,
-      brokerCode: req.investorAccount,
-      security: req.symbol.toUpperCase(),
-      quantity: req.quantity,
-    },
-  );
+  /*
+   * The one place meaning becomes a wire field. See the note on
+   * PledgeRequest: these two assignments are what change if DSE confirms
+   * their email rather than their guide.
+   */
+  const { data, requestId } = await call<Record<string, unknown>>(PLEDGE_PATH[kind], {
+    securityIsin: req.securityIsin.trim().toUpperCase(),
+    securityDesc: req.securityDesc,
+    quantity: req.quantity,
+    brokerCode: req.brokerCode,
+    csdAccount: req.investorAccount,
+    pledgeeBpid: DSE_BPID,
+  });
 
-  const id = (k: string) => (typeof data[k] === "string" || typeof data[k] === "number"
-    ? String(data[k]) : null);
+  const upstream = (data?.upstream ?? null) as { accepted?: unknown } | null;
+  const str = (k: string) => (typeof data?.[k] === "string" ? data[k] as string : null);
+
   return {
-    transactionId: id("transaction_id") ?? id("transactionId"),
-    processingId: id("processing_id") ?? id("processingId"),
+    action: str("action") ?? (kind === "hold" ? "BALANCE" : "RELEASE"),
+    upstreamAccepted: typeof upstream?.accepted === "boolean" ? upstream.accepted : null,
+    tradeDate: str("tradeDate"),
+    settlementDate: str("settlementDate"),
+    requestId,
   };
 }
+
+/** Locks a quantity in CAPX's favour. Confirm before minting against it. */
+export const pledge = (req: PledgeRequest) => instruct("hold", req);
+
+/**
+ * Releases a previously pledged quantity.
+ *
+ * Identified by security, quantity and accounts rather than by a reference
+ * to the hold that placed it — the instruction carries no pledge id, so
+ * there is nothing to quote. A release is therefore a statement about a
+ * quantity, not about a particular earlier pledge, and the burn it follows
+ * has to be reconciled against the holdings rather than against a chain of
+ * instruction ids.
+ */
+export const releasePledge = (req: PledgeRequest) => instruct("release", req);
 
 export type PledgeConfirmation = {
   confirmed: boolean;
@@ -478,7 +559,7 @@ export type PledgeConfirmation = {
 };
 
 /**
- * The only evidence a pledge actually happened.
+ * The evidence a pledge actually happened.
  *
  * Reads the CSD's holdings and asks whether `pledgedBalance` has risen by at
  * least what was asked for. Deliberately a comparison against a figure taken
@@ -486,11 +567,20 @@ export type PledgeConfirmation = {
  * right: a security can be pledged for several reasons at once, and an
  * absolute threshold would read somebody else's lock as ours.
  *
- * An unconfirmed result is not a failure. The CSD processes asynchronously,
+ * This runs even when the instruction came back with `upstreamAccepted`
+ * true, which their guide calls the final confirmation. Their email says
+ * validation continues inside the CSD after acceptance, and the two
+ * statements cannot both be complete. The cost of believing the weaker one
+ * is a poll that was not needed; the cost of believing the stronger one, if
+ * it turns out to be the email that was right, is tokens minted against
+ * shares nothing locked. So the holdings are read either way.
+ *
+ * An unconfirmed result is not a failure. The CSD may still be processing,
  * so "not yet" and "rejected" look identical here until they tell us how
  * rejections are communicated — which is why this reports what it saw and
- * refuses to guess which one it is. The caller waits, and escalates to a
- * person rather than resending.
+ * refuses to guess which. The caller waits, and escalates to a person rather
+ * than resending: their guide says not to retry automatically, and there is
+ * no lookup by our own reference to ask with.
  */
 export async function confirmPledge(args: {
   investorAccount: CdsAccount;
@@ -506,5 +596,30 @@ export async function confirmPledge(args: {
     pledgedBalance,
     wasPledged: args.wasPledged,
     shortBy: Math.max(0, args.quantity - gained),
+  };
+}
+
+/**
+ * The mirror, for a release: has the pledged balance actually fallen?
+ *
+ * Needed as its own function rather than a negated confirmPledge because the
+ * comparison runs the other way and a sign error here would report a lock
+ * still in place as released — which is the direction that lets a share be
+ * sold twice.
+ */
+export async function confirmRelease(args: {
+  investorAccount: CdsAccount;
+  symbol: string;
+  quantity: number;
+  wasPledged: number;
+}): Promise<PledgeConfirmation> {
+  const holding = await holdingOf(args.investorAccount, args.symbol);
+  const pledgedBalance = holding?.pledgedBalance ?? 0;
+  const freed = args.wasPledged - pledgedBalance;
+  return {
+    confirmed: freed >= args.quantity,
+    pledgedBalance,
+    wasPledged: args.wasPledged,
+    shortBy: Math.max(0, args.quantity - freed),
   };
 }

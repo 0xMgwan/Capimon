@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  safeCustodyAccount, cdsAccount, pledgeQuantityFor, DseCustodyError,
+  cdsAccount, pledgeQuantityFor, DseCustodyError,
 } from "../src/lib/dseCustody";
 
 /**
@@ -14,26 +14,13 @@ import {
 
 // ── the two accounts ─────────────────────────────────────────────────────
 
-test("a safe-custody account is accepted and normalised", () => {
-  assert.equal(safeCustodyAccount("b21/c"), "B21/C");
-  assert.equal(safeCustodyAccount("  B7/A  "), "B7/A");
-});
-
-test("an investor CDS account is refused where the broker's belongs", () => {
-  /* The mistake this type exists for: the API calls the broker's account
-     `csdAccount` and the investor's `brokerCode`, so handing them over the
-     wrong way round reads perfectly well. */
-  assert.throws(() => safeCustodyAccount("0123456789"), (e: unknown) => {
-    assert.ok(e instanceof DseCustodyError);
-    assert.equal(e.code, "bad_account");
-    return true;
-  });
-});
-
-test("a broker account is refused where the investor's belongs", () => {
+test("a broker-shaped account is refused for the holdings enquiry", () => {
+  /* holdings/by-cds takes an investor CDS account, unambiguously. A
+     B21/C-shaped value is a broker safe-custody account and belongs
+     elsewhere, so it is caught rather than queried. */
   assert.throws(() => cdsAccount("B21/C"), (e: unknown) => {
     assert.ok(e instanceof DseCustodyError);
-    assert.match(e.message, /swapped relative to the API's field names/);
+    assert.equal(e.code, "bad_account");
     return true;
   });
 });

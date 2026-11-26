@@ -1189,6 +1189,18 @@ export async function migrate() {
            */
           "side text not null default 'buy'",
         ],
+        securities: [
+          /*
+           * The ISIN, because the CSD will not take a ticker.
+           *
+           * Everything in CAPX keys a security by its DSE code — CRDB, NMB —
+           * and the pledge API identifies one by `securityIsin`, an ISIN like
+           * TZ0000000001, with a `securityDesc` beside it. Neither is
+           * derivable from the other, so the mapping has to be stored, and a
+           * security without one simply cannot be pledged.
+           */
+          "isin text",
+        ],
         liquidity_providers: [
           /*
            * The mark a provider will not sell below, as a percentage above

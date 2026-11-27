@@ -367,19 +367,50 @@ async function requestToken(): Promise<Token> {
       continue;
     }
 
+    /*
+     * A 200 is not a success here, and their guide says so outright: "check
+     * the code field in the body, not only the HTTP status. Error results
+     * can come back with HTTP 200."
+     *
+     * That was read, noted and then not implemented for the token call,
+     * which is why a refusal arrived looking like a response with a missing
+     * token. 4000 is a validation error and 4001 wants authentication;
+     * neither is a token under an unfamiliar name.
+     */
+    const envelope = String(body.code ?? "");
+    if (envelope && envelope !== "2000" && envelope !== "200") {
+      const said = [body.message, ...(Array.isArray(body.errors) ? body.errors.map(String) : [])]
+        .filter((v): v is string => typeof v === "string" && v.length > 0)
+        .join(": ");
+      console.error(`CSD token attempt [${attempt.label}] -> HTTP 200 but code ${envelope}`,
+        { body: text.slice(0, 2000) });
+      tried.push(`${attempt.label} → ${envelope}${said ? ` ${said}` : ""}`);
+      last = new DseCustodyError("auth_failed",
+        `The exchange refused the token request. Tried: ${tried.join(" · ")}`, 400);
+      continue;
+    }
+
     const hit = findToken(body);
 
     if (!hit) {
       /* Key names only. The values are the credentials and a bearer token. */
       const nested = (body.data ?? {}) as Record<string, unknown>;
-      console.error("CSD token response had no recognisable token. Top-level keys:",
-        Object.keys(body), "data keys:", Object.keys(nested));
-      throw new DseCustodyError(
-        "token_shape",
-        `The exchange accepted the request (${attempt.label}, HTTP ${res.status}) but the response `
-        + `carried nothing shaped like a token. Its field names are in the server log.`,
-        502,
-      );
+      console.error(`CSD token attempt [${attempt.label}] -> HTTP ${res.status}, no token found.`,
+        "Top-level keys:", Object.keys(body), "data keys:", Object.keys(nested),
+        "body:", text.slice(0, 2000));
+      /*
+       * Recorded and moved past, not thrown.
+       *
+       * Throwing here abandoned every shape after this one, so a request
+       * that got a 200 without a usable token stopped the search even when
+       * a later shape might have produced a real token.
+       */
+      tried.push(`${attempt.label} → ${res.status} no token in the body `
+        + `(keys: ${[...Object.keys(body), ...Object.keys(nested)].join(", ") || "none"})`);
+      last = new DseCustodyError("token_shape",
+        `The exchange accepted a request but returned no usable token. Tried: ${tried.join(" · ")}`,
+        502);
+      continue;
     }
 
     /* The field it was found under, so this can stop searching once it is
@@ -402,8 +433,8 @@ async function requestToken(): Promise<Token> {
   if (last) {
     /* Rebuilt once all attempts are in, so the message lists every shape
        tried rather than whichever happened to be last. */
-    throw new DseCustodyError("auth_failed",
-      `The exchange refused the token request. Tried: ${tried.join(" · ")}`, last.status);
+    throw new DseCustodyError(last.code,
+      `The exchange returned no usable token. Tried: ${tried.join(" · ")}`, last.status);
   }
   throw new DseCustodyError("auth_failed", "The token request failed.", 502);
 }

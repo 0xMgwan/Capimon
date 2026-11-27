@@ -129,6 +129,21 @@ type Token = { value: string; refresh: string | null; expiresAt: number };
 let token: Token | null = null;
 let inFlight: Promise<Token> | null = null;
 
+/**
+ * How long a failed token request is remembered before trying again.
+ *
+ * Nothing caches on failure, so every read of the desk re-authenticated —
+ * and with four shapes attempted, one page load became four credential
+ * submissions against a partner's UAT. That is indistinguishable from
+ * someone trying passwords, and the likely result is a lockout earned by our
+ * own retry loop rather than by anything wrong with the credentials.
+ *
+ * A minute is short enough that a reload picks up a fix on their side
+ * quickly, and long enough that a desk left open does not hammer them.
+ */
+const FAILURE_COOLDOWN_MS = 60_000;
+let lastFailure: { at: number; error: DseCustodyError } | null = null;
+
 /** Renew this far before expiry, so a long request cannot straddle it. */
 const RENEW_MARGIN_MS = 10 * 60_000;
 
@@ -452,16 +467,33 @@ async function authorization(): Promise<string> {
     throw new DseCustodyError("not_configured", "The DSE CSD API is not configured.", 503);
   }
   if (token && Date.now() < token.expiresAt - RENEW_MARGIN_MS) return token.value;
+
+  /* Still inside the cooldown: the same answer, without asking again. */
+  if (lastFailure && Date.now() - lastFailure.at < FAILURE_COOLDOWN_MS) {
+    throw lastFailure.error;
+  }
+
   if (!inFlight) {
     inFlight = requestToken().finally(() => { inFlight = null; });
   }
-  token = await inFlight;
+  try {
+    token = await inFlight;
+  } catch (e) {
+    lastFailure = {
+      at: Date.now(),
+      error: e instanceof DseCustodyError
+        ? e : new DseCustodyError("auth_failed", "The token request failed.", 502),
+    };
+    throw lastFailure.error;
+  }
+  lastFailure = null;
   return token.value;
 }
 
-/** Drops the cached token, so the next call authenticates afresh. */
+/** Drops the cached token and any held failure, so the next call tries again. */
 export function forgetToken(): void {
   token = null;
+  lastFailure = null;
 }
 
 /* --------------------------------------------------------------- call -- */

@@ -145,6 +145,81 @@ const RENEW_MARGIN_MS = 10 * 60_000;
 const TOKEN_PATH = process.env.DSE_CSD_TOKEN_PATH
   ?? "/iam/api/v1/stakeholders/oauth/token";
 
+/**
+ * Finds the access token in a response whose field names we do not know.
+ *
+ * The exchange answered 200 to a body carrying its own four field names,
+ * which settled that the credentials were always fine and that its token
+ * endpoint is not the OAuth password grant its guide prints. What it did not
+ * settle is what the token is called in the answer — and asking costs
+ * another day.
+ *
+ * So it is searched for rather than guessed at, which is safe because of how
+ * narrowly a bearer token is shaped: a long unbroken string under a key that
+ * says token. Anything that does not look like one is not considered, and a
+ * response with nothing matching still fails rather than sending a field
+ * that happened to be long.
+ *
+ * Exported for the tests, because picking the wrong string here would send
+ * an arbitrary value from the response as an Authorization header.
+ */
+export function findToken(body: unknown): { path: string; value: string } | null {
+  const found: { path: string; value: string; score: number }[] = [];
+
+  const walk = (node: unknown, path: string, depth: number) => {
+    if (depth > 3 || node === null || typeof node !== "object") return;
+    for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+      const here = path ? `${path}.${k}` : k;
+      if (typeof v === "string") {
+        /* A bearer token is long and has no whitespace. A name, a date or a
+           status message fails one of those. */
+        if (v.length < 20 || /\s/.test(v)) continue;
+        const key = k.toLowerCase();
+        const score = key.includes("access") && key.includes("token") ? 4
+          : key.includes("token") ? 3
+          : key.includes("jwt") ? 2
+          /* A JWT identifies itself: three base64 segments. Worth taking
+             even under a key that says nothing, since nothing else in a
+             response looks like one. */
+          : /^[\w-]+\.[\w-]+\.[\w-]+$/.test(v) ? 1
+          : 0;
+        if (score > 0) found.push({ path: here, value: v, score });
+      } else {
+        walk(v, here, depth + 1);
+      }
+    }
+  };
+
+  walk(body, "", 0);
+  if (!found.length) return null;
+  /* Best score wins; shallower wins a tie, since a wrapper's own token sits
+     above anything nested inside it. */
+  found.sort((a, b) => b.score - a.score || a.path.length - b.path.length);
+  return { path: found[0].path, value: found[0].value };
+}
+
+/** The lifetime, under whichever of the usual names carries it. */
+export function findExpiry(body: unknown): number | null {
+  const names = ["expires_in", "expiresin", "expiry", "ttl", "validfor", "expiresat"];
+  let out: number | null = null;
+  const walk = (node: unknown, depth: number) => {
+    if (depth > 3 || node === null || typeof node !== "object" || out !== null) return;
+    for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+      if (out !== null) return;
+      if (names.includes(k.toLowerCase().replace(/[_-]/g, ""))) {
+        const n = Number(v);
+        /* Seconds, not a timestamp: anything past a year is an absolute date
+           in disguise and would park the cache beyond any real lifetime. */
+        if (Number.isFinite(n) && n > 0 && n < 400 * 86_400) { out = n; return; }
+      } else if (typeof v === "object") {
+        walk(v, depth + 1);
+      }
+    }
+  };
+  walk(body, 0);
+  return out;
+}
+
 async function requestToken(): Promise<Token> {
   /* applicationId and accessSecret are the client id and secret, presented
      as Basic auth rather than in the body. */
@@ -292,35 +367,36 @@ async function requestToken(): Promise<Token> {
       continue;
     }
 
-    const nested = (body.data ?? {}) as Record<string, unknown>;
-    const token = [body.access_token, nested.access_token, body.accessToken, nested.accessToken]
-      .find((v): v is string => typeof v === "string" && v.length > 0);
+    const hit = findToken(body);
 
-    if (!token) {
+    if (!hit) {
       /* Key names only. The values are the credentials and a bearer token. */
+      const nested = (body.data ?? {}) as Record<string, unknown>;
       console.error("CSD token response had no recognisable token. Top-level keys:",
         Object.keys(body), "data keys:", Object.keys(nested));
       throw new DseCustodyError(
         "token_shape",
         `The exchange accepted the request (${attempt.label}, HTTP ${res.status}) but the response `
-        + `carried no token in a shape this client recognises. The credentials are probably fine; `
-        + `the response format needs confirming. Its field names are in the server log.`,
+        + `carried nothing shaped like a token. Its field names are in the server log.`,
         502,
       );
     }
 
-    console.info(`CSD token obtained with: ${attempt.label}.`);
+    /* The field it was found under, so this can stop searching once it is
+       known — and so a wrong pick is visible rather than silent. */
+    console.info(`CSD token obtained with: ${attempt.label}; token read from "${hit.path}".`);
 
-    /* An absent or unparseable expires_in is treated as one hour rather than
+    /* An absent or unparseable lifetime is treated as one hour rather than
        forever: a token believed valid past its life fails every call until
        something clears the cache. */
-    const ttlS = Number(body.expires_in ?? nested.expires_in ?? nested.expiresIn);
-    const lifeMs = Number.isFinite(ttlS) && ttlS > 0 ? ttlS * 1000 : 3_600_000;
+    const ttlS = findExpiry(body);
+    const lifeMs = ttlS ? ttlS * 1000 : 3_600_000;
 
-    const refresh = [body.refresh_token, nested.refresh_token]
-      .find((v): v is string => typeof v === "string") ?? null;
+    const refresh = findToken({ r: (body.refresh_token ?? body.refreshToken
+      ?? (body.data as Record<string, unknown> | undefined)?.refresh_token
+      ?? (body.data as Record<string, unknown> | undefined)?.refreshToken) })?.value ?? null;
 
-    return { value: token, refresh, expiresAt: Date.now() + lifeMs };
+    return { value: hit.value, refresh, expiresAt: Date.now() + lifeMs };
   }
 
   if (last) {

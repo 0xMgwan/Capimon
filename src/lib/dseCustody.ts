@@ -50,14 +50,32 @@ import "server-only";
  * variable names a second time. `tokenRequest` below is the one piece still
  * waiting on their collection, and it says so rather than guessing.
  */
-const BASE_URL = process.env.DSE_CSD_BASE_URL ?? "";
-const APPLICATION_ID = process.env.DSE_CSD_APPLICATION_ID ?? "";
-const ACCESS_SECRET = process.env.DSE_CSD_ACCESS_SECRET ?? "";
-const STAKEHOLDER_USERNAME = process.env.DSE_CSD_STAKEHOLDER_USERNAME ?? "";
-const STAKEHOLDER_PASSWORD = process.env.DSE_CSD_STAKEHOLDER_PASSWORD ?? "";
+/**
+ * Read with the whitespace and quotes a pasted secret arrives wearing.
+ *
+ * treasury.ts strips both from the private key, and for the same reason:
+ * values are copied out of an email or a dashboard and pick up a trailing
+ * newline or a wrapping pair of quotes on the way. A key with a stray
+ * newline is not a key.
+ *
+ * It matters more here than it looks. The application id and secret are
+ * base64-encoded into an Authorization header, so a trailing newline does
+ * not produce a visibly wrong value — it produces a header the gateway
+ * cannot parse, rejected before anything looks at who is asking. Which is
+ * what a 4000 "Invalid request" from a gateway looks like, and why the one
+ * attempt that puts these in the body instead got further.
+ */
+const env = (name: string) =>
+  (process.env[name] ?? "").trim().replace(/^["']|["']$/g, "").trim();
+
+const BASE_URL = env("DSE_CSD_BASE_URL").replace(/\/+$/, "");
+const APPLICATION_ID = env("DSE_CSD_APPLICATION_ID");
+const ACCESS_SECRET = env("DSE_CSD_ACCESS_SECRET");
+const STAKEHOLDER_USERNAME = env("DSE_CSD_STAKEHOLDER_USERNAME");
+const STAKEHOLDER_PASSWORD = env("DSE_CSD_STAKEHOLDER_PASSWORD");
 
 /** Our own BPID: the party receiving a pledge. */
-export const DSE_BPID = process.env.DSE_CSD_BPID ?? "";
+export const DSE_BPID = env("DSE_CSD_BPID");
 
 export const dseCustodyConfigured =
   BASE_URL.length > 0 && APPLICATION_ID.length > 0 && ACCESS_SECRET.length > 0
